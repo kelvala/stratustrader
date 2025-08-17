@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Stock Analyzer</title>
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1115;--panel:#151923;--text:#e5e7eb;--muted:#9ca3af;
+    --accent:#22c55e;--focus:#3b82f6;--border:#23283a;--hover:#161a25;
+    --metric-bg:#1a1f2e;--metric-border:#2a2f3e;
+    --bull:#26a69a;--bear:#ef4444;--ma20:#22c55e;--ma50:#60a5fa;--ma200:#f59e0b;--bb:#94a3b8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;min-height:100vh;padding:20px}
+  .container{max-width:1100px;margin:0 auto}
+  .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+  .title{font-size:24px;font-weight:800;margin:0}
+  .search-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px}
+  .row{display:grid;grid-template-columns:1fr auto;gap:10px;position:relative}
+  input[type="text"]{width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:#0c0f16;color:var(--text)}
+  .btn{padding:12px 16px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:800;cursor:pointer}
+  /* Autocomplete */
+  .ac{position:absolute;left:0;right:0;top:calc(100% + 6px);background:#0c0f16;border:1px solid var(--border);border-radius:10px;z-index:10;display:none;max-height:320px;overflow:auto}
+  .ac.show{display:block}
+  .ac-item{padding:12px 14px;display:grid;grid-template-columns:110px 1fr;gap:12px;align-items:center;cursor:pointer;border-bottom:1px solid var(--metric-border)}
+  .ac-item:hover,.ac-item.active{background:var(--hover)}
+  .ticker{font-weight:800}
+  .company{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Info */
+  .info{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;display:none}
+  .info.show{display:block}
+  .headline{font-weight:800;margin:0 0 8px}
+  /* Chart card & controls */
+  #chartCard{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;display:none}
+  #controls{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+  select{background:#0c0f16;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+  .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+  .chip{background:#1e293b;border:1px solid #2b3548;border-radius:6px;padding:6px 10px;cursor:pointer}
+  .chip.active{border-color:#10b981;color:#10b981}
+  #chart{height:70vh;min-height:520px}
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1 class="title">Stock Analyzer</h1>
+      <div></div>
+    </div>
+
+    <div class="search-card" id="searchCard">
+      <form id="searchForm">
+        <div class="row">
+          <input id="q" type="text" placeholder="Type ticker or company…" spellcheck="false" autocomplete="off" />
+          <button class="btn" type="submit">Search</button>
+          <div id="ac" class="ac" role="listbox"></div>
+        </div>
+      </form>
+    </div>
+
+    <div id="info" class="info">
+      <h3 id="headline" class="headline"></h3>
+      <div id="mini" style="opacity:.85;font-size:14px"></div>
+    </div>
+
+    <div id="chartCard">
+      <div id="controls">
+        <select id="rangeSel">
+          <option value="6mo">6 months</option>
+          <option value="1y" selected>1 year</option>
+          <option value="2y">2 years</option>
+          <option value="5y">5 years</option>
+        </select>
+        <select id="intervalSel">
+          <option value="1d" selected>Daily</option>
+          <option value="1wk">Weekly</option>
+          <option value="1mo">Monthly</option>
+        </select>
+        <button id="renderBtn" class="btn" type="button">Render</button>
+      </div>
+      <div class="toggle-row" id="toggles">
+        <div class="chip active" data-k="SMA20">SMA 20</div>
+        <div class="chip active" data-k="SMA50">SMA 50</div>
+        <div class="chip active" data-k="SMA200">SMA 200</div>
+        <div class="chip active" data-k="RSI">RSI</div>
+        <div class="chip active" data-k="MACD">MACD</div>
+        <div class="chip active" data-k="VOL">Volume</div>
+      </div>
+      <div id="chart"></div>
+    </div>
+  </div>
+
+<script>
+(async function () {
+  const input = document.getElementById('q');
+  const ac = document.getElementById('ac');
+  const form = document.getElementById('searchForm');
+
+  // Load CSV (expects ticker,company_name as headers)
+  let DB = [];
+  try {
+    const res = await fetch('stock_data.csv', { cache: 'no-store' });
+    const text = await res.text();
+    DB = parseCSV(text);
+    console.log(`Loaded ${DB.length} symbols`);
+  } catch (e) {
+    console.error("Error loading CSV:", e);
+  }
+
+  function parseCSV(text) {
+    const lines = text.trim().split(/\r?\n/);
+    const out = [];
+    for (const line of lines) {
+      if (!line.trim() || line.includes('Symbol|Company')) continue;
+      const parts = line.split('|');
+      if (parts.length >= 2) {
+        const t = parts[0].trim().toUpperCase();
+        const c = cleanCompanyName(parts[1].trim());
+        const exchange = getExchange(t, c);
+        if (t) out.push({ ticker: t, company: c, exchange: exchange });
+      }
+    }
+    return out;
+  }
+  
+  function cleanCompanyName(name) {
+    if (!name) return "Unknown Company";
+    // Remove common stock suffixes
+    const suffixes = [
+      /\s+Common Stock.*$/i,
+      /\s+Class [A-Z] Common Stock.*$/i,
+      /\s+Ordinary Shares.*$/i,
+      /\s+American Depositary Shares.*$/i,
+      /\s+Depositary Shares.*$/i,
+      /\s+Inc\.?\s*$/i,
+      /\s+Corporation.*$/i,
+      /\s+Corp\.?.*$/i,
+      /\s+Company.*$/i,
+      /\s+Co\.?.*$/i,
+      /\s+Limited.*$/i,
+      /\s+Ltd\.?.*$/i
+    ];
+    
+    let cleaned = name;
+    suffixes.forEach(suffix => {
+      cleaned = cleaned.replace(suffix, '');
+    });
+    
+    // Add back appropriate ending
+    if (!cleaned.match(/\b(Inc|Corp|Company|Co|Ltd|Limited|LLC|LP|PLC)\.?$/i)) {
+      if (cleaned.toLowerCase().includes('corporation') || cleaned.toLowerCase().includes('company')) {
+        // Leave as is
+      } else {
+        cleaned += ' Inc';
+      }
+    }
+    
+    return cleaned.trim();
+  }
+  
+  function getExchange(ticker, company) {
+    // Simple heuristics for exchange determination
+    const companyUpper = company.toUpperCase();
+    
+    // ETFs often on NYSE/ARCA
+    if (companyUpper.includes('ETF') || companyUpper.includes('FUND')) {
+      return 'ARCA';
+    }
+    
+    // Tech companies often NASDAQ
+    if (companyUpper.match(/\b(TECH|SOFTWARE|DIGITAL|CYBER|DATA|INTERNET)\b/)) {
+      return 'NASDAQ';
+    }
+    
+    // Financial often NYSE
+    if (companyUpper.match(/\b(BANK|FINANCIAL|INSURANCE|TRUST)\b/)) {
+      return 'NYSE';
+    }
+    
+    // Biotech often NASDAQ
+    if (companyUpper.match(/\b(BIO|PHARMA|THERAPEUTICS|MEDICAL)\b/)) {
+      return 'NASDAQ';
+    }
+    
+    // Mining/Energy often NYSE
+    if (companyUpper.match(/\b(MINING|ENERGY|OIL|GAS|URANIUM)\b/)) {
+      return 'AMEX';
+    }
+    
+    // Default: shorter tickers usually NYSE, longer NASDAQ
+    return ticker.length <= 3 ? 'NYSE' : 'NASDAQ';
+  }
+
+  function splitCSVLine(line){
+    const out=[]; let cur='',q=false;
+    for(let i=0;i<line.length;i++){
+      const ch=line[i];
+      if(ch==='\"'){ if(q && line[i+1]==='\"'){cur+='\"'; i++;} else q=!q; }
+      else if(ch===',' && !q){ out.push(cur); cur=''; }
+      else cur+=ch;
+    }
+    out.push(cur); return out;
+  }
+
+  function clean(s){ return (s||'').toUpperCase().trim(); }
+  function rankSearch(q, max=10){
+    if(!q) return [];
+    const Q = clean(q);
+    const res = [];
+    const qWords = Q.split(/\s+/);
+    for(const row of DB){
+      const t=row.ticker, c=row.company.toUpperCase();
+      let score=-1, badge='';
+      if (t===Q){ score=100; badge='Exact'; }
+      else if (t.startsWith(Q)){ score=90; badge='Starts'; }
+      else {
+        const cWords=c.split(/\s+/);
+        if (qWords.some(w => cWords.includes(w))) { score=75; badge='Name match'; }
+        else if (c.includes(Q)) { score=60; badge='Contains'; }
+        else if (t.includes(Q)) { score=50; badge='Ticker contains'; }
+      }
+      if (score>=0) res.push({score,badge,...row});
+    }
+    res.sort((a,b)=> b.score-a.score || a.ticker.localeCompare(b.ticker));
+    return res.slice(0,max);
+  }
+  function escapeHTML(s){ return s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+
+  let suggestions=[], active=-1;
+  function renderAC(list){
+    ac.innerHTML='';
+    if(!list.length){ ac.classList.remove('show'); return; }
+    list.forEach((it,i)=>{
+      const div=document.createElement('div');
+      div.className='ac-item'+(i===active?' active':'');
+      div.dataset.index=i;
+      
+      const exchangeClass = `exchange-${it.exchange.toLowerCase()}`;
+      
+      div.innerHTML=`
+        <div class="ticker">${it.ticker}</div>
+        <div class="company">${escapeHTML(it.company)}${it.badge?`<span class="match-badge">${it.badge}</span>`:''}</div>
+        <div class="exchange-badge ${exchangeClass}">${it.exchange}</div>
+      `;
+      div.addEventListener('mousedown', (e)=>{ e.preventDefault(); choose(i); });
+      ac.appendChild(div);
+    });
+    ac.classList.add('show');
+  }
+
+  function choose(i){
+    active=i; const pick=suggestions[i]; if(!pick) return;
+    input.value=pick.ticker; hideAC();
+    submitSearch(pick.ticker);
+  }
+  function hideAC(){ ac.classList.remove('show'); active=-1; }
+
+  input.addEventListener('input', ()=>{
+    const q=input.value.trim();
+    if(!q){ hideAC(); return; }
+    suggestions=rankSearch(q, 12); active=-1; renderAC(suggestions);
+  });
+  input.addEventListener('keydown',(e)=>{
+    if(!ac.classList.contains('show')) return;
+    if(e.key==='ArrowDown'){ e.preventDefault(); active=(active+1)%suggestions.length; renderAC(suggestions); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); active=(active-1+suggestions.length)%suggestions.length; renderAC(suggestions); }
+    else if(e.key==='Enter' || e.key==='Tab'){ if(active>=0){ e.preventDefault(); choose(active); } }
+    else if(e.key==='Escape'){ hideAC(); }
+  });
+  document.addEventListener('click', e=>{ if(!e.target.closest('.row')) hideAC(); });
+
+  form.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const t = clean(input.value);
+    if(!t) return;
+    submitSearch(t);
+  });
+
+  function submitSearch(ticker){
+    window.open(`https://finviz.com/quote.ashx?t=${encodeURIComponent(ticker)}`, '_blank', 'noopener');
+  }
+})();
+</script>
+</body>
+</html>
