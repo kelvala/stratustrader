@@ -256,7 +256,7 @@
         <div id="prevCloseLine">Yesterday’s Close: —</div>
         <div id="ivLine">Intrinsic Value: —</div>
       </div>
-      <img id="infoLogo" class="info-logo" src="assets/stratus-trader-wide.png" alt="Stratus Trader">
+      <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader">
     </div>
 
     <div id="chartCard">
@@ -630,7 +630,7 @@
 
     async function loadSymbolsFromCSV(){
       try{
-        const r = await fetch('stock_data.csv', { cache:'no-store' });
+        const r = await fetch('/stock_data.csv', { cache:'no-store' });
         if (!r.ok) throw new Error('CSV not found');
         const text = await r.text();
         const lines = text.split(/\r?\n/).filter(Boolean);
@@ -765,10 +765,11 @@
 
     function normalizePair(time, freq){
       const minFor = { '1m':'1d', '5m':'5d', '15m':'10d', '60m':'1mo' };
-      const order = ['1d','2d','5d','10d','1mo
+      const order = ['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
       const idx = v => Math.max(0, order.indexOf(v));
       if (['1m','5m','15m','60m'].includes(freq)) {
-        const minRange = minFor[freq]; if (idx(time) < idx(minRange)) time = minRange;
+        const minRange = minFor[freq];
+        if (idx(time) < idx(minRange)) time = minRange;
         return { range: time, interval: freq === '60m' ? '60m' : freq };
       }
       const map = { '1d':'1d', '1wk':'1wk', '1mo':'1mo', '3mo':'3mo', '1y':'1y' };
@@ -1181,6 +1182,13 @@
       }
     });
   })();
+
+  window.addEventListener('error', e => {
+    const msg = (e.error && e.error.stack) ? e.error.stack : (e.message || String(e));
+    console.error('💥 Script error:', msg);
+    const box = document.getElementById('headline');
+    if (box) box.textContent = 'Script error: ' + (e.message || 'check console');
+  });
 </script>
 </body>
 </html>
