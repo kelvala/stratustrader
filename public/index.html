@@ -765,7 +765,7 @@
 
     function normalizePair(time, freq){
       const minFor = { '1m':'1d', '5m':'5d', '15m':'10d', '60m':'1mo' };
-      const order = ['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
+      const order = ['1d','2d','5d','10d','1mo
       const idx = v => Math.max(0, order.indexOf(v));
       if (['1m','5m','15m','60m'].includes(freq)) {
         const minRange = minFor[freq]; if (idx(time) < idx(minRange)) time = minRange;
@@ -1136,85 +1136,50 @@
       return { rec: 'HOLD', color: '#fbbf24' };
     }
 
-    // ====== Screeners presets + Finviz links ======
-    (function(){
-      // IMPORTANT: Finviz filter tokens are centralized here.
-      // If any preset needs tweaking, adjust the 'f=' string for that title.
-      const FINVIZ = {
-        'Oversold Reversal (RSI < 30 + Green)':
-          'v=111&f=sh_price_o5,sh_avgvol_o1000,ta_rsi_os,ta_perf_dup,geo_usa',
-        'Fresh Highs (Sub-$7 Momentum)':
-          'v=111&f=sh_price_u7,ta_highlow52w_nh,geo_usa',
-        'High Rel-Vol in Uptrend':
-          'v=111&f=sh_price_o5,sh_avgvol_o1000,sh_relvol_o1.5,ta_sma20_pa,ta_sma50_pa,ta_sma200_pa,geo_usa',
-        'Weekly Dip in an Uptrend':
-          'v=111&f=ta_sma50_pa,ta_sma200_pa,ta_perf_1wdown,geo_usa',
-        'MA Bounce (20/50 DMA Zone)':
-          'v=111&f=ta_sma20_pa,ta_sma50_pb,ta_sma200_pa,sh_avgvol_o500,geo_usa',
-        'Bullish ST MA Crossover (20 vs 50)':
-          'v=111&f=ta_sma20_pa,ta_sma50_pa,ta_sma200_pa,sh_avgvol_o500,geo_usa',
-        'Quality Breakout':
-          'v=111&f=fa_debteq_u0.5,fa_roe_o15,ta_sma20_pa,ta_sma50_pa,ta_sma200_pa,ta_highlow50d_nh,geo_usa',
-        'Shorted & Liquid (Idea Source)':
-          'v=111&f=cap_smallover,sh_avgvol_o750,sh_shortfloat_o10,sh_price_o3,geo_usa',
-        'Classic Short Squeeze Setup':
-          'v=111&f=sh_price_o2,sh_shortfloat_o15,sh_instown_u50,sh_avgvol_o300,geo_usa',
-        'Weekly Earnings Gap-Ups':
-          'v=111&f=earningsdate_tomorrow,ta_gap_u2,sh_avgvol_o300,geo_usa',
-        'Fast EPS Growers (Above 200DMA)':
-          'v=111&f=fa_epsqoq_o25,fa_epsyoy_o25,fa_estltgrow_o10,ta_sma200_pa,ta_rsi_o50,geo_usa',
-        'Sales Rockets (Low Debt, High ROE)':
-          'v=111&f=fa_salesqoq_o10,fa_roe_o15,fa_debteq_u0.5,sh_price_o5,sh_shortfloat_u10,geo_usa',
-        'Low PE Value (Quality Checks)':
-          'v=111&f=fa_pe_u20,fa_pb_u3,fa_peg_u1.5,fa_roa_pos,fa_roe_pos,sh_price_o5,geo_usa',
-        'Compounding Winners (Near 52-Wk Highs)':
-          'v=111&f=fa_roe_o15,fa_estltgrow_o10,sh_price_o15,ta_rsi_o50,ta_highlow52w_a10h,geo_usa',
-        'Dividend Growth Value':
-          'v=111&f=cap_large,fa_div_pos,fa_payoutratio_u50,fa_pe_u20,fa_estltgrow_pos,geo_usa',
-        'Buy-and-Hold Value (PEG < 1)':
-          'v=111&f=fa_curratio_o1.5,fa_estltgrow_o10,fa_peg_u1,fa_roe_o15,sh_beta_u1.5,ta_sma20_pa,geo_usa',
-        'Earnings Pop: Oversold Growth (≤5d)':
-          'v=111&f=earningsdate_nextdays,ta_rsi_u50,fa_epsqoq_o10,fa_salesqoq_o10,ta_perf_52w_o10,sh_avgvol_o300,geo_usa',
-        'CANSLIM Core':
-          'v=111&f=fa_epsqoq_o20,fa_salesqoq_o20,sh_relvol_o1.2,ta_sma50_pa,ta_sma200_pa,geo_usa'
-      };
+    /* ===== Sheets: open/close ===== */
+    const SHEETS = {
+      sheetScreeners: document.getElementById('sheetScreeners'),
+      sheetGPTs: document.getElementById('sheetGPTs'),
+    };
 
-      const PRESETS = [
-        { lvl:'Beginner',     title:'Oversold Reversal (RSI < 30 + Green)', desc:'$5+ names popping green today with high relative volume after RSI ≤ 30.' },
-        { lvl:'Beginner',     title:'Fresh Highs (Sub-$7 Momentum)',        desc:'Low-priced symbols pushing new highs.' },
-        { lvl:'Beginner',     title:'High Rel-Vol in Uptrend',              desc:'Liquid stocks ≥1.5× rel-vol; 20>50>200 MA structure.' },
-        { lvl:'Beginner',     title:'Weekly Dip in an Uptrend',             desc:'Uptrend structure with a down week (buy-the-dip idea).' },
-        { lvl:'Beginner',     title:'MA Bounce (20/50 DMA Zone)',           desc:'Above 20DMA, below 50DMA; decent liquidity.' },
-        { lvl:'Beginner',     title:'Bullish ST MA Crossover (20 vs 50)',   desc:'Early trend-change vibe (light guardrails).' },
+    function openSheet(id) {
+      const el = SHEETS[id];
+      if (!el) return;
+      el.removeAttribute('hidden');
+      document.body.style.overflow = 'hidden';
+    }
 
-        { lvl:'Intermediate', title:'Quality Breakout',                     desc:'Low debt, high ROE, above MAs, making 50d highs.' },
-        { lvl:'Intermediate', title:'Shorted & Liquid (Idea Source)',       desc:'>$300M cap, liquid, higher short interest.' },
-        { lvl:'Intermediate', title:'Classic Short Squeeze Setup',          desc:'High short float, lighter inst. ownership, tradable liquidity.' },
-        { lvl:'Intermediate', title:'Weekly Earnings Gap-Ups',              desc:'Earnings tomorrow (AH), gap ≥2%, liquid.' },
-        { lvl:'Intermediate', title:'Fast EPS Growers (Above 200DMA)',      desc:'EPS growth + above 200DMA + RSI>50.' },
-        { lvl:'Intermediate', title:'Sales Rockets (Low Debt, High ROE)',   desc:'Growth + quality balance sheet.' },
-        { lvl:'Intermediate', title:'Low PE Value (Quality Checks)',        desc:'Cheap but profitable.' },
+    function closeSheet(id) {
+      const el = SHEETS[id];
+      if (!el) return;
+      el.setAttribute('hidden', '');
+      document.body.style.overflow = '';
+    }
 
-        { lvl:'Advanced',     title:'Compounding Winners (Near 52-Wk Highs)', desc:'Healthy growers near highs with ROE>15%.' },
-        { lvl:'Advanced',     title:'Dividend Growth Value',                  desc:'Large caps with sane payout & valuation.' },
-        { lvl:'Advanced',     title:'Buy-and-Hold Value (PEG < 1)',           desc:'Discount growth with quality + lower beta.' },
-        { lvl:'Advanced',     title:'Earnings Pop: Oversold Growth (≤5d)',    desc:'Near earnings, momentum in fundamentals, not overheated.' },
-        { lvl:'Advanced',     title:'CANSLIM Core',                           desc:'Strong EPS & Sales with volume + trend.' },
-      ];
+    // Openers
+    document.getElementById('toolScreeners')?.addEventListener('click', () => openSheet('sheetScreeners'));
+    document.getElementById('toolGPTs')?.addEventListener('click', () => openSheet('sheetGPTs'));
 
-      const list = document.getElementById('scrList');
-      list.innerHTML = PRESETS.map(p => `
-        <a class="scr-item" data-lvl="${p.lvl}" target="_blank"
-           href="https://finviz.com/screener.ashx?${encodeURI(FINVIZ[p.title] || 'v=111')}"
-           rel="noopener">
-          <div style="flex:1">
-            <div class="title">${p.title}</div>
-            <div class="desc">${p.desc}</div>
-          </div>
-          <span class="badge">${p.lvl}</span>
-        </a>
-      `).join('');
-    })();
+    // Any element with [data-close="sheetId"] will close its sheet
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-close]');
+      if (btn) closeSheet(btn.getAttribute('data-close'));
+    });
+
+    // Click backdrop to close (clicks outside .sheet-inner)
+    Object.values(SHEETS).forEach((sheet) => {
+      sheet?.addEventListener('click', (e) => {
+        if (!e.target.closest('.sheet-inner')) closeSheet(sheet.id);
+      });
+    });
+
+    // ESC to close whichever is open
+    window.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      for (const [id, el] of Object.entries(SHEETS)) {
+        if (!el.hasAttribute('hidden')) { closeSheet(id); break; }
+      }
+    });
   })();
 </script>
 </body>
