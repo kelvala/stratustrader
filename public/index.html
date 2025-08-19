@@ -1316,48 +1316,74 @@
     if (box) box.textContent = 'Script error: ' + (e.message || 'check console');
   });
 
-  // ===== Copy-to-clipboard for GPT prompts (works on Vercel/HTTPS) =====
+  // ===== Copy-to-clipboard for GPT prompts, with live ticker =====
+  function _ctx() {
+    return {
+      TICKER: (CURRENT?.ticker || els.input?.value || '').trim().toUpperCase(),
+      COMPANY: CURRENT?.company || '',
+      TIME: els.timeSel?.value || '',
+      FREQ: els.freqSel?.value || ''
+    };
+  }
+  function _fillTokens(s, ctx) {
+    if (!s) return '';
+    return s.replace(/\{\{(\w+)\}\}/g, (_, k) => (ctx[k] ?? ''));
+  }
+  function _maybeAppendTicker(text, ctx) {
+    // If the text already used {{TICKER}}, do nothing.
+    // Otherwise, append a neat Ticker line.
+    if (/\{\{TICKER\}\}/.test(text)) return text;
+    const tail = `\n\nTicker: ${ctx.TICKER}`;
+    return text.endsWith(tail) ? text : text + tail;
+  }
+
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-copy]');
     if (!btn) return;
 
-    // 1) Figure out the text to copy
+    const ctx = _ctx();
+    if (!ctx.TICKER) {
+      alert('Pick a ticker first (e.g., AAPL).');
+      return;
+    }
+
+    // 1) Base prompt: template or inline data-prompt
     let text = '';
     const srcId = btn.getAttribute('data-src');
     if (srcId) {
       const tpl = document.getElementById(srcId);
-      if (tpl && tpl.content) text = tpl.content.textContent.trim();
+      if (tpl?.content) text = tpl.content.textContent.trim();
     }
-    if (!text) {
-      // Optional fallback: try data-prompt attribute if you prefer inline text
-      text = btn.getAttribute('data-prompt') || '';
-    }
-    if (!text) {
-      alert('No prompt attached to this button.');
-      return;
+    if (!text) text = (btn.getAttribute('data-prompt') || '').trim();
+
+    // 2) Token replacement
+    text = _fillTokens(text, ctx);
+
+    // 3) Optional extra append (supports tokens too)
+    const extra = btn.getAttribute('data-append');
+    if (extra) text += (text ? '\n\n' : '') + _fillTokens(extra, ctx);
+
+    // 4) If no {{TICKER}} used anywhere, append it automatically
+    if (!/\b[A-Z]{1,6}\b/.test(text) || !text.includes(ctx.TICKER)) {
+      text = _maybeAppendTicker(text, ctx);
     }
 
-    // 2) Try the modern clipboard API
+    // 5) Copy & UI feedback
     try {
       await navigator.clipboard.writeText(text);
-      btn.dataset._orig = btn.textContent;
-      btn.textContent = 'Copied!';
-      setTimeout(() => (btn.textContent = btn.dataset._orig || 'Copy prompt'), 1100);
-      return;
-    } catch (_) { /* fall through */ }
-
-    // 3) Fallback (older Safari/iOS): temporary textarea + execCommand
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.left = '-2000px';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); } catch(_) {}
-    document.body.removeChild(ta);
-    btn.dataset._orig = btn.textContent;
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-2000px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch {}
+      document.body.removeChild(ta);
+    }
+    const orig = btn.textContent;
     btn.textContent = 'Copied!';
-    setTimeout(() => (btn.textContent = btn.dataset._orig || 'Copy prompt'), 1100);
+    setTimeout(() => (btn.textContent = orig), 1100);
   });
 </script>
 
