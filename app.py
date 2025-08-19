@@ -118,7 +118,7 @@ import yfinance as yf
 
 def fetch_chart(ticker, period='6mo', interval='1d'):
     df = yf.download(ticker, period=period, interval=interval)
-    if df.empty:
+    if df is None or not hasattr(df, 'empty') or df.empty:
         return None
     df = df.reset_index()
     df['date'] = pd.to_datetime(df['Date'])
