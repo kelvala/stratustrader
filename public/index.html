@@ -350,7 +350,7 @@
             </div>
             <div class="badge">GPT</div>
             <div style="display:flex;gap:8px;margin-left:8px">
-              <button class="tool-btn" data-copy>Copy prompt</button>
+              <button class="tool-btn" data-copy data-src="p-smarter-investing">Copy prompt</button>
               <a class="tool-btn" href="https://chatgpt.com/g/g-687b911701a08191aadd69c345a67d17-9-prompts-for-smarter-investing" target="_blank" rel="noopener">Open</a>
             </div>
           </div>
@@ -362,7 +362,7 @@
             </div>
             <div class="badge">GPT</div>
             <div style="display:flex;gap:8px;margin-left:8px">
-              <button class="tool-btn" data-copy>Copy prompt</button>
+              <button class="tool-btn" data-copy data-src="p-stock-predictor">Copy prompt</button>
               <a class="tool-btn" href="https://chatgpt.com/g/g-686c5fc3dd948191a0ff9c14cecda1b4-stock-predictor-prompt-gpt" target="_blank" rel="noopener">Open</a>
             </div>
           </div>
@@ -1315,6 +1315,66 @@
     const box = document.getElementById('headline');
     if (box) box.textContent = 'Script error: ' + (e.message || 'check console');
   });
+
+  // ===== Copy-to-clipboard for GPT prompts (works on Vercel/HTTPS) =====
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-copy]');
+    if (!btn) return;
+
+    // 1) Figure out the text to copy
+    let text = '';
+    const srcId = btn.getAttribute('data-src');
+    if (srcId) {
+      const tpl = document.getElementById(srcId);
+      if (tpl && tpl.content) text = tpl.content.textContent.trim();
+    }
+    if (!text) {
+      // Optional fallback: try data-prompt attribute if you prefer inline text
+      text = btn.getAttribute('data-prompt') || '';
+    }
+    if (!text) {
+      alert('No prompt attached to this button.');
+      return;
+    }
+
+    // 2) Try the modern clipboard API
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.dataset._orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => (btn.textContent = btn.dataset._orig || 'Copy prompt'), 1100);
+      return;
+    } catch (_) { /* fall through */ }
+
+    // 3) Fallback (older Safari/iOS): temporary textarea + execCommand
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-2000px';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(_) {}
+    document.body.removeChild(ta);
+    btn.dataset._orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => (btn.textContent = btn.dataset._orig || 'Copy prompt'), 1100);
+  });
 </script>
+
+<!-- 9 Prompts for Smarter Investing -->
+<template id="p-smarter-investing">
+Paste the long multi-step prompt here…
+Line 2…
+</template>
+
+<!-- Stock Predictor Prompt GPT -->
+<template id="p-stock-predictor">
+Your stock predictor prompt text goes here…
+</template>
+
+<!-- High Yield Dividend Sniper -->
+<template id="p-dividend-sniper">
+Your dividend sniper prompt text goes here…
+</template>
 </body>
 </html>
