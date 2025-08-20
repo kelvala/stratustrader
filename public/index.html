@@ -1101,7 +1101,7 @@
       // ensure the exit pill exists
       if (!document.getElementById('exitMax')) {
         const b = document.createElement('button');
-                                                         b.id = 'exitMax';
+                                                         b.id = 'exitMax;
         b.className = 'max-exit';
         b.title = 'Exit (Esc)';
         b.innerHTML = '⤢ Exit';
@@ -1191,6 +1191,75 @@
       }
     });
 
+    // --- Hardened clipboard helper ---
+function copyTextSmart(text, onDone) {
+  // try 1: modern API (must run directly from the click microtask)
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      navigator.clipboard.writeText(text).then(
+        () => onDone?.(true),
+        () => tryExecCommand()
+      );
+      return;
+    } catch {
+      // fall through
+    }
+  }
+  tryExecCommand();
+
+  function tryExecCommand() {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-2000px';
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch {}
+    document.body.removeChild(ta);
+    if (ok) onDone?.(true);
+    else manualOverlay(text, onDone); // last resort
+  }
+
+  function manualOverlay(txt, done) {
+    // small, self-removing overlay with preselected text
+    const wrap = document.createElement('div');
+    wrap.style.cssText =
+      'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:99999;background:rgba(0,0,0,.45)';
+    const card = document.createElement('div');
+    card.style.cssText =
+      'max-width:520px;width:92%;background:#151923;border:1px solid #2b3548;border-radius:12px;padding:16px;color:#e5e7eb;font:14px system-ui';
+    card.innerHTML =
+      '<div style="font-weight:800;margin-bottom:8px">Copy manually (press ⌘/Ctrl+C)</div>';
+    const input = document.createElement('textarea');
+    input.value = txt;
+    input.setAttribute('readonly', '');
+    input.style.cssText =
+      'width:100%;height:88px;background:#0c0f16;color:#e5e7eb;border:1px solid #2b3548;border-radius:8px;padding:10px';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:10px';
+    const btn = document.createElement('button');
+    btn.textContent = 'Close';
+    btn.style.cssText =
+      'padding:8px 12px;border:0;border-radius:8px;background:#22c55e;color:#fff;font-weight:800;cursor:pointer';
+    btn.onclick = cleanup;
+    row.appendChild(btn);
+    card.appendChild(input);
+    card.appendChild(row);
+    wrap.appendChild(card);
+    document.body.appendChild(wrap);
+    input.focus(); input.select();
+
+    function cleanup() {
+      wrap.remove();
+      done?.(false);
+    }
+    wrap.addEventListener('click', (e) => { if (!e.target.closest('div[style*="max-width"]')) cleanup(); });
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') cleanup(); }, { once:true });
+  }
+}
+
     // === GPT Copy/Open handlers ===
     (() => {
       const gptSheet = document.getElementById('sheetGPTs');
@@ -1217,19 +1286,19 @@
 
       // One delegated listener on the sheet
       gptSheet?.addEventListener('click', async (e) => {
-        // COPY
+        // COPY button
         const copyBtn = e.target.closest('button[data-copy]');
         if (copyBtn) {
           e.preventDefault();
           const c = ctx();
           if (!c.TICKER) { alert('Pick a ticker first (e.g., AAPL).'); return; }
 
+          const tickerOnly = copyBtn.hasAttribute('data-ticker-only');
+
           let text = '';
-          if (copyBtn.hasAttribute('data-ticker-only')) {
-            // Always exactly "<TICKER> stock ticker"
+          if (tickerOnly) {
             text = `${c.TICKER} stock ticker`;
           } else {
-            // Template or inline prompt
             const srcId = copyBtn.getAttribute('data-src');
             if (srcId) {
               const tpl = document.getElementById(srcId);
@@ -1239,20 +1308,16 @@
             text = fillTokens(text, c);
             const extra = copyBtn.getAttribute('data-append');
             if (extra) text += (text ? '\n\n' : '') + fillTokens(extra, c);
-            if (!text) text = `${c.TICKER} stock ticker`; // final fallback
-            text = maybeAppendTicker(text, c);
+            if (!text) text = `${c.TICKER} stock ticker`;
           }
 
-          try {
-            await copyHard(text);
+          // Hardened, synchronous copy logic
+          copyTextSmart(text, (ok) => {
             const orig = copyBtn.textContent;
             copyBtn.disabled = true;
-            copyBtn.textContent = 'Copied!';
+            copyBtn.textContent = ok ? 'Copied!' : 'Ready to copy';
             setTimeout(() => { copyBtn.textContent = orig; copyBtn.disabled = false; }, 1000);
-          } catch (err) {
-            console.error('Clipboard blocked:', err);
-            alert(`Your browser blocked clipboard access.\n\nCopy this manually:\n\n${text}`);
-          }
+          });
           return;
         }
 
