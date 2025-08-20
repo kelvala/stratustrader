@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.024</title>
+<title>Stock Analyzer v.025</title>
 <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
 <style>
   :root{
@@ -88,10 +88,7 @@
 
   /* Info */
   .info{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px}
-  /* Place logo **inside** the info (ticker) box */
   .info { position: relative; }
-
-  /* In-card logo */
   .info-logo{
     position:absolute;
     top:10px;
@@ -101,8 +98,6 @@
     pointer-events:none;
     filter: drop-shadow(0 2px 8px rgba(0,0,0,.35));
   }
-
-  /* Light theme slight dim so it still feels subtle */
   .light .info-logo{ opacity:.88; }
   @media (max-width:640px){
     .info-logo{ height:42px; right:10px; }
@@ -110,12 +105,12 @@
 
   /* Chart + controls */
   #chartCard{
-  background:var(--panel);
-  border:1px solid var(--border);
-  border-radius:14px;
-  padding:16px;
-  position: relative;
-}
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:16px;
+    position: relative;
+  }
   #chart{height:68vh;min-height:520px}
   .container.wide{max-width:100%!important}
   #chartCard.max{position:fixed; inset:12px; z-index:9999; margin:0!important; width:auto!important; height:auto!important; overflow:auto; }
@@ -156,7 +151,7 @@
   .section-sep{ margin:20px -16px 16px; padding:0 16px; }
   .section-sep .rule{ height:3px; border-radius:999px; background:linear-gradient(90deg,var(--focus),var(--accent)); opacity:.9; }
 
-  /* Sheets (click-to-open/close only) */
+  /* Sheets */
   .sheet{ position:fixed; left:0; right:0; bottom:0; top:auto; background:transparent; display:flex; justify-content:center; z-index:2000; }
   .sheet[hidden]{ display:none!important }
   .sheet-inner{ width:min(760px, 100%); background:var(--panel); border-top:1px solid var(--border); border-radius:16px 16px 0 0; box-shadow:0 -8px 30px rgba(0,0,0,.35); padding:14px; animation:sheetUp .18s ease-out; }
@@ -318,7 +313,7 @@
         <button class="sheet-close" data-close="sheetScreeners">✕</button>
       </div>
       <div class="sheet-body">
-        <!-- Quick 3-filter row (yours) -->
+        <!-- Quick 3-filter row -->
         <div class="scr-quick" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
           <select id="scMarketCap"><option>Market Cap ≥ $10B</option><option>≥ $2B</option></select>
           <select id="scAvgVol"><option>Avg Vol ≥ 1M</option><option>≥ 100k</option></select>
@@ -350,9 +345,7 @@
             </div>
             <div class="badge">GPT</div>
             <div style="display:flex;gap:8px;margin-left:8px">
-              <button class="tool-btn" data-copy data-ticker-only>Copy prompt</button>
               <a class="tool-btn"
-                 data-clear-clipboard
                  href="https://chatgpt.com/g/g-687b911701a08191aadd69c345a67d17-9-prompts-for-smarter-investing"
                  target="_blank" rel="noopener">Open</a>
             </div>
@@ -365,9 +358,7 @@
             </div>
             <div class="badge">GPT</div>
             <div style="display:flex;gap:8px;margin-left:8px">
-              <button class="tool-btn" data-copy data-src="p-stock-predictor">Copy prompt</button>
               <a class="tool-btn"
-                 data-clear-clipboard
                  href="https://chatgpt.com/g/g-686c5fc3dd948191a0ff9c14cecda1b4-stock-predictor-prompt-gpt"
                  target="_blank" rel="noopener">Open</a>
             </div>
@@ -380,7 +371,6 @@
             </div>
             <div class="badge">GPT</div>
             <a class="tool-btn"
-               data-clear-clipboard
                href="https://chatgpt.com/g/g-6878fe277c5c819180211289d9e16148-high-yield-dividend-sniper"
                target="_blank" rel="noopener">Open</a>
           </div>
@@ -535,7 +525,6 @@
         borderpad:2
       }));
 
-      // IMPORTANT: replace (don’t append) to avoid duplicates
       return relayoutPreserve({ shapes: fibShapes, annotations: fibAnn });
     }
     function clearAutoFib(){
@@ -586,7 +575,6 @@
       return out;
     }
     function arrShiftFwd(arr, k, n) {
-      // shift forward by k periods (values move to the right)
       const out = new Array(n).fill(null);
       for (let i = 0; i < n; i++) if (i + k < n) out[i + k] = arr[i];
       return out;
@@ -597,7 +585,6 @@
       return out;
     }
     function calcIchimoku(rows) {
-      // standard 9-26-52 settings
       const n = rows.length;
       const high = rows.map(r=>r.h), low = rows.map(r=>r.l), close = rows.map(r=>r.c);
 
@@ -610,7 +597,6 @@
       const senA0  = tenkan.map((t,i)=> (t!=null && kijun[i]!=null) ? (t + kijun[i]) / 2 : null);
       const senB0  = senBHi.map((h,i)=> (h!=null && senBLo[i]!=null) ? (h + senBLo[i]) / 2 : null);
 
-      // shifts
       const shift = 26;
       const spanA = arrShiftFwd(senA0, shift, n);   // forward 26
       const spanB = arrShiftFwd(senB0, shift, n);   // forward 26
@@ -619,7 +605,6 @@
       return { tenkan, kijun, spanA, spanB, chikou };
     }
     function segmentCloud(a, b) {
-      // returns lower/upper arrays for green (A>=B) and red (A<B)
       const n = a.length;
       const gLow = new Array(n).fill(null), gUp = new Array(n).fill(null);
       const rLow = new Array(n).fill(null), rUp = new Array(n).fill(null);
@@ -760,7 +745,6 @@
     function doSearchFromInput(){
       const t = els.input.value.trim().toUpperCase();
       if (!t) return;
-      // quick client-side sanity check
       if (!/^[A-Z0-9.^$-]{1,12}$/.test(t)) { niceTickerError(t); return; }
       const found = LOCAL_SYMBOLS.find(r => r.symbol === t) ||
                     LOCAL_SYMBOLS.find(r => (r.name||'').toUpperCase() === t);
@@ -770,8 +754,6 @@
     els.searchBtn.addEventListener('click', doSearchFromInput);
     els.input.addEventListener('keydown', e => {
       if (e.key !== 'Enter') return;
-      // If the AC list is open and an item is highlighted, the other handler will pick it.
-      // Otherwise, run a search directly.
       if (!els.list.classList.contains('show') || activeIndex < 0) {
         e.preventDefault();
         doSearchFromInput();
@@ -832,14 +814,8 @@
     function historyRangeFor(freq){ if (freq==='1m') return '7d'; if (['5m','15m','60m'].includes(freq)) return '2mo'; return '1y'; }
     async function fetchFullHistory(ticker, freq) { return await fetchChart(ticker, historyRangeFor(freq), freq); }
 
-    function toEastern(date) {
-      // keep for session/market-window logic
-      return new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-    }
-    function formatEasternISO(date) {
-      // Use UTC ISO for Plotly axis stability
-      return date.toISOString(); // keep the 'Z'
-    }
+    function toEastern(date) { return new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' })); }
+    function formatEasternISO(date) { return date.toISOString(); }
 
     function getVisibleData(fullData, range, freq) {
       if (range === '1d' && freq === '1m') {
@@ -867,7 +843,7 @@
 
     async function go(ticker, company){
       CURRENT = { ticker, company };
-      window.CURRENT = CURRENT; // so other helpers can read it
+      window.CURRENT = CURRENT;
       els.headline.textContent = `${ticker}${company ? ' — ' + company : ''}`;
       els.lastLine.textContent = 'Loading…';
       els.prevCloseLine.textContent = '';
@@ -950,7 +926,6 @@
         /* ===== Ichimoku (built on full history, sliced to visible) ===== */
         const ichiAll = calcIchimoku(fullRows);
 
-        // slice to visible window
         const take = (arr) => arr.slice(startIdx, startIdx + visibleRows.length);
         const tenkan = take(ichiAll.tenkan);
         const kijun  = take(ichiAll.kijun);
@@ -958,26 +933,21 @@
         const spanB  = take(ichiAll.spanB);
         const chikou = take(ichiAll.chikou);
 
-        // split cloud into green/red fill segments
         const { gLow, gUp, rLow, rUp } = segmentCloud(spanA, spanB);
 
-        // Draw cloud BEHIND candles: add these before the candlesticks
         const trCloudGreenBottom = { type:'scatter', x, y:gLow,  name:'Cloud+', line:{width:0}, hoverinfo:'skip', yaxis:'y' };
         const trCloudGreenTop    = { type:'scatter', x, y:gUp,   name:'Cloud+', line:{width:0}, fill:'tonexty', fillcolor:getComputedStyle(document.documentElement).getPropertyValue('--c-ichi-up').trim(),  hoverinfo:'skip', yaxis:'y' };
 
         const trCloudRedBottom   = { type:'scatter', x, y:rLow,  name:'Cloud-', line:{width:0}, hoverinfo:'skip', yaxis:'y' };
         const trCloudRedTop      = { type:'scatter', x, y:rUp,   name:'Cloud-', line:{width:0}, fill:'tonexty', fillcolor:getComputedStyle(document.documentElement).getPropertyValue('--c-ichi-down').trim(), hoverinfo:'skip', yaxis:'y' };
 
-        // Lines
         const trTenkan = { type:'scatter', mode:'lines', x, y:tenkan, name:'Tenkan', line:{ width:1.4, color:css('--c-ichi-tenkan'), dash:'dot' }, yaxis:'y' };
         const trKijun  = { type:'scatter', mode:'lines', x, y:kijun,  name:'Kijun',  line:{ width:1.4, color:css('--c-ichi-kijun'),  dash:'dash' }, yaxis:'y' };
-        const trChikou = { type:'scatter', mode:'lines', x, y:chikou, name:'Chikou', line:{ width:1.1, color:css('--c-ichi-chikou') },              yaxis:'y', opacity:.9 };
+        const trChikou = { type:'scatter', mode:'lines', x, y:chikou, name:'Chikou', line:{ width:1.1, color:css('--c-ichi-chikou') }, yaxis:'y', opacity:.9 };
 
         const data = [
-          // Ichimoku first (behind candles)
           trCloudGreenBottom, trCloudGreenTop, trCloudRedBottom, trCloudRedTop,
           trTenkan, trKijun, trChikou,
-          // price + indicators
           candles, trSMA20, trSMA50, trSMA200, trRSI, trRSI70, trRSI30, trMACD, trSignal, trHist, trVol
         ];
 
@@ -1102,10 +1072,7 @@
       els.themeToggle.textContent = t==='dark' ? '☀️ Light' : '🌙 Dark';
       els.themeToggle.classList.toggle('active', t==='dark');
       localStorage.setItem('theme',t);
-      // update colors immediately; optionally re-render data later
       requestAnimationFrame(() => {
-       
-       
         applyChartTheme();
         if (CURRENT.ticker) go(CURRENT.ticker, CURRENT.company);
       });
@@ -1125,9 +1092,7 @@
     });
     function setMaxState(on){
       els.chartCard.classList.toggle('max', on);
-      // ensure the exit pill exists
       if (!document.getElementById('exitMax')) {
-
         const b = document.createElement('button');
         b.id = 'exitMax';
         b.type = 'button';
@@ -1146,11 +1111,9 @@
       if (btnTxt) btnTxt.textContent = label;
       if (els.chart && els.chart.data) Plotly.Plots.resize(els.chart);
     }
-    // Button toggles
     els.maxBtn.addEventListener('click', () =>
       setMaxState(!els.chartCard.classList.contains('max'))
     );
-    // Esc exits Max (capture so it works even when Plotly has focus)
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && els.chartCard.classList.contains('max')) {
         setMaxState(false);
@@ -1176,9 +1139,6 @@
       localStorage.setItem('lastTicker', t);
       return _origDoSearch(t, c);
     };
-
-    // Copy button handler – force "Stock ticker = <ticker>"
-    document.querySelectorAll('.copy').forEach(btn => btn.remove());
   })();
   </script>
 </body>
