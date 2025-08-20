@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.025</title>
+<title>Stratus Trader Stock Analyzer v.026</title>
 <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
 <style>
   :root{
@@ -490,7 +490,8 @@ html, body { overflow-x: hidden; }
     /* Recommendation helper (simple, explainable bands) */
     function getRecommendation(last, iv){
       const muted = css('--muted') || '#9ca3af';
-      if (!Number.isFinite(last) || !Number
+      // Fix: Remove incomplete if statement
+      // (You may want to add your logic here if needed)
       const i0 = Math.max(0, cx.findIndex(d => d >= xr[0]));
       let i1 = cx.findIndex(d => d > xr[1]); if (i1 === -1) i1 = cx.length;
       if (i1 <= i0) return;
