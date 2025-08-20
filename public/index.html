@@ -430,6 +430,14 @@
       tfHead: document.getElementById('tfHead'),
     };
 
+    /* ===== App state (must exist before setTheme runs) ===== */
+    let CURRENT = { ticker: null, company: "" };
+    let FUNDAMENTALS = {};
+    let traceMap = {};
+
+    // safe no-op; you can wire this later
+    function refreshMinis(){}
+
     /* ===== Toolbar toggles ===== */
     els.tfHead.addEventListener('click', () => {
       const open = els.tfCard.getAttribute('data-open') === 'true';
@@ -1096,6 +1104,7 @@
       localStorage.setItem('theme',t);
       // update colors immediately; optionally re-render data later
       requestAnimationFrame(() => {
+       
         applyChartTheme();
         if (CURRENT.ticker) go(CURRENT.ticker, CURRENT.company);
       });
@@ -1154,6 +1163,18 @@
     document.querySelectorAll('.sheet-close').forEach(btn => {
       btn.addEventListener('click', () => { const id = btn.getAttribute('data-close'); sh(id).hidden = true; });
     });
+
+    // Boot with last ticker or a default so the page isn't "blank"
+    const bootTicker = localStorage.getItem('lastTicker') || 'AAPL';
+    onSearch(bootTicker, '');
+    els.input.value = bootTicker;
+
+    // Persist whenever you search
+    const _origDoSearch = onSearch;
+    onSearch = async (t, c) => {
+      localStorage.setItem('lastTicker', t);
+      return _origDoSearch(t, c);
+    };
   })();
   </script>
 </body>
