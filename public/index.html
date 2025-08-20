@@ -440,11 +440,19 @@
     const fmt = n => (Number.isFinite(n) ? n.toFixed(2) : '—');
     const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-    let CURRENT = { ticker: null, company: "" };
-    let FUNDAMENTALS = {};
-    let traceMap = {};
+    /* Recommendation helper (simple, explainable bands) */
+    function getRecommendation(last, iv){
+      const muted = css('--muted') || '#9ca3af';
+      if (!Number.isFinite(last) || !Number.isFinite(iv)) return { rec:'—', color: muted };
 
-    function refreshMinis(){}
+      const diffPct = ((last - iv) / iv) * 100;
+
+      if (diffPct <= -15) return { rec:'BUY',             color: css('--c-up')   || '#16a34a' };
+      if (diffPct <=  -5) return { rec:'Accumulate',      color: css('--c-up')   || '#16a34a' };
+      if (Math.abs(diffPct) < 5) return { rec:'Hold',     color: '#cbd5e1' };
+      if (diffPct >=  20) return { rec:'Trim / Overvalued', color: css('--c-down') || '#dc2626' };
+      return { rec:'Hold / Watch', color: '#f59e0b' };
+    }
 
     /* ===== Fib helpers ===== */
     function getAxisState() {
@@ -816,8 +824,14 @@
     function historyRangeFor(freq){ if (freq==='1m') return '7d'; if (['5m','15m','60m'].includes(freq)) return '2mo'; return '1y'; }
     async function fetchFullHistory(ticker, freq) { return await fetchChart(ticker, historyRangeFor(freq), freq); }
 
-    function toEastern(date) { return new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' })); }
-    function formatEasternISO(date) { const est = toEastern(date); return est.toISOString().replace('Z', ''); }
+    function toEastern(date) {
+      // keep for session/market-window logic
+      return new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    }
+    function formatEasternISO(date) {
+      // Use UTC ISO for Plotly axis stability
+      return date.toISOString(); // keep the 'Z'
+    }
 
     function getVisibleData(fullData, range, freq) {
       if (range === '1d' && freq === '1m') {
@@ -1131,6 +1145,14 @@
       if (e.key === 'Escape' && els.chartCard.classList.contains('max')) {
         setMaxState(false);
       }
+    });
+
+    // Sheets open/close
+    const sh = (id) => document.getElementById(id);
+    document.getElementById('toolScreeners')?.addEventListener('click', () => sh('sheetScreeners').hidden = false);
+    document.getElementById('toolGPTs')?.addEventListener('click', () => sh('sheetGPTs').hidden = false);
+    document.querySelectorAll('.sheet-close').forEach(btn => {
+      btn.addEventListener('click', () => { const id = btn.getAttribute('data-close'); sh(id).hidden = true; });
     });
   })();
   </script>
