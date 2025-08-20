@@ -214,6 +214,55 @@
     display:none;
   }
 
+  /* Prevent any horizontal scrolling/zoom-out */
+html, body { overflow-x: hidden; }
+
+/* Allow the toolbar to wrap to two lines on small screens */
+.toolbar {
+  flex-wrap: wrap;          /* ✅ key fix */
+  max-width: 100%;
+}
+
+/* Let the ticker row shrink instead of forcing overflow */
+.ticker-wrap {
+  min-width: 0;             /* ✅ prevents flex item from expanding past screen */
+  flex: 1 1 260px;          /* grow + wrap smartly */
+}
+
+/* Put the tools on their own line on narrow screens */
+.toolsbar {
+  flex: 1 1 100%;
+  margin-left: 0;           /* don’t push it off-screen */
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Make each tool button behave (no stretching) */
+.tool-btn { flex: 0 0 auto; }
+
+/* Mobile tweaks */
+@media (max-width: 720px) {
+  /* Put the ticker row first, tools second */
+  .ticker-wrap { order: 1; }
+  .toolsbar    { order: 2; }
+
+  /* Hide the text labels on the tool buttons to save space */
+  .toolsbar .tool-txt { display: none; }
+
+  /* Keep the theme toggle visible on the right end of the first line if it fits */
+  #themeToggle { margin-left: auto; }
+}
+
+/* Ultra-narrow: if needed, shrink gaps and button padding a bit */
+@media (max-width: 380px) {
+  .toolbar { gap: 6px; }
+  .tool-btn { padding: 6px 10px; }
+  .btn.inline { padding: 7px 10px; }
+}
+
+/* Ensure ticker input never causes zoom/overflow */
+.ticker-input { font-size: 16px; }
 </style>
 </head>
 <body>
@@ -441,56 +490,7 @@
     /* Recommendation helper (simple, explainable bands) */
     function getRecommendation(last, iv){
       const muted = css('--muted') || '#9ca3af';
-      if (!Number.isFinite(last) || !Number.isFinite(iv)) return { rec:'—', color: muted };
-
-      const diffPct = ((last - iv) / iv) * 100;
-
-      if (diffPct <= -15) return { rec:'BUY',             color: css('--c-up')   || '#16a34a' };
-      if (diffPct <=  -5) return { rec:'Accumulate',      color: css('--c-up')   || '#16a34a' };
-      if (Math.abs(diffPct) < 5) return { rec:'Hold',     color: '#cbd5e1' };
-      if (diffPct >=  20) return { rec:'Trim / Overvalued', color: css('--c-down') || '#dc2626' };
-      return { rec:'Hold / Watch', color: '#f59e0b' };
-    }
-
-    /* ===== Fib helpers ===== */
-    function getAxisState() {
-      const L = els.chart && (els.chart._fullLayout || els.chart.layout);
-      const g = (ax) => ({ range: (L?.[ax]?.range) ? [...L[ax].range] : null, autorange: L?.[ax]?.autorange !== false });
-      return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
-    }
-    function relayoutPreserve(payload) {
-      const S = getAxisState();
-      const keep = (axKey, s) => {
-        if (!s) return {};
-        const out = {};
-        if (s.range) { out[`${axKey}.range`] = s.range; out[`${axKey}.autorange`] = false; }
-        else if (s.autorange) { out[`${axKey}.autorange`] = true; }
-        return out;
-      };
-      return Plotly.relayout(els.chart, { ...payload, ...keep('xaxis',S.x), ...keep('yaxis',S.y), ...keep('yaxis2',S.y2), ...keep('yaxis3',S.y3), ...keep('yaxis4',S.y4) });
-    }
-    const fibActive = () => els.autoFib.classList.contains('active');
-
-    function getCandleTrace() {
-      const d = els.chart?.data || [];
-      const i = d.findIndex(t => t && t.type === 'candlestick');
-      return i >= 0 ? d[i] : null;
-    }
-
-    function addOrUpdateAutoFibTraces(){
-      if (!fibActive()) return;
-      const c = getCandleTrace();
-      if (!c) return;
-
-      const cx = c.x, ch = c.high, cl = c.low;
-
-      // current visible x-range (fallback to full series)
-      const xa = els.chart.layout?.xaxis || {};
-      const xr = (Array.isArray(xa.range) && xa.autorange === false)
-        ? xa.range
-        : [cx[0], cx[cx.length - 1]];
-
-      // indices within range
+      if (!Number.isFinite(last) || !Number
       const i0 = Math.max(0, cx.findIndex(d => d >= xr[0]));
       let i1 = cx.findIndex(d => d > xr[1]); if (i1 === -1) i1 = cx.length;
       if (i1 <= i0) return;
