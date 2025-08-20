@@ -776,11 +776,13 @@
       const minFor = { '1m':'1d', '5m':'5d', '15m':'10d', '60m':'1mo' };
       const order = ['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
       const idx = v => Math.max(0, order.indexOf(v));
+
       if (['1m','5m','15m','60m'].includes(freq)) {
         const minRange = minFor[freq];
         if (idx(time) < idx(minRange)) time = minRange;
         return { range: time, interval: freq === '60m' ? '60m' : freq };
       }
+
       const map = { '1d':'1d', '1wk':'1wk', '1mo':'1mo', '3mo':'3mo', '1y':'1y' };
       return { range: time, interval: map[freq] || '1d' };
     }
@@ -843,6 +845,7 @@
 
     async function go(ticker, company){
       CURRENT = { ticker, company };
+      window.CURRENT = CURRENT; // so other helpers can read it
       els.headline.textContent = `${ticker}${company ? ' — ' + company : ''}`;
       els.lastLine.textContent = 'Loading…';
       els.prevCloseLine.textContent = '';
@@ -1100,11 +1103,18 @@
       els.chartCard.classList.toggle('max', on);
       // ensure the exit pill exists
       if (!document.getElementById('exitMax')) {
+
         const b = document.createElement('button');
-                                                         b.id = 'exitMax;
+        b.id = 'exitMax';
+        b.type = 'button';
         b.className = 'max-exit';
         b.title = 'Exit (Esc)';
-        b.innerHTML = '⤢ Exit';
+        b.textContent = '⤢ Exit';
+        // keep it visible when maximized
+        b.style.position = 'absolute';
+        b.style.top = '12px';
+        b.style.right = '12px';
+        b.style.zIndex = '10000';
         b.addEventListener('click', () => setMaxState(false));
         els.chartCard.appendChild(b);
       }
