@@ -488,15 +488,55 @@ html, body { overflow-x: hidden; }
     const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
     /* Recommendation helper (simple, explainable bands) */
-    function getRecommendation(last, iv){
-      const muted = css('--muted') || '#9ca3af';
-      // Fix: Remove incomplete if statement
-      // (You may want to add your logic here if needed)
+    function getRecommendation(last, iv) {
+      // simple explainable bands around intrinsic value
+      if (!Number.isFinite(last) || !Number.isFinite(iv)) {
+        return { rec: 'HOLD', color: '#fbbf24' }; // amber
+      }
+      const r = last / iv;
+      if (r < 0.85) return { rec: 'BUY',  color: '#16a34a' }; // green
+      if (r > 1.15) return { rec: 'SELL', color: '#dc2626' }; // red
+      return { rec: 'HOLD', color: '#fbbf24' };
+    }
+
+    /* ===== Auto-Fib helpers ===== */
+    function fibActive(){ return els.autoFib?.classList?.contains('active'); }
+
+    function getAxisState() {
+      const L = els.chart && (els.chart._fullLayout || els.chart.layout);
+      const g = (ax) => ({ range: (L?.[ax]?.range) ? [...L[ax].range] : null, autorange: L?.[ax]?.autorange !== false });
+      return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
+    }
+    function relayoutPreserve(payload) {
+      const S = getAxisState();
+      const keep = (axKey, s) => {
+        if (!s) return {};
+        const out = {};
+        if (s.range) { out[`${axKey}.range`] = s.range; out[`${axKey}.autorange`] = false; }
+        else if (s.autorange) { out[`${axKey}.autorange`] = true; }
+        return out;
+      };
+      return Plotly.relayout(els.chart, { ...payload, ...keep('xaxis',S.x), ...keep('yaxis',S.y), ...keep('yaxis2',S.y2), ...keep('yaxis3',S.y3), ...keep('yaxis4',S.y4) });
+    }
+    function getCandleTrace() {
+      const d = els.chart?.data || [];
+      const i = d.findIndex(t => t && t.type === 'candlestick');
+      return i >= 0 ? d[i] : null;
+    }
+    async function addOrUpdateAutoFibTraces(){
+      if (!fibActive()) return;
+      const c = getCandleTrace(); if (!c) return;
+      const cx = c.x, ch = c.high, cl = c.low;
+
+      const xa = els.chart.layout?.xaxis || {};
+      const xr = (Array.isArray(xa.range) && xa.autorange === false)
+        ? xa.range
+        : [cx[0], cx[cx.length - 1]];
+
       const i0 = Math.max(0, cx.findIndex(d => d >= xr[0]));
       let i1 = cx.findIndex(d => d > xr[1]); if (i1 === -1) i1 = cx.length;
       if (i1 <= i0) return;
 
-      // hi/lo of the window
       let hi = -Infinity, lo = Infinity;
       for (let i = i0; i < i1; i++) {
         if (Number.isFinite(ch[i])) hi = Math.max(hi, ch[i]);
@@ -505,33 +545,23 @@ html, body { overflow-x: hidden; }
       if (!Number.isFinite(hi) || !Number.isFinite(lo) || hi === lo) return;
 
       const x0 = xr[0], x1 = xr[1];
-      const lvls = [
-        {p:1,    lbl:'100%'}, {p:.786, lbl:'78.6%'}, {p:.618, lbl:'61.8%'},
-        {p:.5,   lbl:'50%' }, {p:.382, lbl:'38.2%'}, {p:.236, lbl:'23.6%'},
-        {p:0,    lbl:'0%'}
-      ];
-      const color = css('--c-rsi') || '#8b5cf6';
-      const prices = lvls.map(({p,lbl}) => ({ y: hi - (hi - lo) * p, lbl }));
+      const lvls = [1,.786,.618,.5,.382,.236,0];
+      const color = getComputedStyle(document.documentElement).getPropertyValue('--c-rsi').trim() || '#8b5cf6';
+      const prices = lvls.map(p => hi - (hi - lo) * p);
 
-      const fibShapes = prices.map(({y}) => ({
+      const shapes = prices.map(y => ({
         type:'line', xref:'x', yref:'y', x0, x1, y0:y, y1:y,
         line:{ color, width:1.25, dash:'dot' }, layer:'above', opacity:.95
       }));
-      const fibAnn = prices.map(({y,lbl}) => ({
+      const anns = prices.map((y, i) => ({
         x:x1, y, xref:'x', yref:'y', xanchor:'right', yanchor:'middle',
-        text:`${lbl}  ${y.toFixed(2)}`,
-        showarrow:false,
-        font:{ size:11, color },
-        bgcolor:'rgba(0,0,0,0)',
-        borderpad:2
+        text:`${(lvls[i]*100).toFixed(1)}%  ${y.toFixed(2)}`,
+        showarrow:false, font:{ size:11, color }
       }));
 
-      return relayoutPreserve({ shapes: fibShapes, annotations: fibAnn });
+      return relayoutPreserve({ shapes, annotations: anns });
     }
-    function clearAutoFib(){
-      if (!els.chart) return;
-      return relayoutPreserve({ shapes: [], annotations: [] });
-    }
+    function clearAutoFib(){ if (!els.chart) return relayoutPreserve({ shapes:[], annotations:[] }); }
 
     /* ===== Indicators ===== */
     function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
