@@ -1105,6 +1105,7 @@
       // update colors immediately; optionally re-render data later
       requestAnimationFrame(() => {
        
+       
         applyChartTheme();
         if (CURRENT.ticker) go(CURRENT.ticker, CURRENT.company);
       });
@@ -1175,6 +1176,18 @@
       localStorage.setItem('lastTicker', t);
       return _origDoSearch(t, c);
     };
+
+    // Copy button handler – force "Stock ticker = <ticker>"
+    document.querySelectorAll('.copy').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ticker = CURRENT?.ticker || "";
+        const text = `Stock ticker = ${ticker}`;
+        navigator.clipboard.writeText(text).then(() => {
+          btn.textContent = "Copied!";
+          setTimeout(() => btn.textContent = "Copy prompt", 1500);
+        });
+      });
+    });
   })();
   </script>
 </body>
