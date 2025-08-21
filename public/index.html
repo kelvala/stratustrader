@@ -263,6 +263,23 @@ html, body { overflow-x: hidden; }
 
 /* Ensure ticker input never causes zoom/overflow */
 .ticker-input { font-size: 16px; }
+
+/* --- Mobile layout fixes --- */
+@media (max-width:720px){
+  .toolbar{ flex-wrap: wrap; }           /* allow the toolbar to break to 2 rows */
+  .ticker-wrap{ flex: 1 1 100%; }        /* ticker row takes the full width */
+  .ticker-input{ width:100%; }           /* input fills the row */
+  #searchBtn{ flex:0 0 auto; }           /* button stays visible/sized */
+  .toolsbar{ display:none !important; }  /* hide top tool buttons on mobile */
+}
+
+/* iOS notch safe area */
+@supports(padding: max(0px)){
+  .toolbar{
+    padding-left:  max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+}
 </style>
 </head>
 <body>
@@ -1170,6 +1187,43 @@ html, body { overflow-x: hidden; }
       localStorage.setItem('lastTicker', t);
       return _origDoSearch(t, c);
     };
+  })();
+
+  // Bottom nav: Home / Screeners / GPTs / Settings
+  (function(){
+    const btm = document.getElementById('btmNav');
+    if (!btm) return;
+    const sh = (id) => document.getElementById(id);
+
+    btm.addEventListener('click', (e) => {
+      const btn = e.target.closest('.tab');
+      if (!btn) return;
+      const tab = btn.dataset.tab;
+
+      // active state
+      btm.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+
+      // simple router
+      if (tab === 'home') {
+        sh('sheetScreeners').hidden = true;
+        sh('sheetGPTs').hidden = true;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (tab === 'screeners') {
+        sh('sheetGPTs').hidden = true;
+        sh('sheetScreeners').hidden = false;
+      } else if (tab === 'gpts') {
+        sh('sheetScreeners').hidden = true;
+        sh('sheetGPTs').hidden = false;
+      } else if (tab === 'settings') {
+        // quick win: toggle theme
+        const cur = localStorage.getItem('theme') || 'dark';
+        const next = cur === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('theme', next);
+        // call your existing setter
+        (typeof setTheme === 'function') && setTheme(next);
+      }
+    });
   })();
   </script>
 </body>
