@@ -334,7 +334,7 @@ html, body { overflow-x: hidden; }
         <div id="prevCloseLine">Yesterday’s Close: —</div>
         <div id="ivLine">Intrinsic Value: —</div>
       </div>
-      <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
+      <img id="infoLogo" class="info-logo" src="assets/stratus-trader-wide.png" alt="Stratus Trader" />
     </div>
 
     <div id="chartCard">
@@ -694,18 +694,23 @@ html, body { overflow-x: hidden; }
 
     async function loadSymbolsFromCSV(){
       try{
-        const r = await fetch('/stock_data.csv', { cache:'no-store' });
+        const r = await fetch('stock_data.csv', { cache:'no-store' }); // relative path
         if (!r.ok) throw new Error('CSV not found');
-        const text = await r.text();
+        let text = await r.text();
+
+        // strip UTF-8 BOM if present
+        if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+
         const lines = text.split(/\r?\n/).filter(Boolean);
-        if (!lines.length) return;
-        const first = lines[0]; const delim = first.includes('\t') ? '\t' : ',';
+        if (!lines.length) throw new Error('CSV empty');
+
+        const first = lines[0];
+        const delim = first.includes('\t') ? '\t' : ',';
         const hdr = first.split(delim).map(s => s.trim().toLowerCase());
         const hasHeader = hdr.some(h => /^(symbol|ticker)$/.test(h)) || hdr.some(h => /(name|company|security)/.test(h));
         let start = hasHeader ? 1 : 0;
         let symIdx = hasHeader ? (hdr.findIndex(h => /^(symbol|ticker)$/.test(h)) ?? 0) : 0;
         let nameIdx = hasHeader ? (hdr.findIndex(h => /(name|company|security)/.test(h)) ?? 1) : 1;
-        if (symIdx < 0) symIdx = 0; if (nameIdx < 0) nameIdx = 1;
 
         const tmp = [];
         for (let i = start; i < lines.length; i++){
@@ -714,8 +719,10 @@ html, body { overflow-x: hidden; }
           const n = (row[nameIdx] || '').trim();
           if (/^[A-Z0-9.^$\-]{1,12}$/.test(s)) tmp.push({ symbol:s, name:n });
         }
+        if (!tmp.length) throw new Error('No symbols parsed');
         LOCAL_SYMBOLS = tmp;
       }catch(e){
+        console.warn('Symbol CSV load failed, using fallback:', e);
         LOCAL_SYMBOLS = [
           { symbol:'AAPL', name:'Apple Inc' },
           { symbol:'MSFT', name:'Microsoft Corp' },
