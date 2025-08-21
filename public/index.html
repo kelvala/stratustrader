@@ -694,7 +694,7 @@ html, body { overflow-x: hidden; }
 
     async function loadSymbolsFromCSV(){
       try{
-        const r = await fetch('stock_data.csv', { cache:'no-store' }); // relative path
+        const r = await fetch('stock_data.csv', { cache:'no-store' });
         if (!r.ok) throw new Error('CSV not found');
         let text = await r.text();
 
@@ -704,23 +704,32 @@ html, body { overflow-x: hidden; }
         const lines = text.split(/\r?\n/).filter(Boolean);
         if (!lines.length) throw new Error('CSV empty');
 
-        const first = lines[0];
-        const delim = first.includes('\t') ? '\t' : ',';
-        const hdr = first.split(delim).map(s => s.trim().toLowerCase());
-        const hasHeader = hdr.some(h => /^(symbol|ticker)$/.test(h)) || hdr.some(h => /(name|company|security)/.test(h));
-        let start = hasHeader ? 1 : 0;
-        let symIdx = hasHeader ? (hdr.findIndex(h => /^(symbol|ticker)$/.test(h)) ?? 0) : 0;
-        let nameIdx = hasHeader ? (hdr.findIndex(h => /(name|company|security)/.test(h)) ?? 1) : 1;
-
-        const tmp = [];
-        for (let i = start; i < lines.length; i++){
-          const row = lines[i].split(delim);
-          const s = (row[symIdx] || '').toUpperCase().trim();
-          const n = (row[nameIdx] || '').trim();
-          if (/^[A-Z0-9.^$\-]{1,12}$/.test(s)) tmp.push({ symbol:s, name:n });
+        // auto-detect delimiter (supports |, tab, ;, ,)
+        const candidates = ['|', '\t', ';', ','];
+        let delim = candidates[0], best = -1;
+        for (const d of candidates){
+          const score = lines.slice(0, Math.min(5, lines.length))
+                             .map(L => (L.split(d).length - 1))
+                             .filter(k => k > 0).reduce((a,b)=>a+b,0);
+          if (score > best){ best = score; delim = d; }
         }
-        if (!tmp.length) throw new Error('No symbols parsed');
-        LOCAL_SYMBOLS = tmp;
+
+        // skip header if first token looks like "symbol"/"ticker"
+        const firstTok = lines[0].split(delim)[0].trim().toLowerCase();
+        const start = /(symbol|ticker)/.test(firstTok) ? 1 : 0;
+
+        const out = [];
+        for (let i = start; i < lines.length; i++){
+          const line = lines[i].trim();
+          const cut = line.indexOf(delim);
+          if (cut === -1) continue;
+          const sym  = line.slice(0, cut).trim().toUpperCase();
+          const name = line.slice(cut + 1).trim();      // keep commas in the name
+          if (/^[A-Z0-9.^$\-]{1,12}$/.test(sym)) out.push({ symbol: sym, name });
+        }
+
+        if (!out.length) throw new Error('No symbols parsed');
+        LOCAL_SYMBOLS = out;
       }catch(e){
         console.warn('Symbol CSV load failed, using fallback:', e);
         LOCAL_SYMBOLS = [
