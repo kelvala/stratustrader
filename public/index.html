@@ -160,9 +160,21 @@
   .sheet-close{ background:transparent; border:0; color:var(--text); font-size:18px; cursor:pointer; }
   .sheet-body{ max-height:58vh; overflow:auto; }
   /* Sheet: make sure content isn't under the iOS toolbar */
-  .sheet-inner{ padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .sheet-inner{ padding-bottom: max(14px, env(safe-area-inset-bottom)); }
+  .sheet{ z-index: 4000; } /* above Plotly hover layer */
   @media (max-width:720px){
-    .sheet-body{ max-height:70vh; }
+    #toolsBar{ display:none; }
+    .btmnav{ display:flex; gap:8px; }
+    .scr-quick select{
+      width:100%;
+      background:var(--field-bg);
+      color:var(--field-text);
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:10px;
+      appearance:none;           /* iOS Safari: keep dark styling */
+      -webkit-appearance:none;   /* iOS Safari */
+    }
   }
   @keyframes sheetUp{ from{ transform:translateY(16px); opacity:.0 } to{ transform:translateY(0); opacity:1 } }
 
@@ -1022,6 +1034,7 @@ html, body { overflow-x: hidden; }
         };
 
         await Plotly.newPlot(els.chart, data, layout, {responsive:true,displaylogo:false});
+        wireHoverDismiss();
 
         if (fibActive()) addOrUpdateAutoFibTraces();
 
@@ -1230,6 +1243,53 @@ html, body { overflow-x: hidden; }
       }
     });
   })();
+  // =========== Hover tooltip dismiss ===========
+  function dismissHover(){
+    if (!els.chart) return;
+    try { Plotly.Fx.unhover(els.chart); } catch(_) {}
+  }
+
+  function wireHoverDismiss(){
+    if (els.chart?._hoverDismissWired) return;
+
+    // Tap/click outside chart OR on the hover box itself => dismiss
+    document.addEventListener('pointerdown', (e) => {
+      const tappedHoverBox = e.target.closest?.('.hoverlayer');
+      const insideChart = els.chart.contains(e.target);
+      if (!insideChart || tappedHoverBox) dismissHover();
+    }, { capture:true });
+
+    // Also clear on Esc or page scroll
+    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') dismissHover(); });
+    window.addEventListener('scroll', dismissHover, { passive:true });
+
+    els.chart._hoverDismissWired = true;
+  }
+
+  // =========== Mobile bottom bar wiring + sheet helpers ===========
+  const sh = (id) => document.getElementById(id);
+  function openSheet(id){
+    ['sheetScreeners','sheetGPTs'].forEach(s => { const el = sh(s); if (el) el.hidden = true; });
+    const el = sh(id); if (el) el.hidden = false;
+  }
+  function closeAllSheets(){
+    ['sheetScreeners','sheetGPTs'].forEach(s => { const el = sh(s); if (el) el.hidden = true; });
+  }
+
+  const nav = document.getElementById('btmNav');
+  if (nav){
+    nav.addEventListener('click', (e)=>{
+      const tabBtn = e.target.closest('.tab'); if(!tabBtn) return;
+      nav.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+      tabBtn.classList.add('active');
+      const tab = tabBtn.dataset.tab;
+
+      if (tab === 'home'){ closeAllSheets(); window.scrollTo({top:0, behavior:'smooth'}); }
+      else if (tab === 'screeners'){ openSheet('sheetScreeners'); }
+      else if (tab === 'gpts'){ openSheet('sheetGPTs'); }
+      else if (tab === 'settings'){ els.themeToggle?.click(); } // quick theme toggle
+    });
+  }
   </script>
 </body>
 </html>
