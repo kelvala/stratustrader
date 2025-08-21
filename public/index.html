@@ -913,6 +913,7 @@ html, body { overflow-x: hidden; }
       els.lastLine.textContent = 'Loading…';
       els.prevCloseLine.textContent = '';
       els.ivLine.textContent = '';
+      dismissHover();
 
       try{
         const time = els.timeSel.value, freq = els.freqSel.value;
@@ -1194,6 +1195,52 @@ html, body { overflow-x: hidden; }
       btn.addEventListener('click', () => { const id = btn.getAttribute('data-close'); sh(id).hidden = true; });
     });
 
+    /* --- Hover tooltip: dismiss helpers (must live INSIDE the IIFE to see `els`) --- */
+    function dismissHover(){
+      if (!els.chart) return;
+      try { Plotly.Fx.unhover(els.chart); } catch(_) {}
+    }
+    function wireHoverDismiss(){
+      if (els.chart?._hoverDismissWired) return;
+
+      // Tap/click outside chart OR on the hover box itself => dismiss
+      document.addEventListener('pointerdown', (e) => {
+        const tappedHoverBox = e.target.closest?.('.hoverlayer');
+        const insideChart = els.chart.contains(e.target);
+        if (!insideChart || tappedHoverBox) dismissHover();
+      }, { capture:true });
+
+      // Also clear on Esc or page scroll
+      window.addEventListener('keydown', (e) => { if (e.key === 'Escape') dismissHover(); });
+      window.addEventListener('scroll', dismissHover, { passive:true });
+
+      els.chart._hoverDismissWired = true;
+    }
+
+    /* --- Bottom nav wiring + sheet helpers (also inside IIFE) --- */
+    function openSheet(id){
+      ['sheetScreeners','sheetGPTs'].forEach(s => { const el = document.getElementById(s); if (el) el.hidden = true; });
+      const el = document.getElementById(id); if (el) el.hidden = false;
+    }
+    function closeAllSheets(){
+      ['sheetScreeners','sheetGPTs'].forEach(s => { const el = document.getElementById(s); if (el) el.hidden = true; });
+    }
+
+    const nav = document.getElementById('btmNav');
+    if (nav){
+      nav.addEventListener('click', (e)=>{
+        const tabBtn = e.target.closest('.tab'); if(!tabBtn) return;
+        nav.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+        tabBtn.classList.add('active');
+        const tab = tabBtn.dataset.tab;
+
+        if (tab === 'home'){ closeAllSheets(); window.scrollTo({top:0, behavior:'smooth'}); }
+        else if (tab === 'screeners'){ openSheet('sheetScreeners'); }
+        else if (tab === 'gpts'){ openSheet('sheetGPTs'); }
+        else if (tab === 'settings'){ setTheme(getTheme()==='dark' ? 'light' : 'dark'); }
+      });
+    }
+
     // Boot with last ticker or a default so the page isn't "blank"
     const bootTicker = localStorage.getItem('lastTicker') || 'AAPL';
     onSearch(bootTicker, '');
@@ -1206,90 +1253,6 @@ html, body { overflow-x: hidden; }
       return _origDoSearch(t, c);
     };
   })();
-
-  // Bottom nav: Home / Screeners / GPTs / Settings
-  (function(){
-    const btm = document.getElementById('btmNav');
-    if (!btm) return;
-    const sh = (id) => document.getElementById(id);
-
-    btm.addEventListener('click', (e) => {
-      const btn = e.target.closest('.tab');
-      if (!btn) return;
-      const tab = btn.dataset.tab;
-
-      // active state
-      btm.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      btn.classList.add('active');
-
-      // simple router
-      if (tab === 'home') {
-        sh('sheetScreeners').hidden = true;
-        sh('sheetGPTs').hidden = true;
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      } else if (tab === 'screeners') {
-        sh('sheetGPTs').hidden = true;
-        sh('sheetScreeners').hidden = false;
-      } else if (tab === 'gpts') {
-        sh('sheetScreeners').hidden = true;
-        sh('sheetGPTs').hidden = false;
-      } else if (tab === 'settings') {
-        // quick win: toggle theme
-        const cur = localStorage.getItem('theme') || 'dark';
-        const next = cur === 'dark' ? 'light' : 'dark';
-        localStorage.setItem('theme', next);
-        // call your existing setter
-        (typeof setTheme === 'function') && setTheme(next);
-      }
-    });
-  })();
-  // =========== Hover tooltip dismiss ===========
-  function dismissHover(){
-    if (!els.chart) return;
-    try { Plotly.Fx.unhover(els.chart); } catch(_) {}
-  }
-
-  function wireHoverDismiss(){
-    if (els.chart?._hoverDismissWired) return;
-
-    // Tap/click outside chart OR on the hover box itself => dismiss
-    document.addEventListener('pointerdown', (e) => {
-      const tappedHoverBox = e.target.closest?.('.hoverlayer');
-      const insideChart = els.chart.contains(e.target);
-      if (!insideChart || tappedHoverBox) dismissHover();
-    }, { capture:true });
-
-    // Also clear on Esc or page scroll
-    window.addEventListener('keydown', (e) => { if (e.key === 'Escape') dismissHover(); });
-    window.addEventListener('scroll', dismissHover, { passive:true });
-
-    els.chart._hoverDismissWired = true;
-  }
-
-  // =========== Mobile bottom bar wiring + sheet helpers ===========
-  const sh = (id) => document.getElementById(id);
-  function openSheet(id){
-    ['sheetScreeners','sheetGPTs'].forEach(s => { const el = sh(s); if (el) el.hidden = true; });
-    const el = sh(id); if (el) el.hidden = false;
-  }
-  function closeAllSheets(){
-    ['sheetScreeners','sheetGPTs'].forEach(s => { const el = sh(s); if (el) el.hidden = true; });
-  }
-
-  const nav = document.getElementById('btmNav');
-  if (nav){
-    nav.addEventListener('click', (e)=>{
-      const tabBtn = e.target.closest('.tab'); if(!tabBtn) return;
-      nav.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-      tabBtn.classList.add('active');
-      const tab = tabBtn.dataset.tab;
-
-      if (tab === 'home'){ closeAllSheets(); window.scrollTo({top:0, behavior:'smooth'}); }
-      else if (tab === 'screeners'){ openSheet('sheetScreeners'); }
-      else if (tab === 'gpts'){ openSheet('sheetGPTs'); }
-      else if (tab === 'settings'){ els.themeToggle?.click(); } // quick theme toggle
-    });
-  }
   </script>
 </body>
 </html>
