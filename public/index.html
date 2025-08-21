@@ -314,9 +314,6 @@ html, body { overflow-x: hidden; }
       </div>
 
       <div class="toolsbar" id="toolsBar">
-        <button class="tool-btn" id="toolScreeners" aria-label="Open Screeners">
-          <span class="tool-ic">🔎</span><span class="tool-txt">Screeners</span>
-        </button>
         <button class="tool-btn" id="toolGPTs" aria-label="Open GPTs">
           <span class="tool-ic">🧠</span><span class="tool-txt">GPTs</span>
         </button>
@@ -389,30 +386,6 @@ html, body { overflow-x: hidden; }
   </div>
 
   <!-- =================== SHEETS =================== -->
-  <div class="sheet" id="sheetScreeners" hidden>
-    <div class="sheet-inner">
-      <div class="sheet-head">
-        <div class="sheet-title">Screeners</div>
-        <button class="sheet-close" data-close="sheetScreeners">✕</button>
-      </div>
-      <div class="sheet-body">
-        <!-- Quick 3-filter row -->
-        <div class="scr-quick" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
-          <select id="scMarketCap"><option>Market Cap ≥ $10B</option><option>≥ $2B</option></select>
-          <select id="scAvgVol"><option>Avg Vol ≥ 1M</option><option>≥ 100k</option></select>
-          <select id="scRSI"><option>RSI < 30 (oversold)</option><option>RSI > 70 (overbought)</option></select>
-          <div style="grid-column:1/-1;display:flex;gap:8px">
-            <button class="btn" id="runScreener">Run</button>
-            <button class="btn inline" id="saveScreener">Save</button>
-          </div>
-        </div>
-
-        <!-- Preset list (click opens matching Finviz link) -->
-        <div class="scr-list" id="scrList"></div>
-      </div>
-    </div>
-  </div>
-
   <div class="sheet" id="sheetGPTs" hidden>
     <div class="sheet-inner">
       <div class="sheet-head">
@@ -473,7 +446,6 @@ html, body { overflow-x: hidden; }
   <!-- Mobile bottom bar -->
   <nav class="btmnav" id="btmNav" role="navigation" aria-label="Bottom Navigation">
     <button data-tab="home" class="tab active" aria-label="Home">🏠<span>Home</span></button>
-    <button data-tab="screeners" class="tab" aria-label="Screeners">🔎<span>Screeners</span></button>
     <button data-tab="gpts" class="tab" aria-label="GPTs">🧠<span>GPTs</span></button>
     <button data-tab="settings" class="tab" aria-label="Settings">⚙️<span>Settings</span></button>
   </nav>
@@ -1189,7 +1161,6 @@ html, body { overflow-x: hidden; }
 
     // Sheets open/close
     const sh = (id) => document.getElementById(id);
-    document.getElementById('toolScreeners')?.addEventListener('click', () => sh('sheetScreeners').hidden = false);
     document.getElementById('toolGPTs')?.addEventListener('click', () => sh('sheetGPTs').hidden = false);
     document.querySelectorAll('.sheet-close').forEach(btn => {
       btn.addEventListener('click', () => { const id = btn.getAttribute('data-close'); sh(id).hidden = true; });
@@ -1217,15 +1188,14 @@ html, body { overflow-x: hidden; }
       els.chart._hoverDismissWired = true;
     }
 
-    /* --- Bottom nav wiring + sheet helpers (also inside IIFE) --- */
+    /* --- Bottom nav wiring + sheet helpers (Screeners removed) --- */
     function openSheet(id){
-      ['sheetScreeners','sheetGPTs'].forEach(s => { const el = document.getElementById(s); if (el) el.hidden = true; });
+      ['sheetGPTs'].forEach(s => { const el = document.getElementById(s); if (el) el.hidden = true; });
       const el = document.getElementById(id); if (el) el.hidden = false;
     }
     function closeAllSheets(){
-      ['sheetScreeners','sheetGPTs'].forEach(s => { const el = document.getElementById(s); if (el) el.hidden = true; });
+      ['sheetGPTs'].forEach(s => { const el = document.getElementById(s); if (el) el.hidden = true; });
     }
-
     const nav = document.getElementById('btmNav');
     if (nav){
       nav.addEventListener('click', (e)=>{
@@ -1235,7 +1205,6 @@ html, body { overflow-x: hidden; }
         const tab = tabBtn.dataset.tab;
 
         if (tab === 'home'){ closeAllSheets(); window.scrollTo({top:0, behavior:'smooth'}); }
-        else if (tab === 'screeners'){ openSheet('sheetScreeners'); }
         else if (tab === 'gpts'){ openSheet('sheetGPTs'); }
         else if (tab === 'settings'){ setTheme(getTheme()==='dark' ? 'light' : 'dark'); }
       });
