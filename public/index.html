@@ -317,14 +317,13 @@ html, body { overflow-x: hidden; }
         <button class="tool-btn" id="toolGPTs" aria-label="Open GPTs">
           <span class="tool-ic">🧠</span><span class="tool-txt">GPTs</span>
         </button>
+        <button class="tool-btn" id="toolScreeners" aria-label="Open Screeners">
+          <span class="tool-ic">🔎</span><span class="tool-txt">Screeners</span>
+        </button>
         <button class="tool-btn" id="wideBtn" aria-label="Toggle Width"><span class="tool-ic">↔︎</span><span class="tool-txt">Wide</span></button>
         <button class="tool-btn" id="maxBtn" aria-label="Maximize"><span class="tool-ic">⤢</span><span class="tool-txt">Max</span></button>
         <button class="tool-btn" id="refreshBtn" aria-label="Refresh"><span class="tool-ic">⟳</span><span class="tool-txt">Refresh</span></button>
         <button id="themeToggle" class="theme-toggle" type="button">🌙 Dark</button>
-        <!-- Screeners button in toolbar -->
-        <button class="tool-btn" id="toolScreeners" aria-label="Open Screeners">
-          <span class="tool-ic">🔎</span><span class="tool-txt">Screeners</span>
-        </button>
       </div>
     </div>
 
@@ -1274,6 +1273,29 @@ html, body { overflow-x: hidden; }
       localStorage.setItem('lastTicker', t);
       return _origDoSearch(t, c);
     };
+
+    /* ===== Hover tooltip dismiss helpers (must live inside this IIFE) ===== */
+    function dismissHover(){
+      if (!els.chart) return;
+      try { Plotly.Fx.unhover(els.chart); } catch (_) {}
+    }
+
+    function wireHoverDismiss(){
+      if (els.chart?._hoverDismissWired) return;
+
+      // Tap/click outside the chart OR on the hover box itself => dismiss
+      document.addEventListener('pointerdown', (e) => {
+        const tappedHoverBox = e.target.closest?.('.hoverlayer');
+        const insideChart = els.chart.contains(e.target);
+        if (!insideChart || tappedHoverBox) dismissHover();
+      }, { capture: true });
+
+      // Also clear on Esc or page scroll
+      window.addEventListener('keydown', (e) => { if (e.key === 'Escape') dismissHover(); });
+      window.addEventListener('scroll', dismissHover, { passive: true });
+
+      els.chart._hoverDismissWired = true;
+    }
   })();
   </script>
 </body>
