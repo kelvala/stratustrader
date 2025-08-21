@@ -321,6 +321,10 @@ html, body { overflow-x: hidden; }
         <button class="tool-btn" id="maxBtn" aria-label="Maximize"><span class="tool-ic">⤢</span><span class="tool-txt">Max</span></button>
         <button class="tool-btn" id="refreshBtn" aria-label="Refresh"><span class="tool-ic">⟳</span><span class="tool-txt">Refresh</span></button>
         <button id="themeToggle" class="theme-toggle" type="button">🌙 Dark</button>
+        <!-- Screeners button in toolbar -->
+        <button class="tool-btn" id="toolScreeners" aria-label="Open Screeners">
+          <span class="tool-ic">🔎</span><span class="tool-txt">Screeners</span>
+        </button>
       </div>
     </div>
 
@@ -443,9 +447,23 @@ html, body { overflow-x: hidden; }
     </div>
   </div>
 
+  <!-- Simple Screeners sheet (Finviz links only) -->
+  <div class="sheet" id="sheetScreeners" hidden>
+    <div class="sheet-inner">
+      <div class="sheet-head">
+        <div class="sheet-title">Screeners</div>
+        <button class="sheet-close" data-close="sheetScreeners">✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="scr-list" id="scrList"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Mobile bottom bar -->
   <nav class="btmnav" id="btmNav" role="navigation" aria-label="Bottom Navigation">
     <button data-tab="home" class="tab active" aria-label="Home">🏠<span>Home</span></button>
+    <button data-tab="screeners" class="tab" aria-label="Screeners">🔎<span>Screeners</span></button>
     <button data-tab="gpts" class="tab" aria-label="GPTs">🧠<span>GPTs</span></button>
     <button data-tab="settings" class="tab" aria-label="Settings">⚙️<span>Settings</span></button>
   </nav>
@@ -1159,43 +1177,74 @@ html, body { overflow-x: hidden; }
       }
     });
 
+    /* === Finviz Screeners (links only) === */
+    const FINVIZ_PRESETS = [
+      {
+        title: 'Oversold large caps (RSI < 30, Mcap > $10B, AvgVol > 1M)',
+        lvl: 'Beginner',
+        url: 'https://finviz.com/screener.ashx?v=111&f=cap_largeover,sh_avgvol_o1000,ta_rsi_os'
+      },
+      {
+        title: 'New 52-week highs (liquid)',
+        lvl: 'Beginner',
+        url: 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o1000,ta_highlow52w_nh'
+      },
+      {
+        title: 'Price above 50 & 200 SMA (trend strength)',
+        lvl: 'Intermediate',
+        url: 'https://finviz.com/screener.ashx?v=111&f=ta_sma50_pa,ta_sma200_pa,sh_avgvol_o1000'
+      },
+      {
+        title: 'High dividend yield ≥ 5% (liquid)',
+        lvl: 'Beginner',
+        url: 'https://finviz.com/screener.ashx?v=111&f=fa_div_o5,sh_avgvol_o500'
+      },
+      {
+        title: 'Value: P/E < 15, P/B < 3, Debt/Equity < 1',
+        lvl: 'Intermediate',
+        url: 'https://finviz.com/screener.ashx?v=111&f=fa_pe_u15,fa_pb_u3,fa_debteq_u1,sh_avgvol_o500'
+      },
+      {
+        title: 'Insider buying (recent)',
+        lvl: 'Advanced',
+        url: 'https://finviz.com/screener.ashx?v=111&f=sh_insiderbuy'
+      }
+    ];
+
+    function renderScreeners(){
+      const list = document.getElementById('scrList');
+      if (!list) return;
+      list.innerHTML = '';
+      FINVIZ_PRESETS.forEach(p => {
+        const a = document.createElement('a');
+        a.href = p.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.className = 'scr-item';
+        a.dataset.lvl = p.lvl;
+        a.innerHTML = `
+          <div style="flex:1">
+            <div class="title">${p.title}</div>
+            <div class="desc">Opens Finviz with filters applied</div>
+          </div>
+          <div class="badge">Finviz</div>
+        `;
+        list.appendChild(a);
+      });
+    }
+
     // Sheets open/close
     const sh = (id) => document.getElementById(id);
     document.getElementById('toolGPTs')?.addEventListener('click', () => sh('sheetGPTs').hidden = false);
+    document.getElementById('toolScreeners')?.addEventListener('click', () => {
+      renderScreeners();
+      sh('sheetScreeners').hidden = false;
+    });
     document.querySelectorAll('.sheet-close').forEach(btn => {
       btn.addEventListener('click', () => { const id = btn.getAttribute('data-close'); sh(id).hidden = true; });
     });
 
-    /* --- Hover tooltip: dismiss helpers (must live INSIDE the IIFE to see `els`) --- */
-    function dismissHover(){
-      if (!els.chart) return;
-      try { Plotly.Fx.unhover(els.chart); } catch(_) {}
-    }
-    function wireHoverDismiss(){
-      if (els.chart?._hoverDismissWired) return;
-
-      // Tap/click outside chart OR on the hover box itself => dismiss
-      document.addEventListener('pointerdown', (e) => {
-        const tappedHoverBox = e.target.closest?.('.hoverlayer');
-        const insideChart = els.chart.contains(e.target);
-        if (!insideChart || tappedHoverBox) dismissHover();
-      }, { capture:true });
-
-      // Also clear on Esc or page scroll
-      window.addEventListener('keydown', (e) => { if (e.key === 'Escape') dismissHover(); });
-      window.addEventListener('scroll', dismissHover, { passive:true });
-
-      els.chart._hoverDismissWired = true;
-    }
-
-    /* --- Bottom nav wiring + sheet helpers (Screeners removed) --- */
-    function openSheet(id){
-      ['sheetGPTs'].forEach(s => { const el = document.getElementById(s); if (el) el.hidden = true; });
-      const el = document.getElementById(id); if (el) el.hidden = false;
-    }
-    function closeAllSheets(){
-      ['sheetGPTs'].forEach(s => { const el = document.getElementById(s); if (el) el.hidden = true; });
-    }
+    // Bottom nav (mobile)
     const nav = document.getElementById('btmNav');
     if (nav){
       nav.addEventListener('click', (e)=>{
@@ -1204,11 +1253,15 @@ html, body { overflow-x: hidden; }
         tabBtn.classList.add('active');
         const tab = tabBtn.dataset.tab;
 
-        if (tab === 'home'){ closeAllSheets(); window.scrollTo({top:0, behavior:'smooth'}); }
-        else if (tab === 'gpts'){ openSheet('sheetGPTs'); }
-        else if (tab === 'settings'){ setTheme(getTheme()==='dark' ? 'light' : 'dark'); }
+        if (tab === 'home'){ ['sheetScreeners','sheetGPTs'].forEach(s=>sh(s)?.setAttribute('hidden','')); window.scrollTo({top:0, behavior:'smooth'}); }
+        else if (tab === 'screeners'){ renderScreeners(); sh('sheetGPTs')?.setAttribute('hidden',''); sh('sheetScreeners')?.removeAttribute('hidden'); }
+        else if (tab === 'gpts'){ sh('sheetScreeners')?.setAttribute('hidden',''); sh('sheetGPTs')?.removeAttribute('hidden'); }
+        else if (tab === 'settings'){ els.themeToggle?.click(); }
       });
     }
+
+    // Make sure we render the list at least once on load (it’s cheap)
+    renderScreeners();
 
     // Boot with last ticker or a default so the page isn't "blank"
     const bootTicker = localStorage.getItem('lastTicker') || 'AAPL';
