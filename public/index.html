@@ -659,28 +659,45 @@
     els.searchBtn.addEventListener('click', () => { hideAC(); doSearchFromInput(); });
 
     /* ===== Chart flow (unchanged other than theme + fib hooks later) ===== */
-    function alignAndExtendSMA(smaArr, visibleLen, startIdx){
-      const arr = smaArr.slice(startIdx, startIdx + visibleRows.length);
+    function alignAndExtendSMA(smaAll, visibleLen, startIdx){
+      // slice the precomputed SMA to the visible window
+      let arr = smaAll.slice(Math.max(0, startIdx), Math.max(0, startIdx) + visibleLen);
+
+      // if we didn’t fetch far enough back, pad the front
       while (arr.length < visibleLen) arr.unshift(null);
+
+      // carry the first real number backwards so the line starts at the left edge
       const firstIdx = arr.findIndex(v => Number.isFinite(v));
-      if (firstIdx > 0) { const firstVal = arr[firstIdx]; for (let i = 0; i < firstIdx; i++) arr[i] = firstVal; }
-      for (let i = 1; i < arr.length; i++) if (arr[i] == null && Number.isFinite(arr[i-1])) arr[i] = arr[i-1];
+      if (firstIdx > 0) {
+        const firstVal = arr[firstIdx];
+        for (let i = 0; i < firstIdx; i++) arr[i] = firstVal;
+      }
+
+      // forward-fill occasional gaps so the line stays continuous
+      for (let i = 1; i < arr.length; i++) {
+        if (arr[i] == null && Number.isFinite(arr[i-1])) arr[i] = arr[i-1];
+      }
       return arr;
     }
 
-    function normalizePair(time, freq){
-      const minFor = { '1m':'1d', '5m':'5d', '15m':'10d', '60m':'1mo' };
-      const order = ['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
-      const idx = v => Math.max(0, order.indexOf(v));
+    // how much history to fetch given the user's Time + the fact we draw SMA200
+    function historyRangeFor(freq, time){
+      if (freq === '1m') return '7d';
+      if (freq === '5m' || freq === '15m' || freq === '60m') return '2mo';
 
-      if (['1m','5m','15m','60m'].includes(freq)) {
-        const minRange = minFor[freq];
-        if (idx(time) < idx(minRange)) time = minRange;
-        return { range: time, interval: freq === '60m' ? '60m' : freq };
-      }
+      // for daily/weekly/monthly we over-fetch so the 200-period MA is well-formed
+      const map = {
+        '1d':'1y','2d':'1y','5d':'1y','10d':'1y',
+        '1mo':'1y','2mo':'2y','3mo':'2y','6mo':'2y',
+        'ytd':'2y','1y':'3y','2y':'5y','3y':'5y',
+        '4y':'10y','5y':'10y','10y':'max','max':'max'
+      };
+      return map[time] || '3y';
+    }
 
-      const map = { '1d':'1d', '1wk':'1wk', '1mo':'1mo', '3mo':'3mo', '1y':'1y' };
-      return { range: time, interval: map[freq] || '1d' };
+    async function fetchFullHistory(ticker, time, freq){
+      const range = historyRangeFor(freq, time);
+      return await fetchChart(ticker, range, freq);
     }
 
     async function fetchChart(ticker, time, freq){
@@ -707,6 +724,21 @@
         } catch(e){ lastErr=e; }
       }
       throw lastErr || new Error('Fetch failed');
+    }
+
+    function normalizePair(time, freq){
+      const minFor = { '1m':'1d', '5m':'5d', '15m':'10d', '60m':'1mo' };
+      const order = ['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
+      const idx = v => Math.max(0, order.indexOf(v));
+
+      if (['1m','5m','15m','60m'].includes(freq)) {
+        const minRange = minFor[freq];
+        if (idx(time) < idx(minRange)) time = minRange;
+        return { range: time, interval: freq === '60m' ? '60m' : freq };
+      }
+
+      const map = { '1d':'1d', '1wk':'1wk', '1mo':'1mo', '3mo':'3mo', '1y':'1y' };
+      return { range: time, interval: map[freq] || '1d' };
     }
 
     function historyRangeFor(freq){ if (freq==='1m') return '7d'; if (['5m','15m','60m'].includes(freq)) return '2mo'; return '1y'; }
@@ -750,7 +782,7 @@
 
       try{
         const time = els.timeSel.value, freq = els.freqSel.value;
-        const fullRows = await fetchFullHistory(ticker, freq);
+        const fullRows = await fetchFullHistory(ticker, time, freq);
         if (!fullRows.length) throw new Error('No price data');
 
         const visibleRows = getVisibleData(fullRows, time, freq);
