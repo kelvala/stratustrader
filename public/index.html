@@ -10,7 +10,6 @@
     --bg:#0f1115;--panel:#151923;--text:#e5e7eb;--muted:#9ca3af;
     --accent:#22c55e;--focus:#3b82f6;--border:#23283a;--hover:#161a25;
     --metric-bg:#1a1f2e;--metric-border:#2a2f3e;
-    --field-bg:#0c0f16;--field-text:#e5e7eb;
 
     --c-up:#16a34a;--c-down:#dc2626;
     --c-sma20:#22c55e;--c-sma50:#60a5fa;--c-sma200:#f59e0b;
@@ -44,8 +43,14 @@
     --c-sma20:#22c55e;--c-sma50:#2563eb;--c-sma200:#f59e0b;
     --c-rsi:#7c3aed;--c-macd:#0ea5e9;--c-vol:#16a34a;
     --grid:#e5e7eb;
-
     --tf-bg:#eef2ff; --tf-head:#c7d2fe; --tf-glow:#6366f1;
+    --field-bg:#ffffff;         /* <-- added for light input bg */
+    --field-text:#111827;       /* <-- added for light input text */
+  }
+  .light .info-logo{
+    mix-blend-mode: multiply;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,.12));
+    opacity:.95;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;min-height:100vh;padding:20px;transition:background .2s,color .2s}
@@ -98,7 +103,7 @@
     pointer-events:none;
     filter: drop-shadow(0 2px 8px rgba(0,0,0,.35));
   }
-  .light .info-logo{ opacity:.88; }
+  .light .info-logo{ mix-blend-mode: multiply; filter: drop-shadow(0 2px 6px rgba(0,0,0,.12)); opacity:.95; }
   @media (max-width:640px){
     .info-logo{ height:42px; right:10px; }
   }
@@ -584,7 +589,9 @@ html, body { overflow-x: hidden; }
 
       return relayoutPreserve({ shapes, annotations: anns });
     }
-    function clearAutoFib(){ if (!els.chart) return relayoutPreserve({ shapes:[], annotations:[] }); }
+    function clearAutoFib(){
+      if (els.chart) return relayoutPreserve({ shapes:[], annotations:[] });
+    }
 
     /* ===== Indicators ===== */
     function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
@@ -1141,9 +1148,19 @@ html, body { overflow-x: hidden; }
     }
     function setTheme(t){
       Object.entries(THEMES[t]).forEach(([k,v])=>document.documentElement.style.setProperty(k,v));
+      document.documentElement.classList.toggle('light', t==='light'); // <-- add this
       els.themeToggle.textContent = t==='dark' ? '☀️ Light' : '🌙 Dark';
       els.themeToggle.classList.toggle('active', t==='dark');
       localStorage.setItem('theme',t);
+
+      // Optional: swap logo for light mode if you have a light PNG
+      const logo = document.getElementById('infoLogo');
+      if (logo) {
+        logo.src = (t === 'light')
+          ? '/assets/stratus-trader-wide-light.png'
+          : '/assets/stratus-trader-wide.png';
+      }
+
       requestAnimationFrame(() => {
         applyChartTheme();
         if (CURRENT.ticker) go(CURRENT.ticker, CURRENT.company);
