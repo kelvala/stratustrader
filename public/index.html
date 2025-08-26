@@ -797,9 +797,9 @@
 
         const closeAll = fullRows.map(r=>r.c);
         const sma20All  = SMA(closeAll,20), sma50All = SMA(closeAll,50), sma200All = SMA(closeAll,200);
-        const sma20  = sma20All.slice(startIdx, startIdx + visibleRows.length);
-        const sma50  = sma50All.slice(startIdx, startIdx + visibleRows.length);
-        const sma200 = sma200All.slice(startIdx, startIdx + visibleRows.length);
+        const sma20  = alignAndExtendSMA(sma20All , visibleRows.length, startIdx);
+        const sma50  = alignAndExtendSMA(sma50All , visibleRows.length, startIdx);
+        const sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
 
         const rsi  = RSI(close, 14);
         const macd = MACD(close, 12, 26, 9);
@@ -842,9 +842,9 @@
         const volColors = close.map((c,i)=> i===0 ? css('--c-vol') : (c>=close[i-1] ? css('--c-up') : css('--c-down')));
         const trVol = {type:'bar',x,y:vol,marker:{color:volColors},name:'Volume',yaxis:'y3',hovertemplate:'Vol: %{y:,}<extra></extra>'};
 
-        const trSMA20  = {type:'scatter',mode:'lines',x,y:sma20 ,name:'SMA20' ,line:{width:1.8,color:css('--c-sma20')}};
-        const trSMA50  = {type:'scatter',mode:'lines',x,y:sma50 ,name:'SMA50' ,line:{width:1.8,color:css('--c-sma50')}};
-        const trSMA200 = {type:'scatter',mode:'lines',x,y:sma200,name:'SMA200',line:{width:2.6,color:css('--c-sma200')}};
+        const trSMA20  = {type:'scatter',mode:'lines',x,y:sma20 ,name:'SMA20' ,line:{width:1.8,color:css('--c-sma20')}, connectgaps:true};
+        const trSMA50  = {type:'scatter',mode:'lines',x,y:sma50 ,name:'SMA50' ,line:{width:1.8,color:css('--c-sma50')}, connectgaps:true};
+        const trSMA200 = {type:'scatter',mode:'lines',x,y:sma200,name:'SMA200',line:{width:2.6,color:css('--c-sma200')}, connectgaps:true};
 
         const trRSI   = {type:'scatter',mode:'lines',x,y:rsi,name:'RSI',line:{width:1.6,color:css('--c-rsi')},yaxis:'y2'};
         const trRSI70 = {type:'scatter',mode:'lines',x,y:rsi.map(()=>70),name:'70',line:{width:1,dash:'dot',color:'#ef4444'},yaxis:'y2',hoverinfo:'skip'};
