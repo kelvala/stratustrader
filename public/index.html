@@ -143,6 +143,47 @@
   .btmnav .tab.active{background:var(--hover)}
   .btmnav .tab span{font-size:11px;opacity:.85}
   @media (max-width:720px){ .btmnav{display:flex;gap:8px} body{padding-bottom:64px} }
+
+  /* ==== Pro cards for Screeners & GPTs ==== */
+  .scr-list{ display:flex; flex-direction:column; gap:10px; }
+
+  /* Card */
+  .scr-item{
+    position:relative; display:flex; gap:12px; align-items:flex-start;
+    padding:12px 14px; border:1px solid var(--border); border-radius:12px;
+    background:color-mix(in hsl, var(--panel), var(--bg) 35%);
+    text-decoration:none; color:inherit; cursor:pointer;
+    transition:background .15s ease, border-color .15s ease, transform .06s ease;
+  }
+  .scr-item:hover{ background:var(--hover); border-color:#2b3548; transform:translateY(-1px); }
+
+  /* Left color bar (by difficulty) */
+  .scr-item::before{
+    content:""; position:absolute; left:0; top:8px; bottom:8px; width:4px; border-radius:999px;
+    background: var(--lvl-color, #64748b); opacity:.8;
+  }
+  .scr-item{ padding-left:16px; }
+  .scr-item[data-lvl="Beginner"]     { --lvl-color: var(--lvl-beginner); }
+  .scr-item[data-lvl="Intermediate"] { --lvl-color: var(--lvl-intermediate); }
+  .scr-item[data-lvl="Advanced"]     { --lvl-color: var(--lvl-advanced); }
+
+  /* Content */
+  .scr-item .title{ font-weight:800; font-size:14px; line-height:1.25; }
+  .scr-item .desc{ font-size:12px; color:var(--muted); margin-top:2px; }
+
+  /* Right side meta */
+  .badge{
+    font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px;
+    background:var(--metric-bg); border:1px solid var(--metric-border);
+    color:var(--muted); white-space:nowrap; margin-top:2px;
+  }
+
+  /* “Open” button for GPT cards inside sheets */
+  .scr-item .open-btn{
+    margin-left:8px; padding:6px 10px; border-radius:10px; border:1px solid var(--border);
+    background:var(--panel); color:var(--text); text-decoration:none; font-weight:700;
+  }
+  .scr-item .open-btn:hover{ background:var(--hover); }
 </style>
 </head>
 <body>
@@ -242,36 +283,36 @@
         <button class="sheet-close" data-close="sheetGPTs">✕</button>
       </div>
       <div class="sheet-body">
-        <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px">
-          <div class="gpt-item scr-item" data-lvl="Beginner">
-            <div style="flex:1">
+        <div class="scr-list" style="margin-bottom:12px">
+          <div class="scr-item" data-lvl="Beginner">
+            <div style="flex:1; min-width:0">
               <div class="title">9 Prompts for Smarter Investing</div>
               <div class="desc">Bundle of prompts to guide smarter investment analysis.</div>
             </div>
-            <div class="badge">GPT</div>
-            <div style="display:flex;gap:8px;margin-left:8px">
-              <a class="tool-btn" href="https://chatgpt.com/g/g-687b911701a08191aadd69c345a67d17-9-prompts-for-smarter-investing" target="_blank" rel="noopener">Open</a>
+            <div style="display:flex; align-items:center; gap:8px">
+              <span class="badge">GPT</span>
+              <a class="open-btn" href="https://chatgpt.com/g/g-687b911701a08191aadd69c345a67d17-9-prompts-for-smarter-investing" target="_blank" rel="noopener">Open</a>
             </div>
           </div>
-
-          <div class="gpt-item scr-item" data-lvl="Beginner">
-            <div style="flex:1">
+          <div class="scr-item" data-lvl="Beginner">
+            <div style="flex:1; min-width:0">
               <div class="title">Stock Predictor Prompt GPT</div>
               <div class="desc">Structured prompt flow for scenario-led stock predictions.</div>
             </div>
-            <div class="badge">GPT</div>
-            <div style="display:flex;gap:8px;margin-left:8px">
-              <a class="tool-btn" href="https://chatgpt.com/g/g-686c5fc3dd948191a0ff9c14cecda1b4-stock-predictor-prompt-gpt" target="_blank" rel="noopener">Open</a>
+            <div style="display:flex; align-items:center; gap:8px">
+              <span class="badge">GPT</span>
+              <a class="open-btn" href="https://chatgpt.com/g/g-686c5fc3dd948191a0ff9c14cecda1b4-stock-predictor-prompt-gpt" target="_blank" rel="noopener">Open</a>
             </div>
           </div>
-
-          <div class="gpt-item scr-item" data-lvl="Beginner">
-            <div style="flex:1">
+          <div class="scr-item" data-lvl="Beginner">
+            <div style="flex:1; min-width:0">
               <div class="title">High Yield Dividend Sniper</div>
               <div class="desc">Quickly target high-yield dividend candidates.</div>
             </div>
-            <div class="badge">GPT</div>
-            <a class="tool-btn" href="https://chatgpt.com/g/g-6878fe277c5c819180211289d9e16148-high-yield-dividend-sniper" target="_blank" rel="noopener">Open</a>
+            <div style="display:flex; align-items:center; gap:8px">
+              <span class="badge">GPT</span>
+              <a class="open-btn" href="https://chatgpt.com/g/g-6878fe277c5c819180211289d9e16148-high-yield-dividend-sniper" target="_blank" rel="noopener">Open</a>
+            </div>
           </div>
         </div>
 
@@ -797,8 +838,8 @@
 
         const closeAll = fullRows.map(r=>r.c);
         const sma20All  = SMA(closeAll,20), sma50All = SMA(closeAll,50), sma200All = SMA(closeAll,200);
-        const sma20  = alignAndExtendSMA(sma20All , visibleRows.length, startIdx);
-        const sma50  = alignAndExtendSMA(sma50All , visibleRows.length, startIdx);
+        const sma20  = alignAndExtendSMA(sma20All,  visibleRows.length, startIdx);
+        const sma50  = alignAndExtendSMA(sma50All,  visibleRows.length, startIdx);
         const sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
 
         const rsi  = RSI(close, 14);
@@ -1032,7 +1073,7 @@
     /* Finviz presets + sheets + bottom nav (unchanged) */
     const FINVIZ_PRESETS = [
       { title: 'Oversold large caps (RSI < 30, Mcap > $10B, AvgVol > 1M)', lvl: 'Beginner', url: 'https://finviz.com/screener.ashx?v=111&f=cap_largeover,sh_avgvol_o1000,ta_rsi_os' },
-      { title: 'New 52-week highs (liquid)', lvl: 'Beginner', url: 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o1000,ta_highlow52w_nh' },
+      { title: 'New  52-week highs (liquid)', lvl: 'Beginner', url: 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o1000,ta_highlow52w_nh' },
       { title: 'Price above 50 & 200 SMA (trend strength)', lvl: 'Intermediate', url: 'https://finviz.com/screener.ashx?v=111&f=ta_sma50_pa,ta_sma200_pa,sh_avgvol_o1000' },
       { title: 'High dividend yield ≥ 5% (liquid)', lvl: 'Beginner', url: 'https://finviz.com/screener.ashx?v=111&f=fa_div_o5,sh_avgvol_o500' },
       { title: 'Value: P/E < 15, P/B < 3, Debt/Equity < 1', lvl: 'Intermediate', url: 'https://finviz.com/screener.ashx?v=111&f=fa_pe_u15,fa_pb_u3,fa_debteq_u1,sh_avgvol_o500' },
@@ -1042,10 +1083,25 @@
       const list = document.getElementById('scrList');
       if (!list) return;
       list.innerHTML = '';
+
       FINVIZ_PRESETS.forEach(p => {
+        // Whole card is clickable (looks like a card, not a blue link)
         const a = document.createElement('a');
-        a.href = p.url; a.target = '_blank'; a.rel = 'noopener'; a.className = 'scr-item'; a.dataset.lvl = p.lvl;
-        a.innerHTML = `<div style="flex:1"><div class="title">${p.title}</div><div class="desc">Opens Finviz with filters applied</div></div><div class="badge">Finviz</div>`;
+        a.href = p.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.className = 'scr-item';
+        a.dataset.lvl = p.lvl;
+
+        a.innerHTML = `
+          <div style="flex:1; min-width:0">
+            <div class="title">${p.title}</div>
+            <div class="desc">Finviz • Opens with filters applied</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px">
+            <span class="badge">${p.lvl}</span>
+          </div>
+        `;
         list.appendChild(a);
       });
     }
