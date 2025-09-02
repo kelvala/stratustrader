@@ -107,9 +107,9 @@
   /* Indicator chips */
   .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s ease,color .15s ease,border-color .15s ease}
-  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20)}
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50)}
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200)}
+  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20;}
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50;}
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi)}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd)}
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol)}
@@ -1073,7 +1073,7 @@
     /* Finviz presets + sheets + bottom nav (unchanged) */
     const FINVIZ_PRESETS = [
       { title: 'Oversold large caps (RSI < 30, Mcap > $10B, AvgVol > 1M)', lvl: 'Beginner', url: 'https://finviz.com/screener.ashx?v=111&f=cap_largeover,sh_avgvol_o1000,ta_rsi_os' },
-      { title: 'New  52-week highs (liquid)', lvl: 'Beginner', url: 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o1000,ta_highlow52w_nh' },
+      { title: 'New     52-week highs (liquid)', lvl: 'Beginner', url: 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o1000,ta_highlow52w_nh' },
       { title: 'Price above 50 & 200 SMA (trend strength)', lvl: 'Intermediate', url: 'https://finviz.com/screener.ashx?v=111&f=ta_sma50_pa,ta_sma200_pa,sh_avgvol_o1000' },
       { title: 'High dividend yield ≥ 5% (liquid)', lvl: 'Beginner', url: 'https://finviz.com/screener.ashx?v=111&f=fa_div_o5,sh_avgvol_o500' },
       { title: 'Value: P/E < 15, P/B < 3, Debt/Equity < 1', lvl: 'Intermediate', url: 'https://finviz.com/screener.ashx?v=111&f=fa_pe_u15,fa_pb_u3,fa_debteq_u1,sh_avgvol_o500' },
