@@ -650,7 +650,7 @@
       const sma50  = alignAndExtendSMA(sma50All, visibleRows.length, startIdx);
       const sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
 
-      const rsi   = RSI(close,14);
+      const rsiVals   = RSI(close,14);
       const macd  = MACD(close,12,26,9);
 
       const last = close.at(-1);
@@ -688,11 +688,10 @@
       const trSMA20  = {type:'scatter',mode:'lines',x,y:sma20 ,name:'SMA20' ,line:{width:1.8,color:css('--c-sma20')}};
       const trSMA50  = {type:'scatter',mode:'lines',x,y:sma50 ,name:'SMA50' ,line:{width:1.8,color:css('--c-sma50')}};
       const trSMA200 = {type:'scatter',mode:'lines',x,y:sma200,name:'SMA200',line:{width:2.6,color:css('--c-sma200')}};
-      const rsi   = RSI(close,14);
-      const mac = macd; const trRSI   = {type:'scatter',mode:'lines',x,y:rsi,name:'RSI',line:{width:1.6,color:css('--c-rsi')},yaxis:'y2'};
-      const trRSI70 = {type:'scatter',mode:'lines',x,y:rsi.map(()=>70),name:'70',line:{width:1,dash:'dot',color:'#ef4444'},yaxis:'y2',hoverinfo:'skip'};
-      const trRSI30 = {type:'scatter',mode:'lines',x,y:rsi.map(()=>30),name:'30',line:{width:1,dash:'dot',color:'#22c55e'},yaxis:'y2',hoverinfo:'skip'};
-      const trMACD   = {type:'scatter',mode:'lines',x,y:mac.macd  ,name:'MACD' ,line:{width:1.6,color:css('--c-macd')},yaxis:'y4'};
+      const trRSI   = {type:'scatter',mode:'lines',x,y:rsiVals,name:'RSI',line:{width:1.6,color:css('--c-rsi')},yaxis:'y2'};
+      const trRSI70 = {type:'scatter',mode:'lines',x,y:rsiVals.map(()=>70),name:'70',line:{width:1,dash:'dot',color:'#ef4444'},yaxis:'y2',hoverinfo:'skip'};
+      const trRSI30 = {type:'scatter',mode:'lines',x,y:rsiVals.map(()=>30),name:'30',line:{width:1,dash:'dot',color:'#22c55e'},yaxis:'y2',hoverinfo:'skip'};
+      const mac = macd; const trMACD   = {type:'scatter',mode:'lines',x,y:mac.macd  ,name:'MACD' ,line:{width:1.6,color:css('--c-macd')},yaxis:'y4'};
       const trSignal= {type:'scatter',mode:'lines',x,y:mac.signal,name:'Signal',line:{width:1.6,color:'#f97316'},yaxis:'y4'};
       const trHist  = {type:'bar',x,y:mac.hist,name:'Hist',marker:{color:mac.hist.map(h=>h>=0?css('--c-up'):css('--c-down'))},yaxis:'y4'};
 
