@@ -3,8 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.030</title>
-<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+<title>Stock Analyzer v.031</title>
+
+<!-- Plotly (deferred) -->
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js" defer></script>
+
 <style>
   :root{
     --bg:#0f1115;--panel:#151923;--text:#e5e7eb;--muted:#9ca3af;
@@ -22,7 +25,7 @@
   }
   .light{
     --bg:#f8fafc;--panel:#fff;--text:#222;--muted:#64748b;
-    --accent:#22c55e;--focus:#3b82f6;--border:#e2e8f0;--hover:#f1f5f9;
+    --accent:#22c55e;--focus:#3b82f3;--border:#e2e8f0;--hover:#f1f5f9;
     --metric-bg:#f1f5f9;--metric-border:#e2e8f0;
     --c-up:#16a34a;--c-down:#dc2626;
     --c-sma20:#22c55e;--c-sma50:#2563eb;--c-sma200:#f59e0b;
@@ -280,11 +283,22 @@
     <button data-tab="settings" class="tab" aria-label="Settings">⚙️<span>Settings</span></button>
   </nav>
 
-  <!-- Cleaned single script -->
+  <!-- Single app script -->
   <script>
 (() => {
-  /* ---------- Tiny helper ---------- */
   const q = s => document.querySelector(s);
+
+  /* ---------- Fail fast ---------- */
+  for (const sel of ['#q', '#searchBtn', '#chart']) {
+    if (!document.querySelector(sel)) {
+      console.error(`[Stratus] Missing ${sel} — not the main analyzer page.`);
+      const msg = document.createElement('div');
+      msg.style.cssText = 'margin:16px;padding:12px;border:1px solid #ef4444;border-radius:10px;color:#ef4444;background:#1b0f0f;font-weight:800';
+      msg.textContent = '⚠️ This is not the Stock Analyzer page (missing core elements). Open the correct HTML.';
+      document.body.prepend(msg);
+      return;
+    }
+  }
 
   /* ---------- Elements ---------- */
   const els = {
@@ -303,16 +317,29 @@
   let traceMap = {};
   let PRICE_TIMER = null;
 
+  /* Guard to prevent relayout recursion (Auto Fib) */
+  let FIB_LOCK = false;
+  const fibActive = () => els.autoFib?.classList?.contains('active');
+
   /* ---------- Utils ---------- */
   const fmt = n => (Number.isFinite(n) ? n.toFixed(2) : '—');
   const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   const escapeHTML = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
   const debounce = (fn, ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
+  const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
 
   function toEastern(date) { return new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' })); }
-  function formatEasternISO(date) { return toEastern(date), date.toISOString(); }
+  function formatEasternISO(date) { const d = toEastern(date); return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds())).toISOString(); }
   const toET = (d=new Date()) => new Date(d.toLocaleString('en-US',{timeZone:'America/New_York'}));
   const isMarketOpenNow = () => { const d=toET(); const wd=d.getDay(); if(wd===0||wd===6) return false; const m=d.getHours()*60+d.getMinutes(); return m>=(9*60+30)&&m<(16*60); };
+
+  async function waitForPlotly(timeoutMs=12000){
+    const start=Date.now();
+    while(!(window.Plotly && window.Plotly.newPlot)){
+      if(Date.now()-start>timeoutMs) throw new Error('Plotly failed to load');
+      await sleep(25);
+    }
+  }
 
   /* ---------- Theme ---------- */
   const THEMES = {
@@ -320,15 +347,17 @@
     light:{'--bg':'#f8fafc','--panel':'#fff','--text':'#222','--muted':'#64748b','--accent':'#22c55e','--focus':'#3b82f6','--border':'#e2e8f0','--hover':'#f1f5f9','--metric-bg':'#f1f5f9','--metric-border':'#e2e8f0'}
   };
   function applyChartTheme() {
-    if (!els.chart || !els.chart.layout) return;
+    if (!els.chart || !window.Plotly) return;
     const panelBg = getComputedStyle(els.chartCard).backgroundColor;
     const txt  = css('--text') || '#e5e7eb';
     const grid = css('--grid') || '#222837';
-    Plotly.relayout(els.chart, {
-      paper_bgcolor: panelBg, plot_bgcolor: panelBg,
-      'xaxis.gridcolor': grid, 'yaxis.gridcolor': grid, 'yaxis2.gridcolor': grid, 'yaxis3.gridcolor': grid, 'yaxis4.gridcolor': grid,
-      'xaxis.tickfont.color': txt, 'yaxis.tickfont.color': txt, 'yaxis2.tickfont.color': txt, 'yaxis3.tickfont.color': txt, 'yaxis4.tickfont.color': txt
-    });
+    try {
+      Plotly.relayout(els.chart, {
+        paper_bgcolor: panelBg, plot_bgcolor: panelBg,
+        'xaxis.gridcolor': grid, 'yaxis.gridcolor': grid, 'yaxis2.gridcolor': grid, 'yaxis3.gridcolor': grid, 'yaxis4.gridcolor': grid,
+        'xaxis.tickfont.color': txt, 'yaxis.tickfont.color': txt, 'yaxis2.tickfont.color': txt, 'yaxis3.tickfont.color': txt, 'yaxis4.tickfont.color': txt
+      });
+    } catch {}
   }
   function setTheme(t){
     Object.entries(THEMES[t]).forEach(([k,v])=>document.documentElement.style.setProperty(k,v));
@@ -385,7 +414,7 @@
     return {macd,signal,hist};
   }
 
-  /* ---------- Ichimoku helpers ---------- */
+  /* ---------- Ichimoku ---------- */
   function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
     for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
   function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
@@ -410,7 +439,7 @@
     return { gLow, gUp, rLow, rUp };
   }
 
-  /* ---------- SMA spanning helper ---------- */
+  /* ---------- SMA helper ---------- */
   function alignAndExtendSMA(smaAll, visibleLen, startIdx){
     let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
     while (arr.length < visibleLen) arr.unshift(null);
@@ -421,7 +450,6 @@
   }
 
   /* ---------- Auto-Fib ---------- */
-  const fibActive = () => els.autoFib?.classList?.contains('active');
   function getAxisState(){
     const L = els.chart && (els.chart._fullLayout || els.chart.layout);
     const g = ax => ({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false });
@@ -432,8 +460,8 @@
     return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
   }
   const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
-  async function addOrUpdateAutoFibTraces(){
-    if(!fibActive()||!els.chart) return;
+  const addOrUpdateAutoFibTraces = debounce(async () => {
+    if(!fibActive()||!els.chart||FIB_LOCK) return;
     const c=getCandleTrace(); if(!c) return;
     const cx=c.x, ch=c.high, cl=c.low; if(!cx?.length) return;
     const L=els.chart._fullLayout||els.chart.layout||{}, xa=L.xaxis||{};
@@ -445,9 +473,9 @@
     const lvls=[1,.786,.618,.5,.382,.236,0], color=css('--c-rsi')||'#8b5cf6', prices=lvls.map(p=>hi-(hi-lo)*p);
     const shapes=prices.map(y=>({type:'line',xref:'x',yref:'y',x0,x1,y0:y,y1:y,line:{color,width:1.25,dash:'dot'},layer:'above',opacity:.95}));
     const anns=prices.map((y,i)=>({x:x1,y,xref:'x',yref:'y',xanchor:'right',yanchor:'middle',text:`${(lvls[i]*100).toFixed(1)}%  ${y.toFixed(2)}`,showarrow:false,font:{size:11,color}}));
-    return relayoutPreserve({ shapes, annotations: anns });
-  }
-  const clearAutoFib = () => els.chart && relayoutPreserve({shapes:[],annotations:[]});
+    try { FIB_LOCK = true; await relayoutPreserve({ shapes, annotations: anns }); } finally { FIB_LOCK = false; }
+  }, 30);
+  const clearAutoFib = () => { if(!els.chart) return; try{ FIB_LOCK=true; relayoutPreserve({shapes:[],annotations:[]}); } finally { FIB_LOCK=false; } };
 
   /* ---------- Search & autocomplete ---------- */
   let LOCAL_SYMBOLS=[], suggestions=[], activeIndex=-1;
@@ -467,8 +495,11 @@
     }catch{ LOCAL_SYMBOLS=[{symbol:'AAPL',name:'Apple Inc'},{symbol:'MSFT',name:'Microsoft Corp'},{symbol:'TSLA',name:'Tesla Inc'},{symbol:'NVDA',name:'NVIDIA Corp'},{symbol:'AMZN',name:'Amazon.com Inc'}]; }
   }
   function searchLocalSymbols(q){
-    if(!q) return []; const out=[]; for(const r of LOCAL_SYMBOLS){ if(r.symbol.startsWith(q)){ out.push(r); if(out.length>=12) break; } }
-    if(out.length<12){ const seen=new Set(out.map(r=>r.symbol)); for(const r of LOCAL_SYMBOLS){ if(seen.has(r.symbol)) continue; if(r.symbol.includes(q)||(r.name&&r.name.toUpperCase().includes(q))){ out.push(r); if(out.length>=12) break; } } }
+    if(!q) return []; const out=[];
+    for(const r of LOCAL_SYMBOLS){ if(r.symbol.startsWith(q)){ out.push(r); if(out.length>=12) break; } }
+    if(out.length<12){ const seen=new Set(out.map(r=>r.symbol));
+      for(const r of LOCAL_SYMBOLS){ if(seen.has(r.symbol)) continue;
+        if(r.symbol.includes(q)||(r.name&&r.name.toUpperCase().includes(q))){ out.push(r); if(out.length>=12) break; } } }
     return out;
   }
   function renderAC(){
@@ -630,6 +661,7 @@
     els.lastLine.textContent = 'Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent='';
 
     try{
+      await waitForPlotly();
       const time=els.timeSel.value, freq=els.freqSel.value;
       const fullRows = await fetchFullHistory(ticker, time, freq);
       if(!fullRows.length) throw new Error('No price data');
@@ -728,7 +760,11 @@
 
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
       try { Plotly.removeAllListeners?.(els.chart, 'plotly_relayout'); } catch {}
-      els.chart.on('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
+      if (els.chart && els.chart.on) {
+        els.chart.on('plotly_relayout', () => {
+          if (fibActive() && !FIB_LOCK) addOrUpdateAutoFibTraces();
+        });
+      }
       if (fibActive()) setTimeout(addOrUpdateAutoFibTraces, 32);
 
       traceMap = {
@@ -754,11 +790,12 @@
   }
 
   function applyVisibilityFromChips(){
+    if(!els.chart || !window.Plotly) return;
     Object.entries(traceMap).forEach(([key, idx])=>{
       const chip=els.toggles.querySelector(`.chip[data-k="${key}"]`); if(!chip) return;
       const visible = chip.classList.contains('active') ? true : 'legendonly';
       const indices = Array.isArray(idx) ? idx : [idx];
-      Plotly.restyle(els.chart,{ visible }, indices);
+      try{ Plotly.restyle(els.chart,{ visible }, indices); } catch {}
     });
   }
 
@@ -771,9 +808,8 @@
       chip.classList.toggle('active', turningOn);
       chip.setAttribute('aria-pressed', turningOn ? 'true' : 'false');
       if (turningOn) {
-        Plotly.relayout(els.chart, { shapes: [], annotations: [] }).then(() => {
-          requestAnimationFrame(() => addOrUpdateAutoFibTraces());
-        });
+        try { FIB_LOCK = true; Plotly.relayout(els.chart, { shapes: [], annotations: [] }); } finally { FIB_LOCK = false; }
+        requestAnimationFrame(addOrUpdateAutoFibTraces);
       } else {
         clearAutoFib();
       }
@@ -783,7 +819,7 @@
     chip.setAttribute('aria-pressed', chip.classList.contains('active') ? 'true' : 'false');
     const idx = traceMap[key]; if (idx == null) return;
     const indices = Array.isArray(idx) ? idx : [idx];
-    Plotly.restyle(els.chart, { visible: chip.classList.contains('active') ? true : 'legendonly' }, indices);
+    try { Plotly.restyle(els.chart, { visible: chip.classList.contains('active') ? true : 'legendonly' }, indices); } catch {}
   });
 
   /* ---------- Controls ---------- */
