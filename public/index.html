@@ -1010,7 +1010,12 @@
         // AutoFib after initial draw & on relayout
         wireHoverDismiss();
         if (fibActive()) setTimeout(addOrUpdateAutoFibTraces, 32);
-        els.chart.on('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
+        // ensure only one relayout handler is active
+        if (els.chart._fibRelayoutHandler) {
+          els.chart.removeListener('plotly_relayout', els.chart._fibRelayoutHandler);
+        }
+        els.chart._fibRelayoutHandler = () => { if (fibActive()) addOrUpdateAutoFibTraces(); };
+        els.chart.on('plotly_relayout', els.chart._fibRelayoutHandler);
 
         traceMap = {
           SMA20:data.indexOf(trSMA20), SMA50:data.indexOf(trSMA50), SMA200:data.indexOf(trSMA200),
@@ -1042,18 +1047,31 @@
 
     /* ---------- Chips ---------- */
     els.toggles.addEventListener('click', (e)=>{
-      const chip=e.target.closest('.chip'); if(!chip) return;
-      const key=chip.dataset.k;
+      const chip = e.target.closest('.chip'); if(!chip) return;
+      const key  = chip.dataset.k;
 
-      if(key==='AUTOFIB'){
-        const isActive=chip.classList.contains('active');
-        chip.classList.toggle('active'); chip.setAttribute('aria-pressed', (!isActive).toString());
-        if(!isActive){ addOrUpdateAutoFibTraces(); } else { clearAutoFib(); }
+      if (key === 'AUTOFIB') {
+        const turningOn = !chip.classList.contains('active');
+        chip.classList.toggle('active', turningOn);
+        chip.setAttribute('aria-pressed', turningOn ? 'true' : 'false');
+
+        if (turningOn) {
+          // Force-clear first, then (next frame) draw the new levels
+          Plotly.relayout(els.chart, { shapes: [], annotations: [] }).then(() => {
+            requestAnimationFrame(() => addOrUpdateAutoFibTraces());
+          });
+        } else {
+          clearAutoFib();
+        }
         return;
       }
-      chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false');
-      const idx=traceMap[key]; if(idx==null) return; const indices=Array.isArray(idx)?idx:[idx];
-      Plotly.restyle(els.chart,{visible: chip.classList.contains('active') ? true : 'legendonly'}, indices);
+
+      // (unchanged) regular trace toggles
+      chip.classList.toggle('active');
+      chip.setAttribute('aria-pressed', chip.classList.contains('active') ? 'true' : 'false');
+      const idx = traceMap[key]; if (idx == null) return;
+      const indices = Array.isArray(idx) ? idx : [idx];
+      Plotly.restyle(els.chart, { visible: chip.classList.contains('active') ? true : 'legendonly' }, indices);
     });
 
     /* ---------- Controls ---------- */
