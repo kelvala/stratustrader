@@ -603,6 +603,303 @@
       return null;
     }
 
+    // ====== polite auto-refresh for the "Last / Change" line ======
+    let PRICE_TIMER = null;
+
+    function toET(d=new Date()){ return new Date(d.toLocaleString('en-US',{timeZone:'America/New_York'})); }
+    function isMarketOpenNow() {
+      const d = toET();
+      const day = d.getDay();                      // 0 Sun … 6 Sat
+      if (day === 0 || day === 6) return false;    // weekend
+      const mins = d.getHours()*60 + d.getMinutes();
+      return mins >= (9*60+30) && mins < (16*60);  // ~9:30–16:00 ET (simple; not holiday aware)
+    }
+
+    async function fetchLastPriceLight(ticker){
+      // 1) Try a light quote endpoint if your proxy supports it
+      try {
+        const r = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { cache: 'no-store' });
+        if (r.ok) {
+          const j = await r.json();
+          // Expect something like { price: 123.45 } or Yahoo v7 "regularMarketPrice"
+          const p = j?.price ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice;
+          if (Number.isFinite(+p)) return +p;
+        }
+      } catch (_) {}
+      // 2) Tiny fallback: last 1–2 days of 1m bars, use the last close
+      try {
+        const r = await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=1d&interval=1m`, { cache:'no-store' });
+        if (!r.ok) throw 0;
+        const j = await r.json();
+        const res = j?.chart?.result?.[0];
+        const q = res?.indicators?.quote?.[0];
+        const adj = res?.indicators?.adjclose?.[0]?.adjclose;
+        const close = (adj && adj.at(-1) != null) ? adj.at(-1) : q?.close?.at(-1);
+        return Number.isFinite(+close) ? +close : null;
+      } catch (_) { return null; }
+    }
+
+    async function tickPriceOnce(){
+      if (!CURRENT?.ticker) return;
+      const last = await fetchLastPriceLight(CURRENT.ticker);
+      if (!Number.isFinite(last)) return;
+
+      // Use the previous close we already computed in go()
+      const prev = CURRENT.prevClose ?? null;
+      const dayChg = (prev!=null) ? last - prev : null;
+      const dayPct = (prev!=null && prev!==0) ? (dayChg / prev) * 100 : null;
+
+      const upClr = css('--c-up'), dnClr = css('--c-down');
+      const chgClr = dayChg > 0 ? upClr : dayChg < 0 ? dnClr : '#cbd5e1';
+      const signChg = dayChg > 0 ? '+' : dayChg < 0 ? '-' : '';
+      const signPct = dayPct > 0 ? '+' : dayPct < 0 ? '-' : '';
+
+      els.lastLine.innerHTML =
+        `Last: <b>$${fmt(last)}</b> · ` +
+        (dayChg == null
+          ? 'Change: —'
+          : `<span style="font-weight:800;color:${chgClr}">
+               Change: ${signChg}$${fmt(Math.abs(dayChg))}
+               <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span>
+             </span>`);
+    }
+
+    function startPriceTicker(){
+      stopPriceTicker();
+      const base = ['1m','5m','15m','60m'].includes(els.freqSel.value) ? 30000 : 60000; // 30s intraday, 60s otherwise
+      const interval = isMarketOpenNow() ? base : 180000; // 3 min when market likely closed
+      // run immediately, then on interval—but only when visible
+      const run = () => { if (!document.hidden) tickPriceOnce(); };
+      run();
+      PRICE_TIMER = setInterval(run, interval);
+    }
+
+    function stopPriceTicker(){ if (PRICE_TIMER){ clearInterval(PRICE_TIMER); PRICE_TIMER = null; } }
+
+    // Pause/resume with tab visibility
+    document.addEventListener('visibilitychange', () => {
+      if (PRICE_TIMER && document.hidden) return;         // let interval keep ticking but run() blocks when hidden
+      if (!PRICE_TIMER && !document.hidden && CURRENT.ticker) startPriceTicker();
+    });
+
+    /* ---------- Fundamentals ---------- */
+    async function getFundamentals(ticker){
+      try{
+        const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=defaultKeyStatistics,financialData,earningsTrend`, { cache:'no-store' });
+        if(!r.ok) throw new Error('summary '+r.status);
+        const j = await r.json();
+        const res = j?.quoteSummary?.result?.[0] || {};
+        const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+        const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+        let growth=null; const trends=Array.isArray(et.trend)?et.trend:[]; const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+        if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+        const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+        return { eps: +eps || null, growth: +growth || null, ivGraham };
+      }catch(e){ return {}; }
+    }
+
+    /* ---------- Indicators ---------- */
+    function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
+      for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;} if(i>=w){const old=vals[i-w]; if(Number.isFinite(old)){sum-=old;count--;}} if(i>=w-1) out[i]=sum/count; } return out; }
+    function EMA(vals,span){ const out=new Array(vals.length).fill(null),k=2/(span+1); let ema=null;
+      for(let i=0;i<vals.length;i++){ const v=vals[i]; if(!Number.isFinite(v)){ out[i]=(i>0?out[i-1]:null); continue; } ema=(ema==null)?v:v*k+ema*(1-k); out[i]=ema; } return out; }
+    function RSI(values, period=14){ const rsi=new Array(values.length).fill(null); if(values.length<=period) return rsi;
+      let gain=0,loss=0; for(let i=1;i<=period;i++){ const d=values[i]-values[i-1]; if(d>0) gain+=d; else loss-=d; }
+      gain/=period; loss/=period; rsi[period]=100-100/(1+(gain/(loss||1e-10)));
+      for(let i=period+1;i<values.length;i++){ const d=values[i]-values[i-1];
+        if(d>0){ gain=(gain*(period-1)+d)/period; loss=(loss*(period-1))/period; }
+        else { gain=(gain*(period-1))/period; loss=(loss*(period-1)-d)/period; }
+        rsi[i]=100-100/(1+(gain/(loss||1e-10)));
+      } return rsi;
+    }
+    function MACD(closes,f=12,s=26,sig=9){ const ef=EMA(closes,f), es=EMA(closes,s);
+      const macd=closes.map((_,i)=> (ef[i]!=null&&es[i]!=null)? ef[i]-es[i] : null);
+      const signal=EMA(macd.map(x=>x==null?null:x),sig);
+      const hist=macd.map((m,i)=> (m!=null&&signal[i]!=null)? (m-signal[i]) : null);
+      return {macd,signal,hist};
+    }
+
+    /* Ichimoku helpers */
+    function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
+      for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
+    function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
+      for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let lo=Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) lo=Math.min(lo,arr[j]); out[i]=Number.isFinite(lo)?lo:null; } return out; }
+    function arrShiftFwd(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i+k<n) out[i+k]=arr[i]; return out; }
+    function arrShiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
+    function calcIchimoku(rows){
+      const n=rows.length, high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c);
+      const convHi=rollingHigh(high,9), convLo=rollingLow(low,9);
+      const kijHi=rollingHigh(high,26), kijLo=rollingLow(low,26);
+      const senBHi=rollingHigh(high,52), senBLo=rollingLow(low,52);
+      const tenkan=convHi.map((h,i)=> (h!=null&&convLo[i]!=null)?(h+convLo[i])/2:null);
+      const kijun =kijHi .map((h,i)=> (h!=null&&kijLo [i]!=null)?(h+kijLo [i])/2:null);
+      const senA0=tenkan.map((t,i)=> (t!=null&&kijun[i]!=null)?(t+kijun[i])/2:null);
+      const senB0=senBHi.map((h,i)=> (h!=null&&senBLo[i]!=null)?(h+senBLo[i])/2:null);
+      const shift=26, spanA=arrShiftFwd(senA0,shift,n), spanB=arrShiftFwd(senB0,shift,n), chikou=arrShiftBack(close,shift,n);
+      return { tenkan, kijun, spanA, spanB, chikou };
+    }
+    function segmentCloud(a,b){
+      const n=a.length, gLow=Array(n).fill(null), gUp=Array(n).fill(null), rLow=Array(n).fill(null), rUp=Array(n).fill(null);
+      for(let i=0;i<n;i++){ const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue; if(A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; } }
+      return { gLow, gUp, rLow, rUp };
+    }
+
+    /* ---------- SMA spanning helper ---------- */
+    function alignAndExtendSMA(smaAll, visibleLen, startIdx){
+      let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
+      while (arr.length < visibleLen) arr.unshift(null);
+      const firstIdx = arr.findIndex(v => Number.isFinite(v));
+      if (firstIdx > 0){ const firstVal=arr[firstIdx]; for(let i=0;i<firstIdx;i++) arr[i]=firstVal; }
+      for (let i=1;i<arr.length;i++) if (arr[i]==null && Number.isFinite(arr[i-1])) arr[i]=arr[i-1];
+      return arr;
+    }
+
+    /* ---------- Auto-Fib ---------- */
+    function fibActive(){ return els.autoFib?.classList?.contains('active'); }
+    function getAxisState(){
+      const L = els.chart && (els.chart._fullLayout || els.chart.layout);
+      const g = ax => ({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false });
+      return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
+    }
+    function relayoutPreserve(payload){
+      const S=getAxisState(); const keep=(axKey,s)=>{ if(!s) return {}; const out={}; if(s.range){out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false;} else if(s.autorange){out[`${axKey}.autorange`]=true;} return out; };
+      return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
+    }
+    function getCandleTrace(){ const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; }
+    async function addOrUpdateAutoFibTraces(){
+      if(!fibActive()||!els.chart) return;
+      const c=getCandleTrace(); if(!c) return;
+      const cx=c.x, ch=c.high, cl=c.low; if(!cx?.length) return;
+      const L=els.chart._fullLayout||els.chart.layout||{}, xa=L.xaxis||{};
+      const x0=(Array.isArray(xa.range)&&xa.autorange===false)?xa.range[0]:cx[0];
+      const x1=(Array.isArray(xa.range)&&xa.autorange===false)?xa.range[1]:cx[cx.length-1];
+
+      const i0=Math.max(0, cx.findIndex(d=>d>=x0)); let i1=cx.findIndex(d=>d>x1); if(i1===-1) i1=cx.length; if(i1<=i0) return;
+      let hi=-Infinity, lo=Infinity; for(let i=i0;i<i1;i++){ if(Number.isFinite(ch[i])) hi=Math.max(hi,ch[i]); if(Number.isFinite(cl[i])) lo=Math.min(lo,cl[i]); }
+      if(!Number.isFinite(hi)||!Number.isFinite(lo)||hi===lo) return;
+
+      const lvls=[1,.786,.618,.5,.382,.236,0], color=css('--c-rsi')||'#8b5cf6', prices=lvls.map(p=>hi-(hi-lo)*p);
+      const shapes=prices.map(y=>({type:'line',xref:'x',yref:'y',x0,x1,y0:y,y1:y,line:{color,width:1.25,dash:'dot'},layer:'above',opacity:.95}));
+      const anns=prices.map((y,i)=>({x:x1,y,xref:'x',yref:'y',xanchor:'right',yanchor:'middle',text:`${(lvls[i]*100).toFixed(1)}%  ${y.toFixed(2)}`,showarrow:false,font:{size:11,color}}));
+      return relayoutPreserve({ shapes, annotations: anns });
+    }
+    function clearAutoFib(){ if(!els.chart) return; return relayoutPreserve({shapes:[],annotations:[]}); }
+
+    /* ---------- Search & autocomplete ---------- */
+    let LOCAL_SYMBOLS=[], suggestions=[], activeIndex=-1;
+    async function loadSymbolsFromCSV(){
+      try{
+        const r = await fetch('/stock_data.csv',{cache:'no-store'}); if(!r.ok) throw new Error('CSV not found');
+        let text = await r.text(); if (text.charCodeAt(0)===0xFEFF) text=text.slice(1);
+        const lines=text.split(/\r?\n/).filter(Boolean); if(!lines.length) throw new Error('CSV empty');
+        const cand=['|','\t','; ',',']; let delim=cand[0],best=-1;
+        for(const d of cand){ const score=lines.slice(0,Math.min(5,lines.length)).map(L=>L.split(d).length-1).filter(k=>k>0).reduce((a,b)=>a+b,0); if(score>best){best=score;delim=d;} }
+        const firstTok=lines[0].split(delim)[0].trim().toLowerCase(); const start=/(symbol|ticker)/.test(firstTok)?1:0;
+        const out=[]; for(let i=start;i<lines.length;i++){ const line=lines[i].trim(); const cut=line.indexOf(delim); if(cut===-1) continue;
+          const sym=line.slice(0,cut).trim().toUpperCase(); const name=line.slice(cut+1).trim();
+          if(/^[A-Z0-9.^$\-]{1,12}$/.test(sym)) out.push({symbol:sym,name});
+        }
+        if(!out.length) throw new Error('No symbols parsed'); LOCAL_SYMBOLS=out;
+      }catch(e){ LOCAL_SYMBOLS=[{symbol:'AAPL',name:'Apple Inc'},{symbol:'MSFT',name:'Microsoft Corp'},{symbol:'TSLA',name:'Tesla Inc'},{symbol:'NVDA',name:'NVIDIA Corp'},{symbol:'AMZN',name:'Amazon.com Inc'}]; }
+    }
+    function searchLocalSymbols(q){
+      if(!q) return []; const out=[]; for(const r of LOCAL_SYMBOLS){ if(r.symbol.startsWith(q)){ out.push(r); if(out.length>=12) break; } }
+      if(out.length<12){ const seen=new Set(out.map(r=>r.symbol)); for(const r of LOCAL_SYMBOLS){ if(seen.has(r.symbol)) continue; if(r.symbol.includes(q)||(r.name&&r.name.toUpperCase().includes(q))){ out.push(r); if(out.length>=12) break; } } }
+      return out;
+    }
+    function renderAC(){
+      els.list.innerHTML=''; if(!suggestions.length){ els.list.classList.remove('show'); return; }
+      suggestions.forEach((it,i)=>{ const div=document.createElement('div'); div.className='ac-item'+(i===activeIndex?' active':''); div.dataset.i=i;
+        div.innerHTML=`<div class="ticker">${it.symbol}</div><div class="company">${escapeHTML(it.name||'')}</div>`;
+        div.addEventListener('mousedown',e=>{ e.preventDefault(); pick(i); }); els.list.appendChild(div);
+      }); els.list.classList.add('show');
+    }
+    function hideAC(){ els.list.classList.remove('show'); activeIndex=-1; }
+    function pick(i){ const it=suggestions[i]; if(!it) return; els.input.value=it.symbol; hideAC(); onSearch(it.symbol, it.name||''); }
+
+    els.input.addEventListener('input', debounce(async ()=>{
+      if(!LOCAL_SYMBOLS.length) await loadSymbolsFromCSV();
+      const val=els.input.value; if(val!==val.toUpperCase()){ const st=els.input.selectionStart,en=els.input.selectionEnd; els.input.value=val.toUpperCase(); els.input.setSelectionRange(st,en); }
+      const qv=els.input.value.trim().toUpperCase(); if(!qv){ hideAC(); return; }
+      suggestions=searchLocalSymbols(qv); activeIndex=-1; renderAC();
+    },120));
+    els.input.addEventListener('keydown', e=>{
+      if(els.list.classList.contains('show')){
+        if(e.key==='ArrowDown'){ e.preventDefault(); activeIndex=(activeIndex+1)%suggestions.length; renderAC(); return; }
+        if(e.key==='ArrowUp'){ e.preventDefault(); activeIndex=(activeIndex-1+suggestions.length)%suggestions.length; renderAC(); return; }
+        if(e.key==='Enter'||e.key==='Tab'){ if(activeIndex>=0){ e.preventDefault(); pick(activeIndex); return; } }
+        if(e.key==='Escape'){ hideAC(); return; }
+      }
+      if(e.key==='Enter'){ e.preventDefault(); hideAC(); doSearchFromInput(); }
+    });
+    document.addEventListener('click', e=>{ if(!e.target.closest('.ticker-wrap')) hideAC(); });
+    els.input.addEventListener('blur', ()=> setTimeout(hideAC,100));
+    window.addEventListener('scroll', hideAC, { passive:true });
+
+    function niceTickerError(t){
+      els.headline.textContent='Symbol not found';
+      els.lastLine.innerHTML=`<span style="color:${css('--c-down')};font-weight:800">“${t}” isn’t a valid ticker. Please check the spelling and try again.</span>`;
+      els.prevCloseLine.textContent=''; els.ivLine.textContent='';
+    }
+    function doSearchFromInput(){
+      const t=els.input.value.trim().toUpperCase(); if(!t) return;
+      hideAC(); if(!/^[A-Z0-9.^$-]{1,12}$/.test(t)){ niceTickerError(t); return; }
+      const found=LOCAL_SYMBOLS.find(r=>r.symbol===t)||LOCAL_SYMBOLS.find(r=>(r.name||'').toUpperCase()===t); const comp=found?.name||'';
+      onSearch(t,comp);
+    }
+    els.searchBtn.addEventListener('click', ()=>{ hideAC(); doSearchFromInput(); });
+
+    /* ---------- Data fetch & shaping ---------- */
+    function normalizePair(time,freq){
+      const minFor={ '1m':'1d','5m':'5d','15m':'10d','60m':'1mo' };
+      const order=['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
+      const idx=v=>Math.max(0,order.indexOf(v));
+      if(['1m','5m','15m','60m'].includes(freq)){ const minRange=minFor[freq]; if(idx(time)<idx(minRange)) time=minRange; return { range:time, interval: freq==='60m' ? '60m' : freq }; }
+      const map={'1d':'1d','1wk':'1wk','1mo':'1mo','3mo':'3mo','1y':'1y'}; return { range:time, interval: map[freq]||'1d' };
+    }
+    function historyRangeFor(freq,time){
+      if(freq==='1m') return '7d';
+      if(freq==='5m'||freq==='15m'||freq==='60m') return '2mo';
+      const map={'1d':'1y','2d':'1y','5d':'1y','10d':'1y','1mo':'1y','2mo':'2y','3mo':'2y','6mo':'2y','ytd':'2y','1y':'3y','2y':'5y','3y':'5y','4y':'10y','5y':'10y','10y':'max','max':'max'};
+      return map[time]||'3y';
+    }
+    async function fetchFullHistory(ticker,time,freq){ const range=historyRangeFor(freq,time); return await fetchChart(ticker,range,freq); }
+    async function fetchChart(ticker,time,freq){
+      const widen={'1m':['1d','2d','5d'],'5m':['5d','10d','1mo','2mo'],'15m':['10d','1mo','2mo'],'60m':['1mo','2mo','3mo']};
+      const tryRanges=['1m','5m','15m','60m'].includes(freq)?[...new Set([time, ...(widen[freq]||[])])]:[time];
+      let lastErr; for(const candidate of tryRanges){
+        try{
+          const {range,interval}=normalizePair(candidate,freq);
+          const r=await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=${range}&interval=${interval}`,{cache:'no-store'}); if(!r.ok) throw new Error(`Proxy ${r.status}`);
+          const j=await r.json(); const res=j?.chart?.result?.[0]; if(!res) throw new Error('No result');
+          const q=res.indicators?.quote?.[0]||{}; const adj=res.indicators?.adjclose?.[0]?.adjclose; const ts=res.timestamp||[];
+          const rows=[]; for(let i=0;i<ts.length;i++){ const o=q.open?.[i],h=q.high?.[i],l=q.low?.[i], c=(adj?.[i]!==undefined?adj[i]:q.close?.[i]), v=q.volume?.[i];
+            if([o,h,l,c].every(Number.isFinite)) rows.push({date:new Date(ts[i]*1000), o:+o,h:+h,l:+l,c:+c,v:Number.isFinite(v)?+v:0});
+          } return rows;
+        } catch(e){ lastErr=e; }
+      }
+      throw lastErr||new Error('Fetch failed');
+    }
+    function getVisibleData(fullData, range, freq){
+      if(range==='1d' && freq==='1m'){
+        if(!fullData.length) return [];
+        const lastDate=toEastern(fullData.at(-1).date);
+        const preOpen=new Date(lastDate); preOpen.setHours(4,0,0,0);
+        const post=new Date(lastDate); post.setHours(20,0,0,0);
+        return fullData.filter(it=>{ const d=toEastern(it.date); return d>=preOpen && d<=post && d.getDate()===lastDate.getDate(); });
+      }
+      if(range==='ytd'){ const now=new Date(); const jan1=new Date(now.getFullYear(),0,1); return fullData.filter(it=>toEastern(it.date)>=toEastern(jan1)); }
+      const days={'1d':1,'2d':2,'5d':5,'10d':10,'1mo':31,'2mo':62,'3mo':93,'6mo':182,'1y':365,'2y':730,'3y':1095,'4y':1460,'5y':1825,'10y':3650,'max':36500}[range]||365;
+      const cutoff=new Date(Date.now()-days*864e5);
+      return fullData.filter(it=>toEastern(it.date)>=toEastern(cutoff));
+    }
+    function prevDailyCloseFromIntraday(fullRows){
+      if(!fullRows?.length) return null;
+      const lastDayStr=toEastern(fullRows.at(-1).date).toDateString();
+      for(let i=fullRows.length-2;i>=0;i--){ const d=toEastern(fullRows[i].date).toDateString(); if(d!==lastDayStr) return fullRows[i].c ?? null; }
+      return null;
+    }
+
     /* ---------- Main flow ---------- */
     async function onSearch(ticker, company){
       if(!FUNDAMENTALS[ticker]) FUNDAMENTALS[ticker] = await getFundamentals(ticker).catch(()=>({}));
