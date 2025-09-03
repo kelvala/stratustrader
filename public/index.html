@@ -1011,11 +1011,11 @@
         wireHoverDismiss();
         if (fibActive()) setTimeout(addOrUpdateAutoFibTraces, 32);
         // ensure only one relayout handler is active
-        if (els.chart._fibRelayoutHandler) {
-          els.chart.removeListener('plotly_relayout', els.chart._fibRelayoutHandler);
-        }
-        els.chart._fibRelayoutHandler = () => { if (fibActive()) addOrUpdateAutoFibTraces(); };
-        els.chart.on('plotly_relayout', els.chart._fibRelayoutHandler);
+        // keep only one relayout handler, using whichever API exists
+        try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
+        try { Plotly.removeAllListeners?.(els.chart, 'plotly_relayout'); } catch {}
+
+        els.chart.on('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
 
         traceMap = {
           SMA20:data.indexOf(trSMA20), SMA50:data.indexOf(trSMA50), SMA200:data.indexOf(trSMA200),
@@ -1041,7 +1041,7 @@
         const chip=els.toggles.querySelector(`.chip[data-k="${key}"]`); if(!chip) return;
         const visible = chip.classList.contains('active') ? true : 'legendonly';
         const indices = Array.isArray(idx) ? idx : [idx];
-        Plotly.restyle(els.chart,{visible},indices);
+        Plotly.restyle(els.chart,{ visible }, indices);
       });
     }
 
