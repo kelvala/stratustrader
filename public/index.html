@@ -82,7 +82,7 @@
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -576,17 +576,43 @@
     throw lastErr||new Error('Fetch failed');
   }
   function getVisibleData(fullData, range, freq){
-    if(range==='1d' && freq==='1m'){
-      if(!fullData.length) return [];
-      const lastDate=toEastern(fullData.at(-1).date);
-      const preOpen=new Date(lastDate); preOpen.setHours(4,0,0,0);
-      const post=new Date(lastDate); post.setHours(20,0,0,0);
-      return fullData.filter(it=>{ const d=toEastern(it.date); return d>=preOpen && d<=post && d.getDate()===lastDate.getDate(); });
+    // If user picked intraday bars and "Nd", show last N *trading* days
+    const intraday = ['1m','5m','15m','60m'].includes(freq);
+    const m = intraday ? /^(\d+)d$/.exec(range) : null;
+
+    if (m) {
+      const want = Math.max(1, +m[1]); // N trading days
+      let firstIdx = 0, sessionsSeen = 0, curKey = null;
+
+      // Walk backward, counting distinct ET dates that actually have trades
+      for (let i = fullData.length - 1; i >= 0; i--) {
+        const et = toET(fullData[i].date);
+        const key = et.getFullYear() + '-' + (et.getMonth()+1) + '-' + et.getDate();
+        if (key !== curKey) {
+          sessionsSeen++;
+          curKey = key;
+          if (sessionsSeen > want) { firstIdx = i + 1; break; }
+        }
+        // If we never break, firstIdx stays 0 (fewer than N sessions in buffer)
+      }
+      return fullData.slice(firstIdx);
     }
-    if(range==='ytd'){ const now=new Date(); const jan1=new Date(now.getFullYear(),0,1); return fullData.filter(it=>toEastern(it.date)>=toEastern(jan1)); }
-    const days={'1d':1,'2d':2,'5d':5,'10d':10,'1mo':31,'2mo':62,'3mo':93,'6mo':182,'1y':365,'2y':730,'3y':1095,'4y':1460,'5y':1825,'10y':3650,'max':36500}[range]||365;
-    const cutoff=new Date(Date.now()-days*864e5);
-    return fullData.filter(it=>toEastern(it.date)>=toEastern(cutoff));
+
+    // Special-case YTD on calendar basis
+    if (range === 'ytd'){
+      const now = new Date();
+      const jan1 = new Date(now.getFullYear(), 0, 1);
+      return fullData.filter(it => toET(it.date) >= toET(jan1));
+    }
+
+    // Calendar-day trimming for non-intraday / longer ranges
+    const daysMap = {
+      '1d':1,'2d':2,'5d':5,'10d':10,'1mo':31,'2mo':62,'3mo':93,'6mo':182,
+      '1y':365,'2y':730,'3y':1095,'4y':1460,'5y':1825,'10y':3650,'max':36500
+    };
+    const days = daysMap[range] ?? 365;
+    const cutoff = new Date(Date.now() - days * 864e5);
+    return fullData.filter(it => toET(it.date) >= toET(cutoff));
   }
   function prevDailyCloseFromIntraday(fullRows){
     if(!fullRows?.length) return null;
@@ -748,7 +774,18 @@
       const panelBg=getComputedStyle(els.chartCard).backgroundColor, txt=css('--text')||'#e5e7eb', grid=css('--grid')||'#222837';
       const layout={
         paper_bgcolor:panelBg, plot_bgcolor:panelBg, showlegend:false, margin:{l:60,r:24,t:10,b:24},
-        xaxis:{domain:[0,1],rangeslider:{visible:false},gridcolor:grid,tickfont:{color:txt}},
+        xaxis: {
+          type: 'date',
+          domain: [0, 1],
+          rangeslider: { visible: false },
+          gridcolor: grid,
+          tickfont: { color: txt },
+          // 👇 Collapse weekends and overnight (based on ET you already encode)
+          rangebreaks: [
+            { pattern: 'day of week', bounds: [6, 1] }, // Sat → Mon
+            { pattern: 'hour', bounds: [16, 9.5] }      // 4:00pm → 9:30am
+          ]
+        },
         yaxis :{domain:[0.50,1.00],gridcolor:grid,tickfont:{color:txt},side:'right',title:'Price'},
         yaxis2:{domain:[0.38,0.48],gridcolor:grid,tickfont:{color:txt},range:[0,100],title:'RSI'},
         yaxis4:{domain:[0.22,0.36],gridcolor:grid,tickfont:{color:txt},title:'MACD'},
