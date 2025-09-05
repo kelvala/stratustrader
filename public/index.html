@@ -93,6 +93,18 @@
   .chip.active[data-k="VOL"]{background:rgba(16,185,129,.12)}
   .chip.active[data-k="AUTOFIB"]{background:rgba(139,92,246,.12)}
   .chip.active[data-k="ICHI"]{background:rgba(96,165,250,.12)}
+  /* subtle glow for active chips */
+  .chip.active{
+    box-shadow: 0 0 0 1px currentColor, 0 0 12px 2px currentColor;
+  }
+  .light .chip.active{
+    box-shadow: 0 0 0 1px currentColor, 0 0 16px 3px currentColor;
+  }
+  /* nicer keyboard focus too */
+  .chip:focus-visible{
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
   .section-sep{margin:20px -16px 16px;padding:0 16px}
   .section-sep .rule{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.9}
   .sheet{position:fixed;left:0;right:0;bottom:0;top:auto;background:transparent;display:flex;justify-content:center;z-index:2000}
@@ -758,12 +770,27 @@
 
       const trVol = { type:'bar', x, y:vol, yaxis:'y3', name:'Volume', opacity:.4, marker:{ color:css('--c-vol') } };
 
+      // Ichimoku cloud — correct fill order
       const ichi = calcIchimoku(visibleRows);
       const cloud = segmentCloud(ichi.spanA, ichi.spanB);
-      const trCloudGreenBottom = { type:'scatter', x, y:cloud.gLow, yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-up'),   name:'Kumo +' };
-      const trCloudGreenTop    = { type:'scatter', x, y:cloud.gUp,  yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-up'),   name:'' };
-      const trCloudRedBottom   = { type:'scatter', x, y:cloud.rLow, yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-down'), name:'Kumo -' };
-      const trCloudRedTop      = { type:'scatter', x, y:cloud.rUp,  yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-down'), name:'' };
+      const trCloudGreenBottom = {
+        type:'scatter', x, y:cloud.gLow, yaxis:'y',
+        line:{width:0}, hoverinfo:'skip', showlegend:false
+      };
+      const trCloudGreenTop = {
+        type:'scatter', x, y:cloud.gUp, yaxis:'y',
+        fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-up'),
+        hoverinfo:'skip', name:'Kumo +'
+      };
+      const trCloudRedBottom = {
+        type:'scatter', x, y:cloud.rLow, yaxis:'y',
+        line:{width:0}, hoverinfo:'skip', showlegend:false
+      };
+      const trCloudRedTop = {
+        type:'scatter', x, y:cloud.rUp, yaxis:'y',
+        fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-down'),
+        hoverinfo:'skip', name:'Kumo -'
+      };
       const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1, color:css('--c-ichi-tenkan') } };
       const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1, color:css('--c-ichi-kijun') } };
       const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1, color:css('--c-ichi-chikou') } };
