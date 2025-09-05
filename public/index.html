@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.031</title>
+<title>Stock Analyzer v.032</title>
 
 <!-- Plotly (deferred) -->
 <script src="https://cdn.plot.ly/plotly-2.30.0.min.js" defer></script>
@@ -80,9 +80,9 @@
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);}
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
-  .chip[data-k="RSI"]   {border-color:var(--c-rsi);   color:var(--c-rsi);}
-  .chip[data-k="MACD"]  {border-color:var(--c-macd);  color:var,--c-macd;}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);}
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi;}
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol;}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -559,7 +559,6 @@
     return map[time]||'3y';
   }
   async function fetchFullHistory(ticker,time,freq){ const range=historyRangeFor(freq,time); return await fetchChart(ticker,range,freq); }
-  // --- fetchChart: robust adjclose/close fallback ---
   async function fetchChart(ticker,time,freq){
     const widen={'1m':['1d','2d','5d'],'5m':['5d','10d','1mo','2mo'],'15m':['10d','1mo','2mo'],'60m':['1mo','2mo','3mo']};
     const tryRanges=['1m','5m','15m','60m'].includes(freq)?[...new Set([time, ...(widen[freq]||[])])]:[time];
@@ -568,63 +567,39 @@
         const {range,interval}=normalizePair(candidate,freq);
         const r=await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=${range}&interval=${interval}`,{cache:'no-store'}); if(!r.ok) throw new Error(`Proxy ${r.status}`);
         const j=await r.json(); const res=j?.chart?.result?.[0]; if(!res) throw new Error('No result');
-        const q=res.indicators?.quote?.[0]||{}; const adj=res.indicators?.adjclose?.[0]?.adjclose; const ts=res.timestamp||[];
-        // --- FIXED ROWS BLOCK ---
-        const rows = [];
-        for (let i = 0; i < ts.length; i++) {
-          const o = q.open?.[i], h = q.high?.[i], l = q.low?.[i];
-          // ✅ Use adjclose only when it's not null/undefined; otherwise fall back to close
-          const cRaw = (res.indicators?.adjclose?.[0]?.adjclose && res.indicators.adjclose[0].adjclose[i] != null)
-            ? res.indicators.adjclose[0].adjclose[i]
-            : q.close?.[i];
+        const q=res.indicators?.quote?.[0]||{}; const ts=res.timestamp||[];
+        const rows=[];
+        for(let i=0;i<ts.length;i++){
+          const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i];
+          const adj=res.indicators?.adjclose?.[0]?.adjclose;
+          const cRaw = (adj && adj[i]!=null) ? adj[i] : q.close?.[i];
           const c = Number.isFinite(+cRaw) ? +cRaw : null;
           const v = Number.isFinite(q.volume?.[i]) ? +q.volume[i] : 0;
-          if ([o, h, l, c].every(Number.isFinite)) {
-            rows.push({ date: new Date(ts[i] * 1000), o: +o, h: +h, l: +l, c: +c, v });
-          }
+          if ([o,h,l,c].every(Number.isFinite)) rows.push({date:new Date(ts[i]*1000),o:+o,h:+h,l:+l,c:+c,v});
         }
         return rows;
-      } catch(e){ lastErr=e; }
+      }catch(e){ lastErr=e; }
     }
     throw lastErr||new Error('Fetch failed');
   }
   function getVisibleData(fullData, range, freq){
-    // If user picked intraday bars and "Nd", show last N *trading* days
-    const intraday = ['1m','5m','15m','60m'].includes(freq);
+    const intraday=['1m','5m','15m','60m'].includes(freq);
     const m = intraday ? /^(\d+)d$/.exec(range) : null;
-
     if (m) {
-      const want = Math.max(1, +m[1]); // N trading days
-      let firstIdx = 0, sessionsSeen = 0, curKey = null;
-
-      // Walk backward, counting distinct ET dates that actually have trades
-      for (let i = fullData.length - 1; i >= 0; i--) {
-        const et = toET(fullData[i].date);
-        const key = et.getFullYear() + '-' + (et.getMonth()+1) + '-' + et.getDate();
-        if (key !== curKey) {
-          sessionsSeen++;
-          curKey = key;
-          if (sessionsSeen > want) { firstIdx = i + 1; break; }
-        }
-        // If we never break, firstIdx stays 0 (fewer than N sessions in buffer)
+      const want=Math.max(1,+m[1]); let firstIdx=0, sessionsSeen=0, curKey=null;
+      for(let i=fullData.length-1;i>=0;i--){
+        const et=toET(fullData[i].date);
+        const key=et.getFullYear()+'-'+(et.getMonth()+1)+'-'+et.getDate();
+        if(key!==curKey){ sessionsSeen++; curKey=key; if(sessionsSeen>want){ firstIdx=i+1; break; } }
       }
       return fullData.slice(firstIdx);
     }
-
-    // Special-case YTD on calendar basis
-    if (range === 'ytd'){
-      const now = new Date();
-      const jan1 = new Date(now.getFullYear(), 0, 1);
+    if (range==='ytd'){
+      const now=new Date(); const jan1=new Date(now.getFullYear(),0,1);
       return fullData.filter(it => toET(it.date) >= toET(jan1));
     }
-
-    // Calendar-day trimming for non-intraday / longer ranges
-    const daysMap = {
-      '1d':1,'2d':2,'5d':5,'10d':10,'1mo':31,'2mo':62,'3mo':93,'6mo':182,
-      '1y':365,'2y':730,'3y':1095,'4y':1460,'5y':1825,'10y':3650,'max':36500
-    };
-    const days = daysMap[range] ?? 365;
-    const cutoff = new Date(Date.now() - days * 864e5);
+    const daysMap={'1d':1,'2d':2,'5d':5,'10d':10,'1mo':31,'2mo':62,'3mo':93,'6mo':182,'1y':365,'2y':730,'3y':1095,'4y':1460,'5y':1825,'10y':3650,'max':36500};
+    const days=daysMap[range] ?? 365; const cutoff=new Date(Date.now()-days*864e5);
     return fullData.filter(it => toET(it.date) >= toET(cutoff));
   }
   function prevDailyCloseFromIntraday(fullRows){
@@ -700,6 +675,8 @@
     els.lastLine.textContent = 'Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent='';
 
     try{
+      await waitForPlotly();
+
       const time=els.timeSel.value, freq=els.freqSel.value;
       const fullRows = await fetchFullHistory(ticker, time, freq);
       if(!fullRows.length) throw new Error('No price data');
@@ -714,30 +691,73 @@
       const close= visibleRows.map(r => r.c);
       const vol  = visibleRows.map(r => r.v);
 
-      // SMAs
-      const sma20  = alignAndExtendSMA(fullRows.map(r=>r.c), visibleRows.length, startIdx);
-      const sma50  = alignAndExtendSMA(fullRows.map(r=>r.c), visibleRows.length, startIdx);
-      const sma200 = alignAndExtendSMA(fullRows.map(r=>r.c), visibleRows.length, startIdx);
+      // ---------- Indicators ----------
+      const closeAll = fullRows.map(r=>r.c);
+      const sma20All  = SMA(closeAll,20);
+      const sma50All  = SMA(closeAll,50);
+      const sma200All = SMA(closeAll,200);
+      const sma20  = alignAndExtendSMA(sma20All,  visibleRows.length, startIdx);
+      const sma50  = alignAndExtendSMA(sma50All,  visibleRows.length, startIdx);
+      const sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
+
+      const rsiVals   = RSI(close,14);
+      const macd      = MACD(close,12,26,9);
+
+      // ---------- Last/Change ----------
+      const last = close.at(-1);
+      let prevClose = ['1m','5m','15m','60m'].includes(freq)
+        ? prevDailyCloseFromIntraday(fullRows)
+        : (close.length>=2 ? close.at(-2) : null);
+      const ref = (prevClose!=null) ? prevClose : (close.length>=2 ? close.at(-2) : null);
+      const dayChg = (ref!=null) ? (last - ref) : null;
+      const dayPct = (ref!=null && ref!==0) ? (dayChg/ref)*100 : null;
+      const upClr = css('--c-up'), dnClr = css('--c-down');
+      const signChg = dayChg>0?'+':dayChg<0?'-':'';
+      const signPct = dayPct>0?'+':dayPct<0?'-':'';
+      const chgClr  = dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
+
+      els.lastLine.innerHTML =
+        `Last: <b>$${fmt(last)}</b> · ` +
+        (dayChg==null ? 'Change: —'
+          : `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
+      els.prevCloseLine.textContent = `Yesterday’s Close: ${prevClose==null ? '—' : '$'+fmt(prevClose)}`;
+      CURRENT.prevClose = prevClose;
+
+      // ---------- Intrinsic value (rough) ----------
+      const f = FUNDAMENTALS[ticker] || {};
+      const ivs=[]; if(Number.isFinite(f.ivGraham)) ivs.push(f.ivGraham);
+      const s50=sma50.at(-1), s200=sma200.at(-1); if(Number.isFinite(s50)&&Number.isFinite(s200)) ivs.push((s50+s200)/2);
+      const iv = ivs.length ? (ivs.reduce((a,b)=>a+b,0)/ivs.length) : null;
+      els.ivLine.textContent = `Intrinsic Value: ${iv==null ? '—' : '$'+fmt(iv)}`;
+      const rec = (()=>{
+        if(!Number.isFinite(last)||!Number.isFinite(iv)) return {rec:'HOLD',color:'#fbbf24'};
+        const r=last/iv; if(r<0.85) return {rec:'BUY',color:'#16a34a'}; if(r>1.15) return {rec:'SELL',color:'#dc2626'}; return {rec:'HOLD',color:'#fbbf24'};
+      })();
+      els.ivLine.innerHTML += ` &nbsp;|&nbsp; <b style="color:${rec.color};font-weight:800">${rec.rec}</b>`;
+
+      // ---------- Traces ----------
+      const candles = {
+        type:'candlestick', x, open, high, low, close, name:ticker,
+        increasing:{ line:{ color:css('--c-up'), width:1.15 }, fillcolor:css('--c-up') },
+        decreasing:{ line:{ color:css('--c-down'), width:1.15 }, fillcolor:css('--c-down') },
+        whiskerwidth:0.4, opacity:0.95,
+        hovertemplate:'O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>'
+      };
+
       const trSMA20  = { type:'scatter', x, y:sma20,  yaxis:'y', name:'SMA 20',  line:{ width:1.2, color:css('--c-sma20') } };
       const trSMA50  = { type:'scatter', x, y:sma50,  yaxis:'y', name:'SMA 50',  line:{ width:1.2, color:css('--c-sma50') } };
       const trSMA200 = { type:'scatter', x, y:sma200, yaxis:'y', name:'SMA 200', line:{ width:1.2, color:css('--c-sma200') } };
 
-      // RSI
-      const rsiVals = RSI(close,14);
       const trRSI   = { type:'scatter', x, y:rsiVals, yaxis:'y2', name:'RSI', line:{ width:1.1, color:css('--c-rsi') } };
       const trRSI70 = { type:'scatter', x, y:Array(x.length).fill(70), yaxis:'y2', name:'70', line:{ width:.8, dash:'dot' } };
       const trRSI30 = { type:'scatter', x, y:Array(x.length).fill(30), yaxis:'y2', name:'30', line:{ width:.8, dash:'dot' } };
 
-      // MACD
-      const macd = MACD(close,12,26,9);
       const trMACD   = { type:'scatter', x, y:macd.macd,  yaxis:'y4', name:'MACD',   line:{ width:1, color:css('--c-macd') } };
       const trSignal = { type:'scatter', x, y:macd.signal,yaxis:'y4', name:'Signal', line:{ width:1 } };
       const trHist   = { type:'bar',     x, y:macd.hist,  yaxis:'y4', name:'Hist',   opacity:.4 };
 
-      // Volume
       const trVol = { type:'bar', x, y:vol, yaxis:'y3', name:'Volume', opacity:.4, marker:{ color:css('--c-vol') } };
 
-      // Ichimoku
       const ichi = calcIchimoku(visibleRows);
       const cloud = segmentCloud(ichi.spanA, ichi.spanB);
       const trCloudGreenBottom = { type:'scatter', x, y:cloud.gLow, yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-up'),   name:'Kumo +' };
@@ -747,6 +767,27 @@
       const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1, color:css('--c-ichi-tenkan') } };
       const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1, color:css('--c-ichi-kijun') } };
       const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1, color:css('--c-ichi-chikou') } };
+
+      // ---------- Layout ----------
+      const rangebreaksIntraday =
+        ['1m','5m','15m','60m'].includes(freq)
+          ? [{ pattern:'day of week', bounds:['sat','mon'] }, { pattern:'hourly', bounds:[16, 9.5] }]
+          : [{ pattern:'day of week', bounds:['sat','mon'] }];
+
+      const panelBg = getComputedStyle(els.chartCard).backgroundColor,
+            txt     = css('--text') || '#e5e7eb',
+            grid    = css('--grid') || '#222837';
+
+      const layout = {
+        paper_bgcolor: panelBg, plot_bgcolor: panelBg, showlegend:false,
+        margin:{ l:60, r:24, t:10, b:24 },
+        xaxis:{ type:'date', domain:[0,1], rangeslider:{visible:false}, gridcolor:grid, tickfont:{color:txt}, rangebreaks:rangebreaksIntraday },
+        yaxis :{ domain:[0.50,1.00], gridcolor:grid, tickfont:{color:txt}, side:'right', title:'Price' },
+        yaxis2:{ domain:[0.38,0.48], gridcolor:grid, tickfont:{color:txt}, range:[0,100], title:'RSI' },
+        yaxis4:{ domain:[0.22,0.36], gridcolor:grid, tickfont:{color:txt}, title:'MACD' },
+        yaxis3:{ domain:[0.00,0.20], gridcolor:grid, tickfont:{color:txt}, title:'Vol' },
+        hovermode:'x', edits:{ shapePosition:true }, dragmode:'zoom'
+      };
 
       const data = [
         trCloudGreenBottom, trCloudGreenTop, trCloudRedBottom, trCloudRedTop,
@@ -758,12 +799,12 @@
       ];
 
       await Plotly.newPlot(els.chart, data, layout, { responsive:true, displaylogo:false });
+      applyChartTheme();
+
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
       try { Plotly.removeAllListeners?.(els.chart, 'plotly_relayout'); } catch {}
       if (els.chart && els.chart.on) {
-        els.chart.on('plotly_relayout', () => {
-          if (fibActive() && !FIB_LOCK) addOrUpdateAutoFibTraces();
-        });
+        els.chart.on('plotly_relayout', () => { if (fibActive() && !FIB_LOCK) addOrUpdateAutoFibTraces(); });
       }
       if (fibActive()) setTimeout(addOrUpdateAutoFibTraces, 32);
 
