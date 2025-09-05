@@ -81,7 +81,7 @@
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);}
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;}
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;}
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
@@ -208,7 +208,7 @@
               <option value="1mo">1 month</option><option value="2mo">2 months</option>
               <option value="3mo">3 months</option><option value="6mo" selected>6 months</option>
               <option value="ytd">YTD</option><option value="1y">1 year</option>
-              <option value="2y">2 years</option><option value="3y">3 years</option>
+              <option value="2y">2 years</option
               <option value="4y">4 years</option><option value="5y">5 years</option>
               <option value="10y">1 decade</option><option value="max">All Data</option>
             </select>
@@ -469,6 +469,41 @@
     const n=a.length, gLow=Array(n).fill(null), gUp=Array(n).fill(null), rLow=Array(n).fill(null), rUp=Array(n).fill(null);
     for(let i=0;i<n;i++){ const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue; if(A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; } }
     return { gLow, gUp, rLow, rUp };
+  }
+
+  /* --- Cloud helpers: fill to edges + visual magnifier --- */
+  function fillEdges(arr){
+    const out = arr.slice();
+    // forward fill gaps
+    let last = null;
+    for (let i = 0; i < out.length; i++) {
+      if (Number.isFinite(out[i])) last = out[i];
+      else if (last != null) out[i] = last;
+    }
+    // backfill start
+    const fi = out.findIndex(v => Number.isFinite(v));
+    if (fi > 0) { for (let i = 0; i < fi; i++) out[i] = out[fi]; }
+    // extend to the right
+    let li = -1;
+    for (let i = out.length - 1; i >= 0; i--) { if (Number.isFinite(out[i])) { li = i; break; } }
+    if (li >= 0) { for (let i = li + 1; i < out.length; i++) out[i] = out[li]; }
+    return out;
+  }
+
+  function exaggerateCloud(spanA, spanB, mag = 1.6, loClip = -Infinity, hiClip = Infinity){
+    if (!(mag > 1)) return { spanA, spanB };
+    const A = spanA.slice(), B = spanB.slice();
+    for (let i = 0; i < A.length; i++) {
+      const a = A[i], b = B[i];
+      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
+      const mid = (a + b) / 2, half = (a - b) / 2;
+      let a2 = mid + half * mag;
+      let b2 = mid - half * mag;
+      // keep within reasonable y-range so the axis doesn't blow out
+      A[i] = Math.min(Math.max(a2, loClip), hiClip);
+      B[i] = Math.min(Math.max(b2, loClip), hiClip);
+    }
+    return { spanA: A, spanB: B };
   }
 
   /* ---------- SMA helper ---------- */
@@ -792,24 +827,35 @@
 
       // Ichimoku cloud — emphasized fill and thicker lines
       const ichi = calcIchimoku(visibleRows);
-      const cloud = segmentCloud(ichi.spanA, ichi.spanB);
+      // get a safe clip band from visible price so the axis stays nice
+      const hiVis = Math.max(...high.filter(Number.isFinite));
+      const loVis = Math.min(...low.filter(Number.isFinite));
+      const pad   = (hiVis - loVis) * 0.04;   // small cushion
+      // 1) fill spanA/spanB across entire timeframe
+      let spanA = fillEdges(ichi.spanA);
+      let spanB = fillEdges(ichi.spanB);
+      // 2) exaggerate thickness (tweak CLOUD_MAG if you want more/less)
+      const CLOUD_MAG = 1.8; // try 1.6–2.2
+      ({ spanA, spanB } = exaggerateCloud(spanA, spanB, CLOUD_MAG, loVis - pad, hiVis + pad));
+      // 3) segment into green/red and plot with connectgaps for continuity
+      const cloud = segmentCloud(spanA, spanB);
       const trCloudGreenBottom = {
         type:'scatter', x, y:cloud.gLow, yaxis:'y',
-        line:{width:0}, hoverinfo:'skip', showlegend:false
+        line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true
       };
       const trCloudGreenTop = {
         type:'scatter', x, y:cloud.gUp, yaxis:'y',
         fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-up'),
-        hoverinfo:'skip', name:'Kumo +', opacity:1
+        hoverinfo:'skip', name:'Kumo +', opacity:1, connectgaps:true
       };
       const trCloudRedBottom = {
         type:'scatter', x, y:cloud.rLow, yaxis:'y',
-        line:{width:0}, hoverinfo:'skip', showlegend:false
+        line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true
       };
       const trCloudRedTop = {
         type:'scatter', x, y:cloud.rUp, yaxis:'y',
         fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-down'),
-        hoverinfo:'skip', name:'Kumo -', opacity:1
+        hoverinfo:'skip', name:'Kumo -', opacity:1, connectgaps:true
       };
       const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1.4, color:css('--c-ichi-tenkan') } };
       const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1.4, color:css('--c-ichi-kijun') } };
@@ -843,6 +889,7 @@
         trRSI, trRSI70, trRSI30,
         trMACD, trSignal, trHist,
         trVol
+     
       ];
 
       await Plotly.newPlot(els.chart, data, layout, { responsive:true, displaylogo:false });
