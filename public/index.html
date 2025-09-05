@@ -739,58 +739,57 @@
       })();
       els.ivLine.innerHTML += ` &nbsp;|&nbsp; <b style="color:${rec.color};font-weight:800">${rec.rec}</b>`;
 
-      const candles = { type:'candlestick', x, open, high, low, close, name:ticker,
-        increasing:{line:{color:css('--c-up')}}, decreasing:{line:{color:css('--c-down')}} };
-      const volColors = close.map((c,i)=> i===0?css('--c-vol'):(c>=close[i-1]?css('--c-up'):css('--c-down')));
-      const trVol = {type:'bar',x,y:vol,marker:{color:volColors},name:'Volume',yaxis:'y3',hovertemplate:'Vol: %{y:,}<extra></extra>'};
-      const trSMA20  = {type:'scatter',mode:'lines',x,y:sma20 ,name:'SMA20' ,line:{width:1.8,color:css('--c-sma20')}};
-      const trSMA50  = {type:'scatter',mode:'lines',x,y:sma50 ,name:'SMA50' ,line:{width:1.8,color:css('--c-sma50')}};
-      const trSMA200 = {type:'scatter',mode:'lines',x,y:sma200,name:'SMA200',line:{width:2.6,color:css('--c-sma200')}};
-      const trRSI   = {type:'scatter',mode:'lines',x,y:rsiVals,name:'RSI',line:{width:1.6,color:css('--c-rsi')},yaxis:'y2'};
-      const trRSI70 = {type:'scatter',mode:'lines',x,y:rsiVals.map(()=>70),name:'70',line:{width:1,dash:'dot',color:'#ef4444'},yaxis:'y2',hoverinfo:'skip'};
-      const trRSI30 = {type:'scatter',mode:'lines',x,y:rsiVals.map(()=>30),name:'30',line:{width:1,dash:'dot',color:'#22c55e'},yaxis:'y2',hoverinfo:'skip'};
-      const mac = macd; const trMACD   = {type:'scatter',mode:'lines',x,y:mac.macd  ,name:'MACD' ,line:{width:1.6,color:css('--c-macd')},yaxis:'y4'};
-      const trSignal= {type:'scatter',mode:'lines',x,y:mac.signal,name:'Signal',line:{width:1.6,color:'#f97316'},yaxis:'y4'};
-      const trHist  = {type:'bar',x,y:mac.hist,name:'Hist',marker:{color:mac.hist.map(h=>h>=0?css('--c-up'):css('--c-down'))},yaxis:'y4'};
+      // --- Candlestick trace with improved styling ---
+      const candles = {
+        type: 'candlestick',
+        x, open, high, low, close, name: ticker,
+        increasing: {
+          line: { color: css('--c-up'), width: 1.15 },
+          fillcolor: css('--c-up')
+        },
+        decreasing: {
+          line: { color: css('--c-down'), width: 1.15 },
+          fillcolor: css('--c-down')
+        },
+        whiskerwidth: 0.4,
+        opacity: 0.95,
+        hovertemplate:
+          'O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>'
+      };
 
-      const ichiAll = calcIchimoku(fullRows);
-      const take = arr => arr.slice(startIdx, startIdx + visibleRows.length);
-      const tenkan = take(ichiAll.tenkan), kijun = take(ichiAll.kijun), spanA = take(ichiAll.spanA), spanB = take(ichiAll.spanB), chikou = take(ichiAll.chikou);
-      const { gLow, gUp, rLow, rUp } = segmentCloud(spanA, spanB);
-      const trCloudGreenBottom = { type:'scatter', x, y:gLow,  line:{width:0}, hoverinfo:'skip', yaxis:'y' };
-      const trCloudGreenTop    = { type:'scatter', x, y:gUp,   line:{width:0}, fill:'tonexty', fillcolor:css('--c-ichi-up'),  hoverinfo:'skip', yaxis:'y' };
-      const trCloudRedBottom   = { type:'scatter', x, y:rLow,  line:{width:0}, hoverinfo:'skip', yaxis:'y' };
-      const trCloudRedTop      = { type:'scatter', x, y:rUp,   line:{width:0}, fill:'tonexty', fillcolor:css('--c-ichi-down'), hoverinfo:'skip', yaxis:'y' };
-      const trTenkan = { type:'scatter', mode:'lines', x, y:tenkan, line:{ width:1.4, color:css('--c-ichi-tenkan'), dash:'dot' }, yaxis:'y' };
-      const trKijun  = { type:'scatter', mode:'lines', x, y:kijun,  line:{ width:1.4, color:css('--c-ichi-kijun'),  dash:'dash' }, yaxis:'y' };
-      const trChikou = { type:'scatter', mode:'lines', x, y:chikou, line:{ width:1.1, color:css('--c-ichi-chikou') }, yaxis:'y', opacity:.9 };
+      // --- Layout with dynamic rangebreaks for intraday ---
+      const rangebreaksIntraday =
+        ['1m','5m','15m','60m'].includes(freq)
+          ? [
+              { pattern: 'day of week', bounds: ['sat','mon'] }, // hide weekends
+              { pattern: 'hourly', bounds: [16, 9.5] }           // hide 4pm–9:30am ET
+            ]
+          : [{ pattern: 'day of week', bounds: ['sat','mon'] }];
 
-      const data = [
-        trCloudGreenBottom, trCloudGreenTop, trCloudRedBottom, trCloudRedTop,
-        trTenkan, trKijun, trChikou,
-        candles, trSMA20, trSMA50, trSMA200, trRSI, trRSI70, trRSI30, trMACD, trSignal, trHist, trVol
-      ];
+      const panelBg = getComputedStyle(els.chartCard).backgroundColor,
+            txt     = css('--text') || '#e5e7eb',
+            grid    = css('--grid') || '#222837';
 
-      const panelBg=getComputedStyle(els.chartCard).backgroundColor, txt=css('--text')||'#e5e7eb', grid=css('--grid')||'#222837';
-      const layout={
-        paper_bgcolor:panelBg, plot_bgcolor:panelBg, showlegend:false, margin:{l:60,r:24,t:10,b:24},
+      const layout = {
+        paper_bgcolor: panelBg,
+        plot_bgcolor: panelBg,
+        showlegend: false,
+        margin: { l: 60, r: 24, t: 10, b: 24 },
         xaxis: {
           type: 'date',
           domain: [0, 1],
           rangeslider: { visible: false },
           gridcolor: grid,
           tickfont: { color: txt },
-          // 👇 Collapse weekends and overnight (based on ET you already encode)
-          rangebreaks: [
-            { pattern: 'day of week', bounds: [6, 1] }, // Sat → Mon
-            { pattern: 'hour', bounds: [16, 9.5] }      // 4:00pm → 9:30am
-          ]
+          rangebreaks: rangebreaksIntraday
         },
-        yaxis :{domain:[0.50,1.00],gridcolor:grid,tickfont:{color:txt},side:'right',title:'Price'},
-        yaxis2:{domain:[0.38,0.48],gridcolor:grid,tickfont:{color:txt},range:[0,100],title:'RSI'},
-        yaxis4:{domain:[0.22,0.36],gridcolor:grid,tickfont:{color:txt},title:'MACD'},
-        yaxis3:{domain:[0.00,0.20],gridcolor:grid,tickfont:{color:txt},title:'Vol'},
-        hovermode:'x unified', edits:{shapePosition:true}, dragmode:'zoom'
+        yaxis : { domain: [0.50, 1.00], gridcolor: grid, tickfont: { color: txt }, side: 'right', title: 'Price' },
+        yaxis2: { domain: [0.38, 0.48], gridcolor: grid, tickfont: { color: txt }, range: [0, 100], title: 'RSI' },
+        yaxis4: { domain: [0.22, 0.36], gridcolor: grid, tickfont: { color: txt }, title: 'MACD' },
+        yaxis3: { domain: [0.00, 0.20], gridcolor: grid, tickfont: { color: txt }, title: 'Vol' },
+        hovermode: 'x',                   // cleaner hover; switch back to 'x unified' if you prefer
+        edits: { shapePosition: true },
+        dragmode: 'zoom'
       };
 
       await Plotly.newPlot(els.chart, data, layout, {responsive:true,displaylogo:false});
