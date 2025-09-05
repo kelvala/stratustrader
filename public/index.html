@@ -21,7 +21,8 @@
     --lvl-beginner:#22c55e; --lvl-intermediate:#f59e0b; --lvl-advanced:#ef4444;
     --tf-bg:#1c1f35; --tf-head:#1a214e; --tf-glow:#3b82f6;
     --c-ichi-tenkan:#f59e0b; --c-ichi-kijun:#60a5fa; --c-ichi-chikou:#93c5fd;
-    --c-ichi-up:rgba(34,197,94,.22); --c-ichi-down:rgba(239,68,68,.22);
+    --c-ichi-up:   rgba(34,197,94,.38);   /* was .22 */
+    --c-ichi-down: rgba(239,68,68,.34);   /* was .22 */
   }
   .light{
     --bg:#f8fafc;--panel:#fff;--text:#222;--muted:#64748b;
@@ -79,10 +80,10 @@
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);}
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi;}
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol;}
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;}
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -100,10 +101,29 @@
   .light .chip.active{
     box-shadow: 0 0 0 1px currentColor, 0 0 16px 3px currentColor;
   }
-  /* nicer keyboard focus too */
+  /* --- chip glow + focus --- */
+  .toggle-row{ overflow: visible; }
+  .chip{ position: relative; }
+  .chip.active{
+    border-width: 2px;
+  }
+  .chip.active::after{
+    content:"";
+    position:absolute;
+    inset:-8px;
+    border-radius:999px;
+    background: currentColor;
+    opacity:.28;
+    filter: blur(10px);
+    pointer-events:none;
+  }
+  .light .chip.active::after{
+    opacity:.36;
+    filter: blur(12px);
+  }
   .chip:focus-visible{
-    outline: 2px solid currentColor;
-    outline-offset: 2px;
+    outline:2px solid currentColor;
+    outline-offset:3px;
   }
   .section-sep{margin:20px -16px 16px;padding:0 16px}
   .section-sep .rule{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.9}
@@ -770,7 +790,7 @@
 
       const trVol = { type:'bar', x, y:vol, yaxis:'y3', name:'Volume', opacity:.4, marker:{ color:css('--c-vol') } };
 
-      // Ichimoku cloud — correct fill order
+      // Ichimoku cloud — emphasized fill and thicker lines
       const ichi = calcIchimoku(visibleRows);
       const cloud = segmentCloud(ichi.spanA, ichi.spanB);
       const trCloudGreenBottom = {
@@ -780,7 +800,7 @@
       const trCloudGreenTop = {
         type:'scatter', x, y:cloud.gUp, yaxis:'y',
         fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-up'),
-        hoverinfo:'skip', name:'Kumo +'
+        hoverinfo:'skip', name:'Kumo +', opacity:1
       };
       const trCloudRedBottom = {
         type:'scatter', x, y:cloud.rLow, yaxis:'y',
@@ -789,11 +809,11 @@
       const trCloudRedTop = {
         type:'scatter', x, y:cloud.rUp, yaxis:'y',
         fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-down'),
-        hoverinfo:'skip', name:'Kumo -'
+        hoverinfo:'skip', name:'Kumo -', opacity:1
       };
-      const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1, color:css('--c-ichi-tenkan') } };
-      const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1, color:css('--c-ichi-kijun') } };
-      const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1, color:css('--c-ichi-chikou') } };
+      const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1.4, color:css('--c-ichi-tenkan') } };
+      const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1.4, color:css('--c-ichi-kijun') } };
+      const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1.2, color:css('--c-ichi-chikou') } };
 
       // ---------- Layout ----------
       const rangebreaksIntraday =
