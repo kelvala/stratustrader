@@ -562,11 +562,22 @@
     }catch{ LOCAL_SYMBOLS=[{symbol:'AAPL',name:'Apple Inc'},{symbol:'MSFT',name:'Microsoft Corp'},{symbol:'TSLA',name:'Tesla Inc'},{symbol:'NVDA',name:'NVIDIA Corp'},{symbol:'AMZN',name:'Amazon.com Inc'}]; }
   }
   function searchLocalSymbols(q){
-    if(!q) return []; const out=[];
-    for(const r of LOCAL_SYMBOLS){ if(r.symbol.startsWith(q)){ out.push(r); if(out.length>=12) break; } }
-    if(out.length<12){ const seen=new Set(out.map(r=>r.symbol));
-      for(const r of LOCAL_SYMBOLS){ if(seen.has(r.symbol)) continue;
-        if(r.symbol.includes(q)||(r.name&&r.name.toUpperCase().includes(q))){ out.push(r); if(out.length>=12) break; } } }
+    if(!q) return [];
+    const out=[];
+    const qLower = q.toLowerCase();
+    // Match symbol starts-with, then symbol includes, then company name includes (case-insensitive)
+    for(const r of LOCAL_SYMBOLS){
+      if(r.symbol.startsWith(q)) { out.push(r); if(out.length>=12) break; }
+    }
+    if(out.length<12){
+      const seen=new Set(out.map(r=>r.symbol));
+      for(const r of LOCAL_SYMBOLS){
+        if(seen.has(r.symbol)) continue;
+        if(r.symbol.includes(q) || (r.name && r.name.toLowerCase().includes(qLower))) {
+          out.push(r); if(out.length>=12) break;
+        }
+      }
+    }
     return out;
   }
   function renderAC(){
