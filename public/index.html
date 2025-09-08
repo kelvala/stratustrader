@@ -320,6 +320,22 @@
 (() => {
   const q = s => document.querySelector(s);
 
+  /* --- ADD THIS BLOCK --- */
+  // Map common inputs to the symbols your /api endpoints expect
+  const SYMBOL_ALIASES = Object.freeze({
+    BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD', DOGE: 'DOGE-USD',
+    XRP: 'XRP-USD', ADA: 'ADA-USD', LTC: 'LTC-USD', BCH: 'BCH-USD',
+    BNB: 'BNB-USD',
+    // handy equity/indices shorthands
+    SPX: '^GSPC'
+  });
+  const normalizeTicker = (t) => {
+    if (!t) return '';
+    const key = String(t).trim().toUpperCase();
+    return SYMBOL_ALIASES[key] || key;
+  };
+  const isCrypto = (t) => /-USD$/.test(t);
+
   /* ---------- Fail fast ---------- */
   for (const sel of ['#q', '#searchBtn', '#chart']) {
     if (!document.querySelector(sel)) {
@@ -411,6 +427,7 @@
 
   /* ---------- Fundamentals ---------- */
   async function getFundamentals(ticker){
+    if (isCrypto(ticker)) return {};
     try{
       const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=defaultKeyStatistics,financialData,earningsTrend`, { cache:'no-store' });
       if(!r.ok) throw new Error('summary '+r.status);
@@ -594,10 +611,17 @@
   }
   const hideAC = () => { els.list.classList.remove('show'); activeIndex=-1; };
   function pick(i){
-    const it=suggestions[i]; if(!it) return;
+    const it = suggestions[i]; if(!it) return;
     const sym = normalizeTicker(it.symbol);
     els.input.value = sym;
     hideAC(); onSearch(sym, it.name || '');
+  }
+  function doSearchFromInput(){
+    let t = els.input.value.trim().toUpperCase();
+    t = normalizeTicker(t);
+    hideAC(); if(!/^[A-Z0-9.^$-]{1,12}$/.test(t)){ niceTickerError(t); return; }
+    const found=LOCAL_SYMBOLS.find(r=>r.symbol===t)||LOCAL_SYMBOLS.find(r=>(r.name||'').toUpperCase()===t); const comp=found?.name||'';
+    onSearch(t,comp);
   }
 
   els.input.addEventListener('input', debounce(async ()=>{
