@@ -578,6 +578,11 @@
         }
       }
     }
+    // Add crypto alias proactively if user types e.g. BTC
+    const alias = SYMBOL_ALIASES[q];
+    if (alias && !out.some(r => r.symbol === alias)) {
+      out.unshift({ symbol: alias, name: `${q} (Crypto vs USD)` });
+    }
     return out;
   }
   function renderAC(){
@@ -588,7 +593,12 @@
     }); els.list.classList.add('show');
   }
   const hideAC = () => { els.list.classList.remove('show'); activeIndex=-1; };
-  function pick(i){ const it=suggestions[i]; if(!it) return; els.input.value=it.symbol; hideAC(); onSearch(it.symbol, it.name||''); }
+  function pick(i){
+    const it=suggestions[i]; if(!it) return;
+    const sym = normalizeTicker(it.symbol);
+    els.input.value = sym;
+    hideAC(); onSearch(sym, it.name || '');
+  }
 
   els.input.addEventListener('input', debounce(async ()=>{
     if(!LOCAL_SYMBOLS.length) await loadSymbolsFromCSV();
@@ -615,7 +625,8 @@
     els.prevCloseLine.textContent=''; els.ivLine.textContent='';
   }
   function doSearchFromInput(){
-    const t=els.input.value.trim().toUpperCase(); if(!t) return;
+    let t = els.input.value.trim().toUpperCase();
+    t = normalizeTicker(t);
     hideAC(); if(!/^[A-Z0-9.^$-]{1,12}$/.test(t)){ niceTickerError(t); return; }
     const found=LOCAL_SYMBOLS.find(r=>r.symbol===t)||LOCAL_SYMBOLS.find(r=>(r.name||'').toUpperCase()===t); const comp=found?.name||'';
     onSearch(t,comp);
@@ -744,7 +755,10 @@
 
   /* ---------- Main flow ---------- */
   async function onSearch(ticker, company){
-    if(!FUNDAMENTALS[ticker]) FUNDAMENTALS[ticker] = await getFundamentals(ticker).catch(()=>({}));
+    if (!FUNDAMENTALS[ticker]) {
+      try { FUNDAMENTALS[ticker] = await getFundamentals(ticker); }
+      catch { FUNDAMENTALS[ticker] = {}; }
+    }
     await go(ticker, company);
   }
   async function go(ticker, company){
