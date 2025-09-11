@@ -208,7 +208,7 @@
               <option value="1mo">1 month</option><option value="2mo">2 months</option>
               <option value="3mo">3 months</option><option value="6mo" selected>6 months</option>
               <option value="ytd">YTD</option><option value="1y">1 year</option>
-              <option value="2y">2 years</option
+              <option value="2y">2 years</option>
               <option value="4y">4 years</option><option value="5y">5 years</option>
               <option value="10y">1 decade</option><option value="max">All Data</option>
             </select>
@@ -658,12 +658,20 @@
   els.searchBtn.addEventListener('click', ()=>{ hideAC(); doSearchFromInput(); });
 
   /* ---------- Data fetch & shaping ---------- */
-  function normalizePair(time,freq){
-    const minFor={ '1m':'1d','5m':'5d','15m':'10d','60m':'1mo' };
-    const order=['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
-    const idx=v=>Math.max(0,order.indexOf(v));
-    if(['1m','5m','15m','60m'].includes(freq)){ const minRange=minFor[freq]; if(idx(time)<idx(minRange)) time=minRange; return { range:time, interval: freq==='60m' ? '60m' : freq }; }
-    const map={'1d':'1d','1wk':'1wk','1mo':'1mo','3mo':'3mo','1y':'1y'}; return { range:time, interval: map[freq]||'1d' };
+  function normalizePair(time, freq){
+    const minFor = { '1m':'1d','5m':'5d','15m':'10d','60m':'1mo' };
+    const order  = ['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
+    const idx = v => Math.max(0, order.indexOf(v));
+
+    if (['1m','5m','15m','60m'].includes(freq)) {
+      const minRange = minFor[freq];
+      if (idx(time) < idx(minRange)) time = minRange;
+      return { range: time, interval: (freq === '60m' ? '60m' : freq) };
+    }
+
+    // 👇 Yearly (1y) isn’t supported by Yahoo; fetch monthly bars instead
+    const map = { '1d':'1d', '1wk':'1wk', '1mo':'1mo', '3mo':'3mo', '1y':'1mo' };
+    return { range: time, interval: map[freq] || '1d' };
   }
   function historyRangeFor(freq,time){
     if(freq==='1m') return '7d';
@@ -797,25 +805,34 @@
       const fullRows = await fetchFullHistory(ticker, time, freq);
       if(!fullRows.length) throw new Error('No price data');
 
-      const visibleRows = getVisibleData(fullRows, time, freq);
-      const startIdx = fullRows.length - visibleRows.length;
+      let visibleRows = getVisibleData(fullRows, time, freq);
+      if (freq === '1y') {
+        visibleRows = aggregateToPeriod(visibleRows, 'year');
+      }
+      const x     = visibleRows.map(r => formatEasternISO(r.date));
+      const open  = visibleRows.map(r => r.o);
+      const high  = visibleRows.map(r => r.h);
+      const low   = visibleRows.map(r => r.l);
+      const close = visibleRows.map(r => r.c);
+      const vol   = visibleRows.map(r => r.v);
 
-      const x    = visibleRows.map(r => formatEasternISO(r.date));
-      const open = visibleRows.map(r => r.o);
-      const high = visibleRows.map(r => r.h);
-      const low  = visibleRows.map(r => r.l);
-      const close= visibleRows.map(r => r.c);
-      const vol  = visibleRows.map(r => r.v);
+      // Use SMAs directly on visibleRows for yearly, else align/extend for normal
+      let sma20, sma50, sma200;
+      if (freq === '1y') {
+        sma20  = SMA(close, 20);
+        sma50  = SMA(close, 50);
+        sma200 = SMA(close, 200);
+      } else {
+        const sma20All  = SMA(fullRows.map(r=>r.c), 20);
+        const sma50All  = SMA(fullRows.map(r=>r.c), 50);
+        const sma200All = SMA(fullRows.map(r=>r.c), 200);
+        sma20  = alignAndExtendSMA(sma20All,  visibleRows.length, startIdx);
+        sma50  = alignAndExtendSMA(sma50All,  visibleRows.length, startIdx);
+        sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
+      }
 
       // ---------- Indicators ----------
       const closeAll = fullRows.map(r=>r.c);
-      const sma20All  = SMA(closeAll,20);
-      const sma50All  = SMA(closeAll,50);
-      const sma200All = SMA(closeAll,200);
-      const sma20  = alignAndExtendSMA(sma20All,  visibleRows.length, startIdx);
-      const sma50  = alignAndExtendSMA(sma50All,  visibleRows.length, startIdx);
-      const sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
-
       const rsiVals   = RSI(close,14);
       const macd      = MACD(close,12,26,9);
 
