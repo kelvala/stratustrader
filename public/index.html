@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.032</title>
+<title>Stock Analyzer v.033</title>
 
 <!-- Plotly (deferred) -->
 <script src="https://cdn.plot.ly/plotly-2.30.0.min.js" defer></script>
@@ -21,8 +21,8 @@
     --lvl-beginner:#22c55e; --lvl-intermediate:#f59e0b; --lvl-advanced:#ef4444;
     --tf-bg:#1c1f35; --tf-head:#1a214e; --tf-glow:#3b82f6;
     --c-ichi-tenkan:#f59e0b; --c-ichi-kijun:#60a5fa; --c-ichi-chikou:#93c5fd;
-    --c-ichi-up:   rgba(34,197,94,.38);   /* was .22 */
-    --c-ichi-down: rgba(239,68,68,.34);   /* was .22 */
+    --c-ichi-up:rgba(34,197,94,.38);   /* stronger */
+    --c-ichi-down:rgba(239,68,68,.34); /* stronger */
   }
   .light{
     --bg:#f8fafc;--panel:#fff;--text:#222;--muted:#64748b;
@@ -80,10 +80,10 @@
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);}
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;}
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;}
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -94,37 +94,13 @@
   .chip.active[data-k="VOL"]{background:rgba(16,185,129,.12)}
   .chip.active[data-k="AUTOFIB"]{background:rgba(139,92,246,.12)}
   .chip.active[data-k="ICHI"]{background:rgba(96,165,250,.12)}
-  /* subtle glow for active chips */
-  .chip.active{
-    box-shadow: 0 0 0 1px currentColor, 0 0 12px 2px currentColor;
-  }
-  .light .chip.active{
-    box-shadow: 0 0 0 1px currentColor, 0 0 16px 3px currentColor;
-  }
-  /* --- chip glow + focus --- */
-  .toggle-row{ overflow: visible; }
-  .chip{ position: relative; }
-  .chip.active{
-    border-width: 2px;
-  }
-  .chip.active::after{
-    content:"";
-    position:absolute;
-    inset:-8px;
-    border-radius:999px;
-    background: currentColor;
-    opacity:.28;
-    filter: blur(10px);
-    pointer-events:none;
-  }
-  .light .chip.active::after{
-    opacity:.36;
-    filter: blur(12px);
-  }
-  .chip:focus-visible{
-    outline:2px solid currentColor;
-    outline-offset:3px;
-  }
+  /* bright glow for active chips */
+  .toggle-row{overflow:visible}
+  .chip{position:relative}
+  .chip.active{border-width:2px;box-shadow:0 0 0 1px currentColor,0 0 14px 3px currentColor}
+  .chip.active::after{content:"";position:absolute;inset:-8px;border-radius:999px;background:currentColor;opacity:.28;filter:blur(10px);pointer-events:none}
+  .light .chip.active::after{opacity:.36;filter:blur(12px)}
+  .chip:focus-visible{outline:2px solid currentColor;outline-offset:3px}
   .section-sep{margin:20px -16px 16px;padding:0 16px}
   .section-sep .rule{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.9}
   .sheet{position:fixed;left:0;right:0;bottom:0;top:auto;background:transparent;display:flex;justify-content:center;z-index:2000}
@@ -168,7 +144,7 @@
       <div class="ticker-wrap">
         <label for="q">Ticker</label>
         <div class="input-wrap">
-          <input id="q" class="ticker-input" type="text" placeholder="AAPL, MSFT…" spellcheck="false" autocomplete="off"/>
+          <input id="q" class="ticker-input" type="text" placeholder="AAPL, MSFT… or BTC" spellcheck="false" autocomplete="off"/>
           <div id="ac" class="ac" role="listbox" aria-label="Suggestions"></div>
         </div>
         <button id="searchBtn" class="btn inline" type="button">Search</button>
@@ -208,7 +184,7 @@
               <option value="1mo">1 month</option><option value="2mo">2 months</option>
               <option value="3mo">3 months</option><option value="6mo" selected>6 months</option>
               <option value="ytd">YTD</option><option value="1y">1 year</option>
-              <option value="2y">2 years</option>
+              <option value="2y">2 years</option><option value="3y">3 years</option>
               <option value="4y">4 years</option><option value="5y">5 years</option>
               <option value="10y">1 decade</option><option value="max">All Data</option>
             </select>
@@ -320,29 +296,21 @@
 (() => {
   const q = s => document.querySelector(s);
 
-  /* --- ADD THIS BLOCK --- */
-  // Map common inputs to the symbols your /api endpoints expect
+  /* ---------- Aliases & crypto handling ---------- */
   const SYMBOL_ALIASES = Object.freeze({
-    BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD', DOGE: 'DOGE-USD',
-    XRP: 'XRP-USD', ADA: 'ADA-USD', LTC: 'LTC-USD', BCH: 'BCH-USD',
-    BNB: 'BNB-USD',
-    // handy equity/indices shorthands
-    SPX: '^GSPC'
+    BTC:'BTC-USD', ETH:'ETH-USD', SOL:'SOL-USD', DOGE:'DOGE-USD',
+    XRP:'XRP-USD', ADA:'ADA-USD', LTC:'LTC-USD', BCH:'BCH-USD',
+    BNB:'BNB-USD', SPX:'^GSPC'
   });
-  const normalizeTicker = (t) => {
-    if (!t) return '';
-    const key = String(t).trim().toUpperCase();
-    return SYMBOL_ALIASES[key] || key;
-  };
-  const isCrypto = (t) => /-USD$/.test(t);
+  const normalizeTicker = t => SYMBOL_ALIASES[String(t||'').trim().toUpperCase()] || String(t||'').trim().toUpperCase();
+  const isCrypto = t => /-USD$/.test(t);
 
-  /* ---------- Fail fast ---------- */
+  /* ---------- Guard ---------- */
   for (const sel of ['#q', '#searchBtn', '#chart']) {
     if (!document.querySelector(sel)) {
-      console.error(`[Stratus] Missing ${sel} — not the main analyzer page.`);
       const msg = document.createElement('div');
-      msg.style.cssText = 'margin:16px;padding:12px;border:1px solid #ef4444;border-radius:10px;color:#ef4444;background:#1b0f0f;font-weight:800';
-      msg.textContent = '⚠️ This is not the Stock Analyzer page (missing core elements). Open the correct HTML.';
+      msg.style.cssText='margin:16px;padding:12px;border:1px solid #ef4444;border-radius:10px;color:#ef4444;background:#1b0f0f;font-weight:800';
+      msg.textContent='⚠️ This is not the Stock Analyzer page (missing core elements).';
       document.body.prepend(msg);
       return;
     }
@@ -350,22 +318,20 @@
 
   /* ---------- Elements ---------- */
   const els = {
-    input: q('#q'), list: q('#ac'), searchBtn: q('#searchBtn'),
-    headline: q('#headline'), lastLine: q('#lastLine'), prevCloseLine: q('#prevCloseLine'), ivLine: q('#ivLine'),
-    chartCard: q('#chartCard'), chart: q('#chart'),
-    timeSel: q('#timeSel'), freqSel: q('#freqSel'), toggles: q('#toggles'),
-    themeToggle: q('#themeToggle'), autoFib: q('#autoFib'),
-    refreshBtn: q('#refreshBtn'), maxBtn: q('#maxBtn'), wideBtn: q('#wideBtn'),
-    tfCard: q('#tfCard'), tfHead: q('#tfHead')
+    input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'),
+    headline:q('#headline'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'),
+    chartCard:q('#chartCard'), chart:q('#chart'),
+    timeSel:q('#timeSel'), freqSel:q('#freqSel'), toggles:q('#toggles'),
+    themeToggle:q('#themeToggle'), autoFib:q('#autoFib'),
+    refreshBtn:q('#refreshBtn'), maxBtn:q('#maxBtn'), wideBtn:q('#wideBtn'),
+    tfCard:q('#tfCard'), tfHead:q('#tfHead')
   };
 
   /* ---------- State ---------- */
-  let CURRENT = { ticker: null, company: "", prevClose: null };
+  let CURRENT = { ticker:null, company:"", prevClose:null };
   let FUNDAMENTALS = {};
   let traceMap = {};
   let PRICE_TIMER = null;
-
-  /* Guard to prevent relayout recursion (Auto Fib) */
   let FIB_LOCK = false;
   const fibActive = () => els.autoFib?.classList?.contains('active');
 
@@ -373,14 +339,12 @@
   const fmt = n => (Number.isFinite(n) ? n.toFixed(2) : '—');
   const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
   const escapeHTML = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
-  const debounce = (fn, ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
+  const debounce = (fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
   const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
-
-  function toEastern(date) { return new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' })); }
-  function formatEasternISO(date) { const d = toEastern(date); return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds(), d.getMilliseconds())).toISOString(); }
   const toET = (d=new Date()) => new Date(d.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  function toEastern(date){ return new Date(date.toLocaleString('en-US',{timeZone:'America/New_York'})); }
+  function formatEasternISO(date){ const d=toEastern(date); return new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate(),d.getHours(),d.getMinutes(),d.getSeconds(),d.getMilliseconds())).toISOString(); }
   const isMarketOpenNow = () => { const d=toET(); const wd=d.getDay(); if(wd===0||wd===6) return false; const m=d.getHours()*60+d.getMinutes(); return m>=(9*60+30)&&m<(16*60); };
-
   async function waitForPlotly(timeoutMs=12000){
     const start=Date.now();
     while(!(window.Plotly && window.Plotly.newPlot)){
@@ -394,40 +358,40 @@
     dark:{'--bg':'#0f1115','--panel':'#151923','--text':'#e5e7eb','--muted':'#9ca3af','--accent':'#22c55e','--focus':'#3b82f6','--border':'#23283a','--hover':'#161a25','--metric-bg':'#1a1f2e','--metric-border':'#2a2f3e'},
     light:{'--bg':'#f8fafc','--panel':'#fff','--text':'#222','--muted':'#64748b','--accent':'#22c55e','--focus':'#3b82f6','--border':'#e2e8f0','--hover':'#f1f5f9','--metric-bg':'#f1f5f9','--metric-border':'#e2e8f0'}
   };
-  function applyChartTheme() {
-    if (!els.chart || !window.Plotly) return;
-    const panelBg = getComputedStyle(els.chartCard).backgroundColor;
-    const txt  = css('--text') || '#e5e7eb';
-    const grid = css('--grid') || '#222837';
-    try {
-      Plotly.relayout(els.chart, {
-        paper_bgcolor: panelBg, plot_bgcolor: panelBg,
-        'xaxis.gridcolor': grid, 'yaxis.gridcolor': grid, 'yaxis2.gridcolor': grid, 'yaxis3.gridcolor': grid, 'yaxis4.gridcolor': grid,
-        'xaxis.tickfont.color': txt, 'yaxis.tickfont.color': txt, 'yaxis2.tickfont.color': txt, 'yaxis3.tickfont.color': txt, 'yaxis4.tickfont.color': txt
+  function applyChartTheme(){
+    if(!els.chart||!window.Plotly) return;
+    const panelBg=getComputedStyle(els.chartCard).backgroundColor;
+    const txt=css('--text')||'#e5e7eb';
+    const grid=css('--grid')||'#222837';
+    try{
+      Plotly.relayout(els.chart,{
+        paper_bgcolor:panelBg, plot_bgcolor:panelBg,
+        'xaxis.gridcolor':grid, 'yaxis.gridcolor':grid, 'yaxis2.gridcolor':grid, 'yaxis3.gridcolor':grid, 'yaxis4.gridcolor':grid,
+        'xaxis.tickfont.color':txt, 'yaxis.tickfont.color':txt, 'yaxis2.tickfont.color':txt, 'yaxis3.tickfont.color':txt, 'yaxis4.tickfont.color':txt
       });
-    } catch {}
+    }catch{}
   }
   function setTheme(t){
     Object.entries(THEMES[t]).forEach(([k,v])=>document.documentElement.style.setProperty(k,v));
-    document.body.classList.toggle('light', t === 'light');
+    document.body.classList.toggle('light', t==='light');
     els.themeToggle.textContent = t==='dark' ? '☀️ Light' : '🌙 Dark';
     els.themeToggle.classList.toggle('active', t==='dark');
     localStorage.setItem('theme',t);
-    requestAnimationFrame(() => { applyChartTheme(); if (CURRENT.ticker) go(CURRENT.ticker, CURRENT.company); });
+    requestAnimationFrame(()=>{ applyChartTheme(); if(CURRENT.ticker) go(CURRENT.ticker, CURRENT.company); });
   }
   const getTheme = () => localStorage.getItem('theme')||'dark';
   els.themeToggle.addEventListener('click',()=> setTheme(getTheme()==='dark'?'light':'dark'));
   setTheme(getTheme());
 
-  /* ---------- Time frame UI ---------- */
-  els.tfHead.addEventListener('click', () => {
+  /* ---------- Collapsible ---------- */
+  els.tfHead.addEventListener('click',()=>{
     const open = els.tfCard.getAttribute('data-open') === 'true';
     els.tfCard.setAttribute('data-open', open ? 'false' : 'true');
   });
 
   /* ---------- Fundamentals ---------- */
   async function getFundamentals(ticker){
-    if (isCrypto(ticker)) return {};
+    if(isCrypto(ticker)) return {};
     try{
       const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=defaultKeyStatistics,financialData,earningsTrend`, { cache:'no-store' });
       if(!r.ok) throw new Error('summary '+r.status);
@@ -435,7 +399,9 @@
       const res = j?.quoteSummary?.result?.[0] || {};
       const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
       const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
-      let growth=null; const trends=Array.isArray(et.trend)?et.trend:[]; const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+      let growth=null;
+      const trends=Array.isArray(et.trend)?et.trend:[];
+      const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
       if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
       const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
       return { eps: +eps || null, growth: +growth || null, ivGraham };
@@ -463,7 +429,7 @@
     return {macd,signal,hist};
   }
 
-  /* ---------- Ichimoku ---------- */
+  /* ---------- Ichimoku helpers ---------- */
   function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
     for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
   function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
@@ -472,11 +438,11 @@
   function arrShiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
   function calcIchimoku(rows){
     const n=rows.length, high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c);
-    const convHi=rollingHigh(high,9), convLo=rollingLow(low,9);
-    const kijHi=rollingHigh(high,26), kijLo=rollingLow(low,26);
-    const senBHi=rollingHigh(high,52), senBLo=rollingLow(low,52);
+    const convHi=rollingHigh(high,9),  convLo=rollingLow(low,9);
+    const kijHi =rollingHigh(high,26), kijLo=rollingLow(low,26);
+    const senBHi=rollingHigh(high,52),  senBLo=rollingLow(low,52);
     const tenkan=convHi.map((h,i)=> (h!=null&&convLo[i]!=null)?(h+convLo[i])/2:null);
-    const kijun =kijHi .map((h,i)=> (h!=null&&kijLo [i]!=null)?(h+kijLo [i])/2:null);
+    const kijun =kijHi .map((h,i)=> (h!=null&&kijLo[i]!=null)?(h+kijLo[i])/2:null);
     const senA0=tenkan.map((t,i)=> (t!=null&&kijun[i]!=null)?(t+kijun[i])/2:null);
     const senB0=senBHi.map((h,i)=> (h!=null&&senBLo[i]!=null)?(h+senBLo[i])/2:null);
     const shift=26, spanA=arrShiftFwd(senA0,shift,n), spanB=arrShiftFwd(senB0,shift,n), chikou=arrShiftBack(close,shift,n);
@@ -487,40 +453,26 @@
     for(let i=0;i<n;i++){ const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue; if(A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; } }
     return { gLow, gUp, rLow, rUp };
   }
-
-  /* --- Cloud helpers: fill to edges + visual magnifier --- */
   function fillEdges(arr){
     const out = arr.slice();
-    // forward fill gaps
     let last = null;
-    for (let i = 0; i < out.length; i++) {
-      if (Number.isFinite(out[i])) last = out[i];
-      else if (last != null) out[i] = last;
-    }
-    // backfill start
-    const fi = out.findIndex(v => Number.isFinite(v));
-    if (fi > 0) { for (let i = 0; i < fi; i++) out[i] = out[fi]; }
-    // extend to the right
-    let li = -1;
-    for (let i = out.length - 1; i >= 0; i--) { if (Number.isFinite(out[i])) { li = i; break; } }
-    if (li >= 0) { for (let i = li + 1; i < out.length; i++) out[i] = out[li]; }
+    for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; }
+    const fi = out.findIndex(v=>Number.isFinite(v));
+    if(fi>0){ for(let i=0;i<fi;i++) out[i]=out[fi]; }
+    let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } }
+    if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; }
     return out;
   }
-
-  function exaggerateCloud(spanA, spanB, mag = 1.6, loClip = -Infinity, hiClip = Infinity){
-    if (!(mag > 1)) return { spanA, spanB };
-    const A = spanA.slice(), B = spanB.slice();
-    for (let i = 0; i < A.length; i++) {
-      const a = A[i], b = B[i];
-      if (!Number.isFinite(a) || !Number.isFinite(b)) continue;
-      const mid = (a + b) / 2, half = (a - b) / 2;
-      let a2 = mid + half * mag;
-      let b2 = mid - half * mag;
-      // keep within reasonable y-range so the axis doesn't blow out
-      A[i] = Math.min(Math.max(a2, loClip), hiClip);
-      B[i] = Math.min(Math.max(b2, loClip), hiClip);
+  function exaggerateCloud(spanA, spanB, mag=1.8, loClip=-Infinity, hiClip=Infinity){
+    if(!(mag>1)) return {spanA,spanB};
+    const A=spanA.slice(), B=spanB.slice();
+    for(let i=0;i<A.length;i++){
+      const a=A[i], b=B[i]; if(!Number.isFinite(a)||!Number.isFinite(b)) continue;
+      const mid=(a+b)/2, half=(a-b)/2;
+      A[i]=Math.min(Math.max(mid+half*mag, loClip), hiClip);
+      B[i]=Math.min(Math.max(mid-half*mag, loClip), hiClip);
     }
-    return { spanA: A, spanB: B };
+    return {spanA:A, spanB:B};
   }
 
   /* ---------- SMA helper ---------- */
@@ -576,30 +528,22 @@
         if(/^[A-Z0-9.^$\-]{1,12}$/.test(sym)) out.push({symbol:sym,name});
       }
       if(!out.length) throw new Error('No symbols parsed'); LOCAL_SYMBOLS=out;
-    }catch{ LOCAL_SYMBOLS=[{symbol:'AAPL',name:'Apple Inc'},{symbol:'MSFT',name:'Microsoft Corp'},{symbol:'TSLA',name:'Tesla Inc'},{symbol:'NVDA',name:'NVIDIA Corp'},{symbol:'AMZN',name:'Amazon.com Inc'}]; }
+    }catch{
+      LOCAL_SYMBOLS=[{symbol:'AAPL',name:'Apple Inc'},{symbol:'MSFT',name:'Microsoft Corp'},{symbol:'TSLA',name:'Tesla Inc'},{symbol:'NVDA',name:'NVIDIA Corp'},{symbol:'AMZN',name:'Amazon.com Inc'}];
+    }
   }
   function searchLocalSymbols(q){
     if(!q) return [];
-    const out=[];
-    const qLower = q.toLowerCase();
-    // Match symbol starts-with, then symbol includes, then company name includes (case-insensitive)
-    for(const r of LOCAL_SYMBOLS){
-      if(r.symbol.startsWith(q)) { out.push(r); if(out.length>=12) break; }
-    }
+    const out=[]; const qLower=q.toLowerCase();
+    for(const r of LOCAL_SYMBOLS){ if(r.symbol.startsWith(q)){ out.push(r); if(out.length>=12) break; } }
     if(out.length<12){
       const seen=new Set(out.map(r=>r.symbol));
       for(const r of LOCAL_SYMBOLS){
         if(seen.has(r.symbol)) continue;
-        if(r.symbol.includes(q) || (r.name && r.name.toLowerCase().includes(qLower))) {
-          out.push(r); if(out.length>=12) break;
-        }
+        if(r.symbol.includes(q) || (r.name && r.name.toLowerCase().includes(qLower))) { out.push(r); if(out.length>=12) break; }
       }
     }
-    // Add crypto alias proactively if user types e.g. BTC
-    const alias = SYMBOL_ALIASES[q];
-    if (alias && !out.some(r => r.symbol === alias)) {
-      out.unshift({ symbol: alias, name: `${q} (Crypto vs USD)` });
-    }
+    const alias = SYMBOL_ALIASES[q]; if(alias && !out.some(r=>r.symbol===alias)) out.unshift({symbol:alias,name:`${q} (Crypto vs USD)`});
     return out;
   }
   function renderAC(){
@@ -610,19 +554,7 @@
     }); els.list.classList.add('show');
   }
   const hideAC = () => { els.list.classList.remove('show'); activeIndex=-1; };
-  function pick(i){
-    const it = suggestions[i]; if(!it) return;
-    const sym = normalizeTicker(it.symbol);
-    els.input.value = sym;
-    hideAC(); onSearch(sym, it.name || '');
-  }
-  function doSearchFromInput(){
-    let t = els.input.value.trim().toUpperCase();
-    t = normalizeTicker(t);
-    hideAC(); if(!/^[A-Z0-9.^$-]{1,12}$/.test(t)){ niceTickerError(t); return; }
-    const found=LOCAL_SYMBOLS.find(r=>r.symbol===t)||LOCAL_SYMBOLS.find(r=>(r.name||'').toUpperCase()===t); const comp=found?.name||'';
-    onSearch(t,comp);
-  }
+  function pick(i){ const it=suggestions[i]; if(!it) return; const sym=normalizeTicker(it.symbol); els.input.value=sym; hideAC(); onSearch(sym,it.name||''); }
 
   els.input.addEventListener('input', debounce(async ()=>{
     if(!LOCAL_SYMBOLS.length) await loadSymbolsFromCSV();
@@ -642,42 +574,48 @@
   document.addEventListener('click', e=>{ if(!e.target.closest('.ticker-wrap')) hideAC(); });
   els.input.addEventListener('blur', ()=> setTimeout(hideAC,100));
   window.addEventListener('scroll', hideAC, { passive:true });
-
   function niceTickerError(t){
     els.headline.textContent='Symbol not found';
     els.lastLine.innerHTML=`<span style="color:${css('--c-down')};font-weight:800">“${t}” isn’t a valid ticker. Please check the spelling and try again.</span>`;
     els.prevCloseLine.textContent=''; els.ivLine.textContent='';
   }
   function doSearchFromInput(){
-    let t = els.input.value.trim().toUpperCase();
-    t = normalizeTicker(t);
+    let t = normalizeTicker(els.input.value.trim().toUpperCase());
     hideAC(); if(!/^[A-Z0-9.^$-]{1,12}$/.test(t)){ niceTickerError(t); return; }
     const found=LOCAL_SYMBOLS.find(r=>r.symbol===t)||LOCAL_SYMBOLS.find(r=>(r.name||'').toUpperCase()===t); const comp=found?.name||'';
     onSearch(t,comp);
   }
   els.searchBtn.addEventListener('click', ()=>{ hideAC(); doSearchFromInput(); });
 
-  /* ---------- Data fetch & shaping ---------- */
-  function normalizePair(time, freq){
-    const minFor = { '1m':'1d','5m':'5d','15m':'10d','60m':'1mo' };
-    const order  = ['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
-    const idx = v => Math.max(0, order.indexOf(v));
-
-    if (['1m','5m','15m','60m'].includes(freq)) {
-      const minRange = minFor[freq];
-      if (idx(time) < idx(minRange)) time = minRange;
-      return { range: time, interval: (freq === '60m' ? '60m' : freq) };
-    }
-
-    // 👇 Yearly (1y) isn’t supported by Yahoo; fetch monthly bars instead
-    const map = { '1d':'1d', '1wk':'1wk', '1mo':'1mo', '3mo':'3mo', '1y':'1mo' };
-    return { range: time, interval: map[freq] || '1d' };
+  /* ---------- Fetch & shape ---------- */
+  function normalizePair(time,freq){
+    const minFor={ '1m':'1d','5m':'5d','15m':'10d','60m':'1mo' };
+    const order=['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
+    const idx=v=>Math.max(0,order.indexOf(v));
+    if(['1m','5m','15m','60m'].includes(freq)){ const minRange=minFor[freq]; if(idx(time)<idx(minRange)) time=minRange; return { range:time, interval: freq==='60m' ? '60m' : freq }; }
+    // Yahoo doesn't actually serve "1y" bars; we’ll fetch monthly and aggregate to yearly
+    const map={'1d':'1d','1wk':'1wk','1mo':'1mo','3mo':'3mo','1y':'1mo'};
+    return { range:time, interval: map[freq]||'1d' };
   }
   function historyRangeFor(freq,time){
     if(freq==='1m') return '7d';
     if(freq==='5m'||freq==='15m'||freq==='60m') return '2mo';
     const map={'1d':'1y','2d':'1y','5d':'1y','10d':'1y','1mo':'1y','2mo':'2y','3mo':'2y','6mo':'2y','ytd':'2y','1y':'3y','2y':'5y','3y':'5y','4y':'10y','5y':'10y','10y':'max','max':'max'};
     return map[time]||'3y';
+  }
+  function aggregateToYear(rows){
+    if(!rows.length) return rows;
+    const byY = new Map();
+    for(const r of rows){
+      const y = toET(r.date).getFullYear();
+      let b = byY.get(y);
+      if(!b) byY.set(y, b={ o:r.o, h:r.h, l:r.l, c:r.c, v:r.v, date: new Date(y,0,1) });
+      b.h = Math.max(b.h, r.h);
+      b.l = Math.min(b.l, r.l);
+      b.c = r.c;
+      b.v += r.v;
+    }
+    return Array.from(byY.entries()).sort((a,b)=>a[0]-b[0]).map(([,v])=>v);
   }
   async function fetchFullHistory(ticker,time,freq){ const range=historyRangeFor(freq,time); return await fetchChart(ticker,range,freq); }
   async function fetchChart(ticker,time,freq){
@@ -693,10 +631,10 @@
         for(let i=0;i<ts.length;i++){
           const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i];
           const adj=res.indicators?.adjclose?.[0]?.adjclose;
-          const cRaw = (adj && adj[i]!=null) ? adj[i] : q.close?.[i];
-          const c = Number.isFinite(+cRaw) ? +cRaw : null;
-          const v = Number.isFinite(q.volume?.[i]) ? +q.volume[i] : 0;
-          if ([o,h,l,c].every(Number.isFinite)) rows.push({date:new Date(ts[i]*1000),o:+o,h:+h,l:+l,c:+c,v});
+          const cRaw=(adj && adj[i]!=null) ? adj[i] : q.close?.[i];
+          const c=Number.isFinite(+cRaw)?+cRaw:null;
+          const v=Number.isFinite(q.volume?.[i])?+q.volume[i]:0;
+          if([o,h,l,c].every(Number.isFinite)) rows.push({date:new Date(ts[i]*1000),o:+o,h:+h,l:+l,c:+c,v});
         }
         return rows;
       }catch(e){ lastErr=e; }
@@ -730,74 +668,60 @@
     return null;
   }
 
-  /* ---------- Live Last/Change line ---------- */
+  /* ---------- Price ticker ---------- */
   async function fetchLastPriceLight(ticker){
-    try {
-      const r = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { cache: 'no-store' });
+    try{
+      const r = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { cache:'no-store' });
       if (r.ok) {
-        const j = await r.json();
-        const p = j?.price ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice;
-        if (Number.isFinite(+p)) return +p;
+        const j=await r.json();
+        const p=j?.price ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice;
+        if(Number.isFinite(+p)) return +p;
       }
-    } catch {}
-    try {
+    }catch{}
+    try{
       const r = await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=1d&interval=1m`, { cache:'no-store' });
-      if (!r.ok) throw 0;
-      const j = await r.json();
-      const res = j?.chart?.result?.[0];
-      const q = res?.indicators?.quote?.[0];
-      const adj = res?.indicators?.adjclose?.[0]?.adjclose;
-      const close = (adj && adj.at(-1) != null) ? adj.at(-1) : q?.close?.at(-1);
+      if(!r.ok) throw 0;
+      const j=await r.json();
+      const res=j?.chart?.result?.[0];
+      const q=res?.indicators?.quote?.[0];
+      const adj=res?.indicators?.adjclose?.[0]?.adjclose;
+      const close=(adj && adj.at(-1)!=null) ? adj.at(-1) : q?.close?.at(-1);
       return Number.isFinite(+close) ? +close : null;
-    } catch { return null; }
+    }catch{ return null; }
   }
   async function tickPriceOnce(){
-    if (!CURRENT?.ticker) return;
-    const last = await fetchLastPriceLight(CURRENT.ticker);
-    if (!Number.isFinite(last)) return;
-    const prev = CURRENT.prevClose ?? null;
-    const dayChg = (prev!=null) ? last - prev : null;
-    const dayPct = (prev!=null && prev!==0) ? (dayChg / prev) * 100 : null;
-    const upClr = css('--c-up'), dnClr = css('--c-down');
-    const chgClr = dayChg > 0 ? upClr : dayChg < 0 ? dnClr : '#cbd5e1';
-    const signChg = dayChg > 0 ? '+' : dayChg < 0 ? '-' : '';
-    const signPct = dayPct > 0 ? '+' : dayPct < 0 ? '-' : '';
-    els.lastLine.innerHTML =
-      `Last: <b>$${fmt(last)}</b> · ` +
-      (dayChg == null
-        ? 'Change: —'
-        : `<span style="font-weight:800;color:${chgClr}">
-             Change: ${signChg}$${fmt(Math.abs(dayChg))}
-             <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span>
-           </span>`);
+    if(!CURRENT?.ticker) return;
+    const last=await fetchLastPriceLight(CURRENT.ticker);
+    if(!Number.isFinite(last)) return;
+    const prev=CURRENT.prevClose ?? null;
+    const dayChg=(prev!=null)?last-prev:null;
+    const dayPct=(prev!=null && prev!==0)?(dayChg/prev)*100:null;
+    const upClr=css('--c-up'), dnClr=css('--c-down');
+    const chgClr=dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
+    const signChg=dayChg>0?'+':dayChg<0?'-':'';
+    const signPct=dayPct>0?'+':dayPct<0?'-':'';
+    els.lastLine.innerHTML = `Last: <b>$${fmt(last)}</b> · ` + (dayChg==null? 'Change: —' :
+      `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
   }
   function startPriceTicker(){
     stopPriceTicker();
-    const base = ['1m','5m','15m','60m'].includes(els.freqSel.value) ? 30000 : 60000;
-    const interval = isMarketOpenNow() ? base : 180000;
-    const run = () => { if (!document.hidden) tickPriceOnce(); };
-    run();
-    PRICE_TIMER = setInterval(run, interval);
+    const base=['1m','5m','15m','60m'].includes(els.freqSel.value) ? 30000 : 60000;
+    const interval=isMarketOpenNow()?base:180000;
+    const run=()=>{ if(!document.hidden) tickPriceOnce(); };
+    run(); PRICE_TIMER=setInterval(run,interval);
   }
-  const stopPriceTicker = () => { if (PRICE_TIMER){ clearInterval(PRICE_TIMER); PRICE_TIMER = null; } };
-  document.addEventListener('visibilitychange', () => {
-    if (PRICE_TIMER && document.hidden) return;
-    if (!PRICE_TIMER && !document.hidden && CURRENT.ticker) startPriceTicker();
-  });
+  const stopPriceTicker=()=>{ if(PRICE_TIMER){ clearInterval(PRICE_TIMER); PRICE_TIMER=null; } };
+  document.addEventListener('visibilitychange',()=>{ if(PRICE_TIMER && document.hidden) return; if(!PRICE_TIMER && !document.hidden && CURRENT.ticker) startPriceTicker(); });
 
   /* ---------- Main flow ---------- */
   async function onSearch(ticker, company){
-    if (!FUNDAMENTALS[ticker]) {
-      try { FUNDAMENTALS[ticker] = await getFundamentals(ticker); }
-      catch { FUNDAMENTALS[ticker] = {}; }
-    }
+    if(!FUNDAMENTALS[ticker]){ try{ FUNDAMENTALS[ticker]=await getFundamentals(ticker); }catch{ FUNDAMENTALS[ticker]={}; } }
     await go(ticker, company);
   }
   async function go(ticker, company){
-    CURRENT = { ...CURRENT, ticker, company };
-    els.headline.textContent = `${ticker}${company ? ' — ' + company : ''}`;
-    els.lastLine.textContent = 'Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent='';
-
+    CURRENT={...CURRENT,ticker,company};
+    els.headline.textContent=`${ticker}${company?' — '+company:''}`;
+    els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent='';
     try{
       await waitForPlotly();
 
@@ -806,9 +730,10 @@
       if(!fullRows.length) throw new Error('No price data');
 
       let visibleRows = getVisibleData(fullRows, time, freq);
-      if (freq === '1y') {
-        visibleRows = aggregateToPeriod(visibleRows, 'year');
-      }
+      if (freq === '1y') visibleRows = aggregateToYear(visibleRows);
+
+      const startIdx = fullRows.length - visibleRows.length; /* <-- FIXED */
+
       const x     = visibleRows.map(r => formatEasternISO(r.date));
       const open  = visibleRows.map(r => r.o);
       const high  = visibleRows.map(r => r.h);
@@ -816,7 +741,7 @@
       const close = visibleRows.map(r => r.c);
       const vol   = visibleRows.map(r => r.v);
 
-      // Use SMAs directly on visibleRows for yearly, else align/extend for normal
+      /* --- SMAs --- */
       let sma20, sma50, sma200;
       if (freq === '1y') {
         sma20  = SMA(close, 20);
@@ -831,48 +756,37 @@
         sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
       }
 
-      // ---------- Indicators ----------
-      const closeAll = fullRows.map(r=>r.c);
-      const rsiVals   = RSI(close,14);
-      const macd      = MACD(close,12,26,9);
+      /* --- Indicators --- */
+      const rsiVals = RSI(close,14);
+      const macd = MACD(close,12,26,9);
 
-      // ---------- Last/Change ----------
+      /* --- Last/Change lines & prev close --- */
       const last = close.at(-1);
-      let prevClose = ['1m','5m','15m','60m'].includes(freq)
-        ? prevDailyCloseFromIntraday(fullRows)
-        : (close.length>=2 ? close.at(-2) : null);
+      const prevClose = ['1m','5m','15m','60m'].includes(freq) ? prevDailyCloseFromIntraday(fullRows) : (close.length>=2 ? close.at(-2) : null);
+      CURRENT.prevClose = prevClose;
       const ref = (prevClose!=null) ? prevClose : (close.length>=2 ? close.at(-2) : null);
       const dayChg = (ref!=null) ? (last - ref) : null;
       const dayPct = (ref!=null && ref!==0) ? (dayChg/ref)*100 : null;
-      const upClr = css('--c-up'), dnClr = css('--c-down');
+      const upClr=css('--c-up'), dnClr=css('--c-down');
+      const chgClr = dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
       const signChg = dayChg>0?'+':dayChg<0?'-':'';
       const signPct = dayPct>0?'+':dayPct<0?'-':'';
-      const chgClr  = dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
-
-      els.lastLine.innerHTML =
-        `Last: <b>$${fmt(last)}</b> · ` +
-        (dayChg==null ? 'Change: —'
-          : `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
+      els.lastLine.innerHTML = `Last: <b>$${fmt(last)}</b> · ` + (dayChg==null? 'Change: —' :
+        `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
       els.prevCloseLine.textContent = `Yesterday’s Close: ${prevClose==null ? '—' : '$'+fmt(prevClose)}`;
-      CURRENT.prevClose = prevClose;
 
-      // ---------- Intrinsic value (rough) ----------
+      /* --- Intrinsic value (very rough) --- */
       const f = FUNDAMENTALS[ticker] || {};
       const ivs=[]; if(Number.isFinite(f.ivGraham)) ivs.push(f.ivGraham);
       const s50=sma50.at(-1), s200=sma200.at(-1); if(Number.isFinite(s50)&&Number.isFinite(s200)) ivs.push((s50+s200)/2);
       const iv = ivs.length ? (ivs.reduce((a,b)=>a+b,0)/ivs.length) : null;
       els.ivLine.textContent = `Intrinsic Value: ${iv==null ? '—' : '$'+fmt(iv)}`;
-      const rec = (()=>{
-        if(!Number.isFinite(last)||!Number.isFinite(iv)) return {rec:'HOLD',color:'#fbbf24'};
-        const r=last/iv; if(r<0.85) return {rec:'BUY',color:'#16a34a'}; if(r>1.15) return {rec:'SELL',color:'#dc2626'}; return {rec:'HOLD',color:'#fbbf24'};
-      })();
-      els.ivLine.innerHTML += ` &nbsp;|&nbsp; <b style="color:${rec.color};font-weight:800">${rec.rec}</b>`;
 
-      // ---------- Traces ----------
+      /* --- Traces --- */
       const candles = {
         type:'candlestick', x, open, high, low, close, name:ticker,
-        increasing:{ line:{ color:css('--c-up'), width:1.15 }, fillcolor:css('--c-up') },
-        decreasing:{ line:{ color:css('--c-down'), width:1.15 }, fillcolor:css('--c-down') },
+        increasing:{ line:{ color:css('--c-up'), width:1.15 } },
+        decreasing:{ line:{ color:css('--c-down'), width:1.15 } },
         whiskerwidth:0.4, opacity:0.95,
         hovertemplate:'O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>'
       };
@@ -891,62 +805,24 @@
 
       const trVol = { type:'bar', x, y:vol, yaxis:'y3', name:'Volume', opacity:.4, marker:{ color:css('--c-vol') } };
 
-      // Ichimoku cloud — emphasized fill and thicker lines
+      /* --- Ichimoku (bigger + full width + continuous) --- */
       const ichi = calcIchimoku(visibleRows);
-      // get a safe clip band from visible price so the axis stays nice
-      const hiVis = Math.max(...high.filter(Number.isFinite));
-      const loVis = Math.min(...low.filter(Number.isFinite));
-      const pad   = (hiVis - loVis) * 0.04;   // small cushion
-      // 1) fill spanA/spanB across entire timeframe
+      const hiVis=Math.max(...high.filter(Number.isFinite));
+      const loVis=Math.min(...low.filter(Number.isFinite));
+      const pad=(hiVis-loVis)*0.04;
+
       let spanA = fillEdges(ichi.spanA);
       let spanB = fillEdges(ichi.spanB);
-      // 2) exaggerate thickness (tweak CLOUD_MAG if you want more/less)
-      const CLOUD_MAG = 1.8; // try 1.6–2.2
-      ({ spanA, spanB } = exaggerateCloud(spanA, spanB, CLOUD_MAG, loVis - pad, hiVis + pad));
-      // 3) segment into green/red and plot with connectgaps for continuity
+      ({spanA,spanB} = exaggerateCloud(spanA, spanB, 1.9, loVis-pad, hiVis+pad));
+
       const cloud = segmentCloud(spanA, spanB);
-      const trCloudGreenBottom = {
-        type:'scatter', x, y:cloud.gLow, yaxis:'y',
-        line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true
-      };
-      const trCloudGreenTop = {
-        type:'scatter', x, y:cloud.gUp, yaxis:'y',
-        fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-up'),
-        hoverinfo:'skip', name:'Kumo +', opacity:1, connectgaps:true
-      };
-      const trCloudRedBottom = {
-        type:'scatter', x, y:cloud.rLow, yaxis:'y',
-        line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true
-      };
-      const trCloudRedTop = {
-        type:'scatter', x, y:cloud.rUp, yaxis:'y',
-        fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-down'),
-        hoverinfo:'skip', name:'Kumo -', opacity:1, connectgaps:true
-      };
-      const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1.4, color:css('--c-ichi-tenkan') } };
-      const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1.4, color:css('--c-ichi-kijun') } };
-      const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1.2, color:css('--c-ichi-chikou') } };
-
-      // ---------- Layout ----------
-      const rangebreaksIntraday =
-        ['1m','5m','15m','60m'].includes(freq)
-          ? [{ pattern:'day of week', bounds:['sat','mon'] }, { pattern:'hourly', bounds:[16, 9.5] }]
-          : [{ pattern:'day of week', bounds:['sat','mon'] }];
-
-      const panelBg = getComputedStyle(els.chartCard).backgroundColor,
-            txt     = css('--text') || '#e5e7eb',
-            grid    = css('--grid') || '#222837';
-
-      const layout = {
-        paper_bgcolor: panelBg, plot_bgcolor: panelBg, showlegend:false,
-        margin:{ l:60, r:24, t:10, b:24 },
-        xaxis:{ type:'date', domain:[0,1], rangeslider:{visible:false}, gridcolor:grid, tickfont:{color:txt}, rangebreaks:rangebreaksIntraday },
-        yaxis :{ domain:[0.50,1.00], gridcolor:grid, tickfont:{color:txt}, side:'right', title:'Price' },
-        yaxis2:{ domain:[0.38,0.48], gridcolor:grid, tickfont:{color:txt}, range:[0,100], title:'RSI' },
-        yaxis4:{ domain:[0.22,0.36], gridcolor:grid, tickfont:{color:txt}, title:'MACD' },
-        yaxis3:{ domain:[0.00,0.20], gridcolor:grid, tickfont:{color:txt}, title:'Vol' },
-        hovermode:'x', edits:{ shapePosition:true }, dragmode:'zoom'
-      };
+      const trCloudGreenBottom = { type:'scatter', x, y:cloud.gLow, yaxis:'y', line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true };
+      const trCloudGreenTop    = { type:'scatter', x, y:cloud.gUp,  yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-up'),   hoverinfo:'skip', name:'Kumo +', opacity:1, connectgaps:true };
+      const trCloudRedBottom   = { type:'scatter', x, y:cloud.rLow, yaxis:'y', line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true };
+      const trCloudRedTop      = { type:'scatter', x, y:cloud.rUp,  yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-down'), hoverinfo:'skip', name:'Kumo -', opacity:1, connectgaps:true };
+      const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1, color:css('--c-ichi-tenkan') } };
+      const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1, color:css('--c-ichi-kijun') } };
+      const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1, color:css('--c-ichi-chikou') } };
 
       const data = [
         trCloudGreenBottom, trCloudGreenTop, trCloudRedBottom, trCloudRedTop,
@@ -955,11 +831,21 @@
         trRSI, trRSI70, trRSI30,
         trMACD, trSignal, trHist,
         trVol
-     
       ];
 
+      const layout = {
+        margin:{l:56,r:28,t:18,b:26},
+        xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid') },
+        yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid') },
+        yaxis2:{ domain:[0,0.18], anchor:'x', title:'RSI', range:[0,100] },
+        yaxis3:{ domain:[0.18,0.28], anchor:'x', title:'Vol' },
+        yaxis4:{ domain:[0.28,0.42], anchor:'x', title:'MACD' },
+        legend:{orientation:'h'},
+        paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
+        plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor
+      };
+
       await Plotly.newPlot(els.chart, data, layout, { responsive:true, displaylogo:false });
-      applyChartTheme();
 
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
       try { Plotly.removeAllListeners?.(els.chart, 'plotly_relayout'); } catch {}
@@ -986,13 +872,13 @@
       wireHoverDismiss();
     }catch(e){
       console.error(e);
-      els.headline.textContent = 'Chart error';
-      els.lastLine.innerHTML = `<span style="color:${css('--c-down')};font-weight:800">${escapeHTML(ticker)} failed to render: ${escapeHTML(e.message || String(e))}</span>`;
+      els.headline.textContent='Chart error';
+      els.lastLine.innerHTML=`<span style="color:${css('--c-down')};font-weight:800">${escapeHTML(ticker)} failed to render: ${escapeHTML(e.message||String(e))}</span>`;
     }
   }
 
   function applyVisibilityFromChips(){
-    if(!els.chart || !window.Plotly) return;
+    if(!els.chart||!window.Plotly) return;
     Object.entries(traceMap).forEach(([key, idx])=>{
       const chip=els.toggles.querySelector(`.chip[data-k="${key}"]`); if(!chip) return;
       const visible = chip.classList.contains('active') ? true : 'legendonly';
@@ -1045,7 +931,7 @@
   els.maxBtn.addEventListener('click', ()=> setMaxState(!els.chartCard.classList.contains('max')));
   window.addEventListener('keydown', e=>{ if(e.key==='Escape' && els.chartCard.classList.contains('max')) setMaxState(false); });
 
-  /* ---------- Screeners ---------- */
+  /* ---------- Screeners, sheets, nav ---------- */
   const FINVIZ_PRESETS = [
     { title:'Oversold large caps (RSI < 30, Mcap > $10B, AvgVol > 1M)', lvl:'Beginner', url:'https://finviz.com/screener.ashx?v=111&f=cap_largeover,sh_avgvol_o1000,ta_rsi_os' },
     { title:'New 52-week highs (liquid)', lvl:'Beginner', url:'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o1000,ta_highlow52w_nh' },
@@ -1063,7 +949,6 @@
     });
   }
 
-  /* ---------- Sheets & bottom nav ---------- */
   const sh=id=>q('#'+id);
   q('#toolGPTs')?.addEventListener('click', ()=> sh('sheetGPTs').hidden=false);
   q('#toolScreeners')?.addEventListener('click', ()=>{ renderScreeners(); sh('sheetScreeners').hidden=false; });
