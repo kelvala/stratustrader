@@ -846,11 +846,15 @@
       };
 
       await Plotly.newPlot(els.chart, data, layout, { responsive:true, displaylogo:false });
+      await fitPriceAxisToCandles();
 
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
       try { Plotly.removeAllListeners?.(els.chart, 'plotly_relayout'); } catch {}
       if (els.chart && els.chart.on) {
-        els.chart.on('plotly_relayout', () => { if (fibActive() && !FIB_LOCK) addOrUpdateAutoFibTraces(); });
+        els.chart.on('plotly_relayout', () => {
+          if (fibActive() && !FIB_LOCK) addOrUpdateAutoFibTraces();
+          fitPriceAxisToCandles();
+        });
       }
       if (fibActive()) setTimeout(addOrUpdateAutoFibTraces, 32);
 
@@ -875,6 +879,27 @@
       els.headline.textContent='Chart error';
       els.lastLine.innerHTML=`<span style="color:${css('--c-down')};font-weight:800">${escapeHTML(ticker)} failed to render: ${escapeHTML(e.message||String(e))}</span>`;
     }
+  }
+
+  // Fit the price axis to ONLY the visible candlestick highs/lows
+  function fitPriceAxisToCandles() {
+    const c = getCandleTrace();
+    if (!c || !els.chart) return;
+    const L  = els.chart._fullLayout || els.chart.layout || {};
+    const xr = (L.xaxis && Array.isArray(L.xaxis.range) && L.xaxis.autorange===false)
+              ? L.xaxis.range
+              : [c.x[0], c.x[c.x.length - 1]];
+    let i0 = Math.max(0, c.x.findIndex(d => d >= xr[0]));
+    let i1 = c.x.findIndex(d => d > xr[1]); if (i1 === -1) i1 = c.x.length;
+    if (i1 <= i0) return;
+    let hi = -Infinity, lo = Infinity;
+    for (let i = i0; i < i1; i++) {
+      if (Number.isFinite(c.high[i])) hi = Math.max(hi, c.high[i]);
+      if (Number.isFinite(c.low[i]))  lo = Math.min(lo,  c.low[i]);
+    }
+    if (!Number.isFinite(hi) || !Number.isFinite(lo) || hi === lo) return;
+    const pad = (hi - lo) * 0.08;
+    return relayoutPreserve({ 'yaxis.autorange': false, 'yaxis.range': [lo - pad, hi + pad] });
   }
 
   function applyVisibilityFromChips(){
