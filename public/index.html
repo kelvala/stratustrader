@@ -3,11 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stratus Chart — Clean Boxes (Price • MACD • RSI) v.044</title>
-
-<!-- Plotly (deferred) -->
+<title>Stratus Trader — Chart v.2</title>
 <script src="https://cdn.plot.ly/plotly-2.30.0.min.js" defer></script>
-
 <style>
   :root{
     --bg:#0f1115;--panel:#151923;--text:#e5e7eb;--muted:#9ca3af;
@@ -18,32 +15,16 @@
     --c-sma20:#22c55e;--c-sma50:#60a5fa;--c-sma200:#f59e0b;
     --c-rsi:#a78bfa;--c-macd:#38bdf8;--c-vol:#10b981;
     --grid:#283044;
-    --lvl-beginner:#22c55e; --lvl-intermediate:#f59e0b; --lvl-advanced:#ef4444;
-    --tf-bg:#1c1f35; --tf-head:#1a214e; --tf-glow:#3b82f6;
     --c-ichi-tenkan:#f59e0b; --c-ichi-kijun:#60a5fa; --c-ichi-chikou:#93c5fd;
-    --c-ichi-up:rgba(34,197,94,.38);   /* stronger */
-    --c-ichi-down:rgba(239,68,68,.34); /* stronger */
+    --c-ichi-up:rgba(34,197,94,.38); --c-ichi-down:rgba(239,68,68,.34);
   }
-  .light{
-    --bg:#f8fafc;--panel:#fff;--text:#222;--muted:#64748b;
-    --accent:#22c55e;--focus:#3b82f3;--border:#e2e8f0;--hover:#f1f5f9;
-    --metric-bg:#f1f5f9;--metric-border:#e2e8f0;
-    --c-up:#16a34a;--c-down:#dc2626;
-    --c-sma20:#22c55e;--c-sma50:#2563eb;--c-sma200:#f59e0b;
-    --c-rsi:#7c3aed;--c-macd:#0ea5e9;--c-vol:#16a34a;
-    --grid:#e5e7eb; --tf-bg:#eef2ff; --tf-head:#c7d2fe; --tf-glow:#6366f1;
-    --field-bg:#ffffff; --field-text:#111827;
-  }
-  *{box-sizing:border-box}
-  html,body{overflow-x:hidden}
-  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;min-height:100vh;padding:20px;transition:background .2s,color .2s}
+  body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;min-height:100vh;padding:20px}
   .container{max-width:1100px;margin:0 auto}
   .toolbar{position:sticky;top:0;z-index:12000;display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px 12px;margin-bottom:16px;flex-wrap:wrap}
   .ticker-wrap{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
   .ticker-wrap label{font-weight:800;opacity:.9}
   .input-wrap{position:relative;flex:0 1 460px;max-width:460px;width:100%}
-  @media (max-width:720px){ .input-wrap{flex:1 1 100%;max-width:100%} }
-  .ticker-input{width:100%;min-width:120px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text);text-transform:uppercase;font-size:16px}
+  .ticker-input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text);text-transform:uppercase;font-size:16px}
   .btn{padding:10px 14px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:800;cursor:pointer}
   .btn.inline{padding:8px 12px}
   .toolsbar{display:flex;align-items:center;gap:8px;margin-left:auto;flex:1 1 100%;justify-content:flex-start;flex-wrap:wrap}
@@ -51,39 +32,23 @@
   .tool-btn:hover{background:var(--hover)}
   .theme-toggle{margin-left:auto;cursor:pointer;padding:8px 14px;border-radius:8px;background:var(--panel);color:var(--text);border:1px solid var(--border);font-weight:600}
   .theme-toggle:hover{background:var(--hover)}
-  .theme-toggle.active{background:var(--accent);color:#fff}
-  .ac{position:absolute;left:0;top:calc(100% + 6px);width:100%;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:10px;display:none;max-height:280px;overflow:auto;box-shadow:0 10px 24px rgba(0,0,0,.18);z-index:12050}
-  .ac.show{display:block}
-  .ac-item{padding:12px 14px;display:grid;grid-template-columns:110px 1fr;gap:12px;align-items:center;cursor:pointer;border-bottom:1px solid var(--metric-border)}
-  .ac-item:hover,.ac-item.active{background:var(--hover)}
-  .ticker{font-weight:800}
-  .company{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .info{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;position:relative}
-  .info-logo{position:absolute;top:10px;right:12px;height:54px;opacity:.92;pointer-events:none;filter:drop-shadow(0 2px 8px rgba(0,0,0,.35))}
-  .light .info-logo{mix-blend-mode:multiply;filter:drop-shadow(0 2px 6px rgba(0,0,0,.12));opacity:.95}
-  @media (max-width:640px){ .info-logo{height:42px;right:10px} }
   #chartCard{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative}
   #chart{height:68vh;min-height:520px}
-  .container.wide{max-width:100%!important}
-  #chartCard.max{position:fixed;inset:12px;z-index:9999;margin:0!important;width:auto!important;height:auto!important;overflow:auto}
-  #chartCard.max #chart{height:calc(100vh - 160px)!important;min-height:400px;cursor:zoom-out}
-  .tf-card{background:var(--tf-bg);border:1px solid rgba(99,102,241,.25);border-radius:12px;padding:10px;margin-bottom:10px;box-shadow:0 0 0 1px rgba(99,102,241,.15) inset}
-  .tf-head{display:flex;align-items:center;gap:8px;background:linear-gradient(180deg, var(--tf-head), transparent);border-radius:8px;padding:6px 10px;margin:-4px -2px 8px;font-weight:800}
-  .tf-head .carat{display:inline-block;transform:rotate(-90deg);transition:transform .15s ease}
-  .tf-card[data-open="true"] .carat{transform:rotate(0)}
-  .tf-body{display:none}
-  .tf-card[data-open="true"] .tf-body{display:grid}
-  .tf-body{grid-template-columns:1fr 1fr;gap:10px}
+  .tf-card{background:rgba(80,90,160,.08);border:1px solid rgba(99,102,241,.25);border-radius:12px;padding:10px;margin-bottom:10px}
+  .tf-head{display:flex;align-items:center;gap:8px;background:linear-gradient(180deg, rgba(99,102,241,.16), transparent);border-radius:8px;padding:6px 10px;margin:-4px -2px 8px;font-weight:800}
+  .tf-body{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .control label{display:block;font-size:13px;font-weight:800;margin-bottom:6px;color:#cbd5ff}
   .control select{width:100%;background:var(--field-bg);color:var(--field-text);border:1px solid var(--border);border-radius:10px;padding:10px}
-  .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
-  .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
-  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50;}
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200;}
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi;}
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol;}
+
+  /* toggle chips */
+  .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px;overflow:visible}
+  .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s;position:relative;z-index:0;overflow:visible;box-shadow:none}
+  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20)}
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50)}
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200)}
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi)}
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd)}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol)}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -94,123 +59,55 @@
   .chip.active[data-k="VOL"]{background:rgba(16,185,129,.12)}
   .chip.active[data-k="AUTOFIB"]{background:rgba(139,92,246,.12)}
   .chip.active[data-k="ICHI"]{background:rgba(96,165,250,.12)}
+
   /* bright glow for active chips */
-  .toggle-row{overflow:visible}
-  .chip{position:relative}
-  .chip.active{border-width:2px;box-shadow:0 0 0 1px currentColor,0 0 14px 3px currentColor}
-  .chip.active::after{content:"";position:absolute;inset:-8px;border-radius:999px;background:currentColor;opacity:.28;filter:blur(10px);pointer-events:none}
-  .light .chip.active::after{opacity:.36;filter:blur(12px)}
-  .chip:focus-visible{outline:2px solid currentColor;outline-offset:3px}
-  .section-sep{margin:20px -16px 16px;padding:0 16px}
-  .section-sep .rule{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.9}
-  .sheet{position:fixed;left:0;right:0;bottom:0;top:auto;background:transparent;display:flex;justify-content:center;z-index:2000}
-  .sheet[hidden]{display:none!important}
-  .sheet-inner{width:min(760px,100%);background:var(--panel);border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.35);padding:14px;animation:sheetUp .18s ease-out;padding-bottom:max(14px, env(safe-area-inset-bottom))}
-  .sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
-  .sheet-title{font-weight:800;font-size:16px}
-  .sheet-close{background:transparent;border:0;color:var(--text);font-size:18px;cursor:pointer}
-  .sheet-body{max-height:58vh;overflow:auto}
-  @keyframes sheetUp{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
-  .btmnav{position:fixed;left:0;right:0;bottom:0;display:none;background:var(--panel);border-top:1px solid var(--border);padding:6px 10px;z-index:1000}
-  .btmnav .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 8px;border-radius:10px;border:0;background:transparent;color:var(--text);font-weight:700;font-size:13px}
-  .btmnav .tab.active{background:var(--hover)}
-  .btmnav .tab span{font-size:11px;opacity:.85}
-  @media (max-width:720px) and (hover:none) and (pointer:coarse){
-    .btmnav{ display:flex; gap:8px }
-    body{ padding-bottom:64px }
+  .chip.active,
+  .chip[aria-pressed="true"],
+  .chip[data-on="true"]{
+    box-shadow:
+      0 0 0 1px rgba(70,209,255,.75) inset,
+      0 0 10px rgba(70,209,255,.45),
+      0 0 24px rgba(70,209,255,.25);
+    border-width:2px;
   }
-  .scr-list{display:flex;flex-direction:column;gap:10px}
-  .scr-item{
-    position:relative; display:flex; gap:12px; align-items:flex-start;
-    padding:12px 14px; border:1px solid var(--border); border-radius:12px;
-    background:color-mix(in hsl, var(--panel), var(--bg) 35%);
-    text-decoration:none; color:inherit; cursor:pointer;
-    transition:background .15s,border-color .15s,transform .06s;
+  .chip.active::after,
+  .chip[aria-pressed="true"]::after,
+  .chip[data-on="true"]::after{
+    content:"";position:absolute;inset:-6px;border-radius:inherit;background:radial-gradient(60% 60% at 50% 50%,rgba(70,209,255,.40) 0%,rgba(70,209,255,0) 70%);
+    filter:blur(10px);z-index:-1;pointer-events:none;
   }
-  .scr-item:hover{ background:var(--hover); border-color:#2b3548; transform:translateY(-1px); }
-  .scr-item::before{ content:""; position:absolute; left:0; top:8px; bottom:8px; width:4px; border-radius:999px; background: var(--lvl-color, #64748b); opacity:.8; }
-  .scr-item{ padding-left:16px; }
-  .scr-item[data-lvl="Beginner"]     { --lvl-color: var(--lvl-beginner); }
-  .scr-item[data-lvl="Intermediate"] { --lvl-color: var(--lvl-intermediate); }
-  .scr-item[data-lvl="Advanced"]     { --lvl-color: var(--lvl-advanced); }
-  .scr-item .title{ font-weight:800; font-size:14px; line-height:1.25; }
-  .scr-item .desc{ font-size:12px; color:var(--muted); margin-top:2px; }
-  .badge{ font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; background:var(--metric-bg); border:1px solid var(--metric-border); color:var(--muted); white-space:nowrap; margin-top:2px; }
-  .scr-item .open-btn{ margin-left:8px; padding:6px 10px; border-radius:10px; border:1px solid var(--border); background:var(--panel); color:var(--text); text-decoration:none; font-weight:700; }
-  .scr-item .open-btn:hover{ background:var(--hover); }
 
-/* --- Active chip glow (neon ring) --- */
-.chip {
-  position: relative;
-  z-index: 0;              /* establish stacking context */
-  overflow: visible;       /* let glow extend outside the chip */
-  box-shadow: none;        /* IMPORTANT: no default glow when inactive */
-}
-
-/* treat any of these as "active" */
-.chip.active,
-.chip[aria-pressed="true"],
-.chip[data-on="true"] {
-  border-color: var(--accent, #46d1ff);
-  box-shadow:
-    0 0 0 1px rgba(70, 209, 255, .75) inset,   /* crisp inner ring */
-    0 0 10px rgba(70, 209, 255, .45),          /* soft outer glow */
-    0 0 24px rgba(70, 209, 255, .25);
-}
-
-/* extra bloom behind the chip */
-.chip.active::after,
-.chip[aria-pressed="true"]::after,
-.chip[data-on="true"]::after {
-  content: "";
-  position: absolute;
-  inset: -6px;             /* grow beyond the chip’s edges */
-  border-radius: inherit;
-  background: radial-gradient(
-    60% 60% at 50% 50%,
-    rgba(70, 209, 255, .40) 0%,
-    rgba(70, 209, 255, 0) 70%
-  );
-  filter: blur(10px);
-  z-index: -1;             /* sit behind the chip */
-  pointer-events: none;
-}
+  /* remove mobile bottom nav completely */
+  .btmnav{display:none !important}
 </style>
 </head>
 <body>
   <div class="container">
-    <!-- Toolbar -->
     <div class="toolbar">
       <div class="ticker-wrap">
         <label for="q">Ticker</label>
         <div class="input-wrap">
           <input id="q" class="ticker-input" type="text" placeholder="AAPL, MSFT… or BTC" spellcheck="false" autocomplete="off"/>
-          <div id="ac" class="ac" role="listbox" aria-label="Suggestions"></div>
         </div>
         <button id="searchBtn" class="btn inline" type="button">Search</button>
       </div>
-      <div class="toolsbar" id="toolsBar">
-        <button class="tool-btn" id="toolGPTs" aria-label="Open GPTs">🧠 <span class="tool-txt">GPTs</span></button>
-        <button class="tool-btn" id="toolScreeners" aria-label="Open Screeners">🔎 <span class="tool-txt">Screeners</span></button>
-        <button class="tool-btn" id="wideBtn" aria-label="Toggle Width">↔︎ <span class="tool-txt">Wide</span></button>
-        <button class="tool-btn" id="maxBtn" aria-label="Maximize">⤢ <span class="tool-txt">Max</span></button>
-        <button class="tool-btn" id="refreshBtn" aria-label="Refresh">⟳ <span class="tool-txt">Refresh</span></button>
+      <div class="toolsbar">
+        <button class="tool-btn" id="wideBtn">↔︎ <span>Wide</span></button>
+        <button class="tool-btn" id="maxBtn">⤢ <span>Max</span></button>
+        <button class="tool-btn" id="refreshBtn">⟳ <span>Refresh</span></button>
         <button id="themeToggle" class="theme-toggle" type="button">🌙 Dark</button>
       </div>
     </div>
 
-    <!-- Info bar -->
-    <div id="info" class="info">
+    <div id="info" class="info" style="background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px">
       <h3 id="headline" style="margin:0 0 6px 0"></h3>
       <div style="opacity:.9;font-size:14px;line-height:1.6">
         <div id="lastLine">Last: — · Change: —</div>
         <div id="prevCloseLine">Yesterday’s Close: —</div>
         <div id="ivLine">Intrinsic Value: —</div>
       </div>
-      <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
     </div>
 
-    <!-- Chart card -->
     <div id="chartCard">
       <div class="tf-card" id="tfCard" data-open="true">
         <div class="tf-head" id="tfHead"><span class="carat">▾</span> <span style="font-style:italic">time frame</span></div>
@@ -218,26 +115,20 @@
           <div class="control">
             <label for="timeSel">Time</label>
             <select id="timeSel">
-              <option value="1d">1 day</option><option value="2d">2 days</option>
-              <option value="5d">5 days</option><option value="10d">10 days</option>
-              <option value="sep" disabled>──────────</option>
-              <option value="1mo">1 month</option><option value="2mo">2 months</option>
-              <option value="3mo">3 months</option><option value="6mo" selected>6 months</option>
-              <option value="ytd">YTD</option><option value="1y">1 year</option>
-              <option value="2y">2 years</option><option value="3y">3 years</option>
-              <option value="4y">4 years</option><option value="5y">5 years</option>
-              <option value="10y">1 decade</option><option value="max">All Data</option>
+              <option value="6mo" selected>6 months</option>
+              <option value="3mo">3 months</option>
+              <option value="1y">1 year</option>
+              <option value="2y">2 years</option>
+              <option value="5y">5 years</option>
+              <option value="max">All Data</option>
             </select>
           </div>
           <div class="control">
             <label for="freqSel">Frequency</label>
             <select id="freqSel">
-              <option value="1m">1-Minute</option><option value="5m">5-Minute</option>
-              <option value="15m">15-Minute</option><option value="60m">Hourly</option>
-              <option value="sep" disabled>──────────</option>
-              <option value="1d" selected>Daily</option><option value="1wk">Weekly</option>
-              <option value="1mo">Monthly</option><option value="3mo">Quarterly</option>
-              <option value="1y">Yearly</option>
+              <option value="1d" selected>Daily</option>
+              <option value="1wk">Weekly</option>
+              <option value="1mo">Monthly</option>
             </select>
           </div>
         </div>
@@ -250,786 +141,195 @@
         <div class="chip active" data-k="RSI">RSI</div>
         <div class="chip active" data-k="MACD">MACD</div>
         <div class="chip active" data-k="VOL">Volume</div>
-        <div class="chip" id="autoFib" data-k="AUTOFIB">Auto Fib</div>
+        <div class="chip" data-k="AUTOFIB">Auto Fib</div>
         <div class="chip active" data-k="ICHI">Ichimoku</div>
       </div>
 
       <div id="chart"></div>
     </div>
-
-    <div class="section-sep" aria-hidden="true"><div class="rule"></div></div>
   </div>
 
-  <!-- GPTs Sheet -->
-  <div class="sheet" id="sheetGPTs" hidden>
-    <div class="sheet-inner">
-      <div class="sheet-head">
-        <div class="sheet-title">GPTs</div>
-        <button class="sheet-close" data-close="sheetGPTs">✕</button>
-      </div>
-      <div class="sheet-body">
-        <div class="scr-list" style="margin-bottom:12px">
-          <div class="scr-item" data-lvl="Beginner">
-            <div style="flex:1;min-width:0">
-              <div class="title">9 Prompts for Smarter Investing</div>
-              <div class="desc">Bundle of prompts to guide smarter investment analysis.</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="badge">GPT</span>
-              <a class="open-btn" href="https://chatgpt.com/g/g-687b911701a08191aadd69c345a67d17-9-prompts-for-smarter-investing" target="_blank" rel="noopener">Open</a>
-            </div>
-          </div>
-          <div class="scr-item" data-lvl="Beginner">
-            <div style="flex:1;min-width:0">
-              <div class="title">Stock Predictor Prompt GPT</div>
-              <div class="desc">Structured prompt flow for scenario-led stock predictions.</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="badge">GPT</span>
-              <a class="open-btn" href="https://chatgpt.com/g/g-686c5fc3dd948191a0ff9c14cecda1b4-stock-predictor-prompt-gpt" target="_blank" rel="noopener">Open</a>
-            </div>
-          </div>
-          <div class="scr-item" data-lvl="Beginner">
-            <div style="flex:1;min-width:0">
-              <div class="title">High Yield Dividend Sniper</div>
-              <div class="desc">Quickly target high-yield dividend candidates.</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <span class="badge">GPT</span>
-              <a class="open-btn" href="https://chatgpt.com/g/g-6878fe277c5c819180211289d9e16148-high-yield-dividend-sniper" target="_blank" rel="noopener">Open</a>
-            </div>
-          </div>
-        </div>
-        <div>
-          <textarea id="gptInput" rows="4" placeholder="Ask a question about the current ticker…" style="width:100%;background:var(--field-bg);color:var(--field-text);border:1px solid var(--border);border-radius:10px;padding:10px"></textarea>
-          <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
-            <button class="btn" id="askGPT">Ask</button>
-            <div style="font-size:12px;color:var(--muted)">Uses the visible chart context when possible.</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Screeners Sheet -->
-  <div class="sheet" id="sheetScreeners" hidden>
-    <div class="sheet-inner">
-      <div class="sheet-head">
-        <div class="sheet-title">Screeners</div>
-        <button class="sheet-close" data-close="sheetScreeners">✕</button>
-      </div>
-      <div class="sheet-body">
-        <div class="scr-list" id="scrList"></div>
-      </div>
-    </div>
-  </div>
-
-  <nav class="btmnav" id="btmNav" role="navigation" aria-label="Bottom Navigation">
-    <button data-tab="home" class="tab active" aria-label="Home">🏠<span>Home</span></button>
-    <button data-tab="screeners" class="tab" aria-label="Screeners">🔎<span>Screeners</span></button>
-    <button data-tab="gpts" class="tab" aria-label="GPTs">🧠<span>GPTs</span></button>
-    <button data-tab="settings" class="tab" aria-label="Settings">⚙️<span>Settings</span></button>
-  </nav>
-
-  <!-- Single app script -->
-  <script>
-(() => {
+<script>
+(function(){
   const q = s => document.querySelector(s);
-
-  /* ---------- Aliases & crypto handling ---------- */
-  const SYMBOL_ALIASES = Object.freeze({
-    BTC:'BTC-USD', ETH:'ETH-USD', SOL:'SOL-USD', DOGE:'DOGE-USD',
-    XRP:'XRP-USD', ADA:'ADA-USD', LTC:'LTC-USD', BCH:'BCH-USD',
-    BNB:'BNB-USD', SPX:'^GSPC'
-  });
-  const normalizeTicker = t => SYMBOL_ALIASES[String(t||'').trim().toUpperCase()] || String(t||'').trim().toUpperCase();
-  const isCrypto = t => /-USD$/.test(t);
-
-  /* ---------- Guard ---------- */
-  for (const sel of ['#q', '#searchBtn', '#chart']) {
-    if (!document.querySelector(sel)) {
-      const msg = document.createElement('div');
-      msg.style.cssText='margin:16px;padding:12px;border:1px solid #ef4444;border-radius:10px;color:#ef4444;background:#1b0f0f;font-weight:800';
-      msg.textContent='⚠️ This is not the Stock Analyzer page (missing core elements).';
-      document.body.prepend(msg);
-      return;
-    }
-  }
-
-  /* ---------- Elements ---------- */
   const els = {
-    input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'),
-    headline:q('#headline'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'),
-    chartCard:q('#chartCard'), chart:q('#chart'),
-    timeSel:q('#timeSel'), freqSel:q('#freqSel'), toggles:q('#toggles'),
-    themeToggle:q('#themeToggle'), autoFib:q('#autoFib'),
-    refreshBtn:q('#refreshBtn'), maxBtn:q('#maxBtn'), wideBtn:q('#wideBtn'),
-    tfCard:q('#tfCard'), tfHead:q('#tfHead')
+    input:q('#q'), searchBtn:q('#searchBtn'),
+    lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'),
+    headline:q('#headline'),
+    chart:q('#chart'), chartCard:q('#chartCard'),
+    timeSel:q('#timeSel'), freqSel:q('#freqSel'),
+    toggles:q('#toggles'), themeToggle:q('#themeToggle')
   };
+  const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-  /* ---------- State ---------- */
-  let CURRENT = { ticker:null, company:"", prevClose:null };
-  let FUNDAMENTALS = {};
-  let traceMap = {};
-  let PRICE_TIMER = null;
-  let FIB_LOCK = false;
-  const fibActive = () => els.autoFib?.classList?.contains('active');
-
-  /* ---------- Utils ---------- */
-  const fmt = n => (Number.isFinite(n) ? n.toFixed(2) : '—');
-  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-  const escapeHTML = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
-  const debounce = (fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
-  const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
-  const toET = (d=new Date()) => new Date(d.toLocaleString('en-US',{timeZone:'America/New_York'}));
-  function toEastern(date){ return new Date(date.toLocaleString('en-US',{timeZone:'America/New_York'})); }
-  function formatEasternISO(date){ const d=toEastern(date); return new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate(),d.getHours(),d.getMinutes(),d.getSeconds(),d.getMilliseconds())).toISOString(); }
-  const isMarketOpenNow = () => { const d=toET(); const wd=d.getDay(); if(wd===0||wd===6) return false; const m=d.getHours()*60+d.getMinutes(); return m>=(9*60+30)&&m<(16*60); };
-  async function waitForPlotly(timeoutMs=12000){
-    const start=Date.now();
-    while(!(window.Plotly && window.Plotly.newPlot)){
-      if(Date.now()-start>timeoutMs) throw new Error('Plotly failed to load');
-      await sleep(25);
-    }
-  }
-
-  /* ---------- Theme ---------- */
-  const THEMES = {
-    dark:{'--bg':'#0f1115','--panel':'#151923','--text':'#e5e7eb','--muted':'#9ca3af','--accent':'#22c55e','--focus':'#3b82f6','--border':'#23283a','--hover':'#161a25','--metric-bg':'#1a1f2e','--metric-border':'#2a2f3e'},
-    light:{'--bg':'#f8fafc','--panel':'#fff','--text':'#222','--muted':'#64748b','--accent':'#22c55e','--focus':'#3b82f6','--border':'#e2e8f0','--hover':'#f1f5f9','--metric-bg':'#f1f5f9','--metric-border':'#e2e8f0'}
-  };
-  function applyChartTheme(){
-    if(!els.chart||!window.Plotly) return;
-    const panelBg=getComputedStyle(els.chartCard).backgroundColor;
-    const txt=css('--text')||'#e5e7eb';
-    const grid=css('--grid')||'#222837';
-    try{
-      Plotly.relayout(els.chart,{
-        paper_bgcolor:panelBg, plot_bgcolor:panelBg,
-        'xaxis.gridcolor':grid, 'yaxis.gridcolor':grid, 'yaxis2.gridcolor':grid, 'yaxis3.gridcolor':grid, 'yaxis4.gridcolor':grid,
-        'xaxis.tickfont.color':txt, 'yaxis.tickfont.color':txt, 'yaxis2.tickfont.color':txt, 'yaxis3.tickfont.color':txt, 'yaxis4.tickfont.color':txt
-      });
-    }catch{}
-  }
-  function setTheme(t){
-    Object.entries(THEMES[t]).forEach(([k,v])=>document.documentElement.style.setProperty(k,v));
-    document.body.classList.toggle('light', t==='light');
-    els.themeToggle.textContent = t==='dark' ? '☀️ Light' : '🌙 Dark';
-    els.themeToggle.classList.toggle('active', t==='dark');
-    localStorage.setItem('theme',t);
-    requestAnimationFrame(()=>{ applyChartTheme(); if(CURRENT.ticker) go(CURRENT.ticker, CURRENT.company); });
-  }
-  const getTheme = () => localStorage.getItem('theme')||'dark';
-  els.themeToggle.addEventListener('click',()=> setTheme(getTheme()==='dark'?'light':'dark'));
-  setTheme(getTheme());
-
-  /* ---------- Collapsible ---------- */
-  els.tfHead.addEventListener('click',()=>{
-    const open = els.tfCard.getAttribute('data-open') === 'true';
-    els.tfCard.setAttribute('data-open', open ? 'false' : 'true');
-  });
-
-  /* ---------- Fundamentals ---------- */
-  async function getFundamentals(ticker){
-    if(isCrypto(ticker)) return {};
-    try{
-      const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=defaultKeyStatistics,financialData,earningsTrend`, { cache:'no-store' });
-      if(!r.ok) throw new Error('summary '+r.status);
-      const j = await r.json();
-      const res = j?.quoteSummary?.result?.[0] || {};
-      const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
-      const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
-      let growth=null;
-      const trends=Array.isArray(et.trend)?et.trend:[];
-      const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
-      if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
-      const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
-      return { eps: +eps || null, growth: +growth || null, ivGraham };
-    }catch{ return {}; }
-  }
-
-  /* ---------- Indicators ---------- */
+  /* ---- helpers ---- */
   function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
-    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;} if(i>=w){const old=vals[i-w]; if(Number.isFinite(old)){sum-=old;count--;}} if(i>=w-1) out[i]=sum/count; } return out; }
-  function EMA(vals,span){ const out=new Array(vals.length).fill(null),k=2/(span+1); let ema=null
-    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(!Number.isFinite(v)){ out[i]=(i>0?out[i-1]:null); continue; } ema=(ema==null)?v:v*k+ema*(1-k); out[i]=ema; } return out; }
-  function RSI(values, period=14){ const rsi=new Array(values.length).fill(null); if(values.length<=period) return rsi;
-    let gain=0,loss=0; for(let i=1;i<=period;i++){ const d=values[i]-values[i-1]; if(d>0) gain+=d; else loss-=d; }
-    gain/=period; loss/=period; rsi[period]=100-100/(1+(gain/(loss||1e-10)));
-    for(let i=period+1;i<values.length;i++){ const d=values[i]-values[i-1];
-      if(d>0){ gain=(gain*(period-1)+d)/period; loss=(loss*(period-1))/period; }
-      else { gain=(gain*(period-1))/period; loss=(loss*(period-1)-d)/period; }
-      rsi[i]=100-100/(1+(gain/(loss||1e-10)));
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;}
+      if(i>=w){ const old=vals[i-w]; if(Number.isFinite(old)){sum-=old;count--;} }
+      if(i>=w-1) out[i]=sum/count;
+    } return out;
+  }
+  function EMA(vals,span){ const out=new Array(vals.length).fill(null),k=2/(span+1); let ema=null;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(!Number.isFinite(v)){ out[i]=(i?out[i-1]:null); continue; }
+      ema=(ema==null)?v:v*k+ema*(1-k); out[i]=ema; } return out;
+  }
+  function RSI(values, p=14){
+    const rsi=new Array(values.length).fill(null); if(values.length<=p) return rsi;
+    let g=0,l=0; for(let i=1;i<=p;i++){ const d=values[i]-values[i-1]; if(d>0) g+=d; else l-=d; }
+    g/=p; l/=p; rsi[p]=100-100/(1+(g/(l||1e-10)));
+    for(let i=p+1;i<values.length;i++){ const d=values[i]-values[i-1];
+      if(d>0){ g=(g*(p-1)+d)/p; l=(l*(p-1))/p; } else { g=(g*(p-1))/p; l=(l*(p-1)-d)/p; }
+      rsi[i]=100-100/(1+(g/(l||1e-10)));
     } return rsi;
   }
-  function MACD(closes,f=12,s=26,sig=9){ const ef=EMA(closes,f), es=EMA(closes,s);
-    const macd=closes.map((_,i)=> (ef[i]!=null&&es[i]!=null)? ef[i]-es[i] : null);
+  function MACD(close,f=12,s=26,sig=9){ const ef=EMA(close,f), es=EMA(close,s);
+    const macd=close.map((_,i)=> (ef[i]!=null&&es[i]!=null)? ef[i]-es[i] : null);
     const signal=EMA(macd.map(x=>x==null?null:x),sig);
     const hist=macd.map((m,i)=> (m!=null&&signal[i]!=null)? (m-signal[i]) : null);
     return {macd,signal,hist};
   }
 
-  /* ---------- Ichimoku helpers ---------- */
-  function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
-    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
-  function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
-    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let lo=Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) lo=Math.min(lo,arr[j]); out[i]=Number.isFinite(lo)?lo:null; } return out; }
-  function arrShiftFwd(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i+k<n) out[i+k]=arr[i]; return out; }
-  function arrShiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
+  /* ---- Ichimoku ---- */
+  function rollingHigh(a,w){ const out=new Array(a.length).fill(null); for(let i=0;i<a.length;i++){ if(i<w-1) continue; let h=-Infinity; for(let j=i-w+1;j<=i;j++){ if(Number.isFinite(a[j])) h=Math.max(h,a[j]); } out[i]=h>-Infinity?h:null; } return out; }
+  function rollingLow(a,w){ const out=new Array(a.length).fill(null); for(let i=0;i<a.length;i++){ if(i<w-1) continue; let l=Infinity; for(let j=i-w+1;j<=i;j++){ if(Number.isFinite(a[j])) l=Math.min(l,a[j]); } out[i]=l<Infinity?l:null; } return out; }
+  function shiftFwd(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i+k<n) out[i+k]=arr[i]; return out; }
+  function shiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
   function calcIchimoku(rows){
     const n=rows.length, high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c);
-    const convHi=rollingHigh(high,9),  convLo=rollingLow(low,9);
-    const kijHi =rollingHigh(high,26), kijLo=rollingLow(low,26);
-    const senBHi=rollingHigh(high,52),  senBLo=rollingLow(low,52);
-    const tenkan=convHi.map((h,i)=> (h!=null&&convLo[i]!=null)?(h+convLo[i])/2:null);
-    const kijun =kijHi .map((h,i)=> (h!=null&&kijLo[i]!=null)?(h+kijLo[i])/2:null);
-    const senA0=tenkan.map((t,i)=> (t!=null&&kijun[i]!=null)?(t+kijun[i])/2:null);
-    const senB0=senBHi.map((h,i)=> (h!=null&&senBLo[i]!=null)?(h+senBLo[i])/2:null);
-    const shift=26, spanA=arrShiftFwd(senA0,shift,n), spanB=arrShiftFwd(senB0,shift,n), chikou=arrShiftBack(close,shift,n);
-    return { tenkan, kijun, spanA, spanB, chikou };
+    const ten=(rollingHigh(high,9).map((h,i)=> (h+rollingLow(low,9)[i])/2));
+    const kij=(rollingHigh(high,26).map((h,i)=> (h+rollingLow(low,26)[i])/2));
+    const spanA0=ten.map((t,i)=>(t!=null&&kij[i]!=null)?(t+kij[i])/2:null);
+    const spanB0=rollingHigh(high,52).map((h,i)=>(h+rollingLow(low,52)[i])/2);
+    const spanA=shiftFwd(spanA0,26,n), spanB=shiftFwd(spanB0,26,n), chik=shiftBack(close,26,n);
+    return {tenkan:ten,kijun:kij,spanA,spanB,chikou:chik};
   }
   function segmentCloud(a,b){
     const n=a.length, gLow=Array(n).fill(null), gUp=Array(n).fill(null), rLow=Array(n).fill(null), rUp=Array(n).fill(null);
     for(let i=0;i<n;i++){ const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue; if(A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; } }
-    return { gLow, gUp, rLow, rUp };
+    return { gLow,gUp,rLow,rUp };
   }
-  function fillEdges(arr){
-    const out = arr.slice();
-    let last = null;
-    for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; }
-    const fi = out.findIndex(v=>Number.isFinite(v));
-    if(fi>0){ for(let i=0;i<fi;i++) out[i]=out[fi]; }
-    let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } }
-    if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; }
-    return out;
-  }
-  function exaggerateCloud(spanA, spanB, mag=1.8, loClip=-Infinity, hiClip=Infinity){
-    if(!(mag>1)) return {spanA,spanB};
-    const A=spanA.slice(), B=spanB.slice();
-    for(let i=0;i<A.length;i++){
-      const a=A[i], b=B[i]; if(!Number.isFinite(a)||!Number.isFinite(b)) continue;
-      const mid=(a+b)/2, half=(a-b)/2;
-      A[i]=Math.min(Math.max(mid+half*mag, loClip), hiClip);
-      B[i]=Math.min(Math.max(mid-half*mag, loClip), hiClip);
+
+  /* ---- Data fetch (expects your existing /api/* endpoints) ---- */
+  async function fetchChart(ticker, range, interval){
+    const r=await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=${range}&interval=${interval}`,{cache:'no-store'});
+    if(!r.ok) throw new Error('chart '+r.status);
+    const j=await r.json(); const res=j?.chart?.result?.[0]; if(!res) throw new Error('no result');
+    const q=res.indicators?.quote?.[0]||{}; const ts=res.timestamp||[]; const adj=res.indicators?.adjclose?.[0]?.adjclose;
+    const rows=[];
+    for(let i=0;i<ts.length;i++){
+      const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i]; const cRaw=(adj && adj[i]!=null)?adj[i]:q.close?.[i]; const v=q.volume?.[i];
+      if([o,h,l,cRaw].every(Number.isFinite)) rows.push({date:new Date(ts[i]*1000),o:+o,h:+h,l:+l,c:+cRaw,v:+(v||0)});
     }
-    return {spanA:A, spanB:B};
+    return rows;
   }
 
-  /* ---------- SMA helper ---------- */
-  function alignAndExtendSMA(smaAll, visibleLen, startIdx){
-    let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
-    while (arr.length < visibleLen) arr.unshift(null);
-    const firstIdx = arr.findIndex(v => Number.isFinite(v));
-    if (firstIdx > 0){ const firstVal=arr[firstIdx]; for(let i=0;i<firstIdx;i++) arr[i]=firstVal; }
-    for (let i=1;i<arr.length;i++) if (arr[i]==null && Number.isFinite(arr[i-1])) arr[i]=arr[i-1];
-    return arr;
+  function getVisibleData(full, range){
+    const daysMap={'3mo':93,'6mo':182,'1y':365,'2y':730,'5y':1825,'max':36500};
+    const days=daysMap[range] ?? 182; const cutoff=new Date(Date.now()-days*864e5);
+    return full.filter(r=>r.date>=cutoff);
   }
 
-  /* ---------- Auto-Fib ---------- */
-  function getAxisState(){
-    const L = els.chart && (els.chart._fullLayout || els.chart.layout);
-    const g = ax => ({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false });
-    return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
-  }
-  function relayoutPreserve(payload){
-    const S=getAxisState(); const keep=(axKey,s)=>{ if(!s) return {}; const out={}; if(s.range){out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false;} else if(s.autorange){out[`${axKey}.autorange`]=true;} return out; };
-    return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
-  }
-  const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
-  const addOrUpdateAutoFibTraces = debounce(async () => {
-    if(!fibActive()||!els.chart||FIB_LOCK) return;
-    const c=getCandleTrace(); if(!c) return;
-    const cx=c.x, ch=c.high, cl=c.low; if(!cx?.length) return;
-    const L=els.chart._fullLayout||els.chart.layout||{}, xa=L.xaxis||{};
-    const x0=(Array.isArray(xa.range)&&xa.autorange===false)?xa.range[0]:cx[0];
-    const x1=(Array.isArray(xa.range)&&xa.autorange===false)?xa.range[1]:cx[cx.length-1];
-    const i0=Math.max(0, cx.findIndex(d=>d>=x0)); let i1=cx.findIndex(d=>d>x1); if(i1===-1) i1=cx.length; if(i1<=i0) return;
-    let hi=-Infinity, lo=Infinity; for(let i=i0;i<i1;i++){ if(Number.isFinite(ch[i])) hi=Math.max(hi,ch[i]); if(Number.isFinite(cl[i])) lo=Math.min(lo,cl[i]); }
-    if(!Number.isFinite(hi)||!Number.isFinite(lo)||hi===lo) return;
-    const lvls=[1,.786,.618,.5,.382,.236,0], color=css('--c-rsi')||'#8b5cf6', prices=lvls.map(p=>hi-(hi-lo)*p);
-    const shapes=prices.map(y=>({type:'line',xref:'x',yref:'y',x0,x1,y0:y,y1:y,line:{color,width:1.25,dash:'dot'},layer:'above',opacity:.95}));
-    const anns=prices.map((y,i)=>({x:x1,y,xref:'x',yref:'y',xanchor:'right',yanchor:'middle',text:`${(lvls[i]*100).toFixed(1)}%  ${y.toFixed(2)}`,showarrow:false,font:{size:11,color}}));
-    try { FIB_LOCK = true; await relayoutPreserve({ shapes, annotations: anns }); } finally { FIB_LOCK = false; }
-  }, 30);
-  const clearAutoFib = () => { if(!els.chart) return; try{ FIB_LOCK=true; relayoutPreserve({shapes:[],annotations:[]}); } finally { FIB_LOCK=false; } };
+  function buildData(rows, toggles){
+    const x=rows.map(r=>r.date);
+    const open=rows.map(r=>r.o), high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c), vol=rows.map(r=>r.v);
 
-  /* ---------- Search & autocomplete ---------- */
-  let LOCAL_SYMBOLS=[], suggestions=[], activeIndex=-1;
-  async function loadSymbolsFromCSV(){
+    const sma20=SMA(close,20), sma50=SMA(close,50), sma200=SMA(close,200);
+    const macd=MACD(close), rsi=RSI(close,14);
+
+    const data=[];
+
+    // Ichimoku cloud first so it sits behind candles
+    if(toggles.ICHI){
+      const ichi=calcIchimoku(rows);
+      const cloud=segmentCloud(ichi.spanA, ichi.spanB);
+      data.push(
+        {type:'scatter',x,y:cloud.gLow,yaxis:'y',line:{width:0},hoverinfo:'skip',showlegend:false,connectgaps:true},
+        {type:'scatter',x,y:cloud.gUp ,yaxis:'y',fill:'tonexty',line:{width:0},fillcolor:cssVar('--c-ichi-up'), hoverinfo:'skip',name:'Kumo +',opacity:1,connectgaps:true},
+        {type:'scatter',x,y:cloud.rLow,yaxis:'y',line:{width:0},hoverinfo:'skip',showlegend:false,connectgaps:true},
+        {type:'scatter',x,y:cloud.rUp ,yaxis:'y',fill:'tonexty',line:{width:0},fillcolor:cssVar('--c-ichi-down'),hoverinfo:'skip',name:'Kumo -',opacity:1,connectgaps:true},
+        {type:'scatter',x,y:ichi.tenkan,yaxis:'y',name:'Tenkan',line:{width:1,color:cssVar('--c-ichi-tenkan')}},
+        {type:'scatter',x,y:ichi.kijun ,yaxis:'y',name:'Kijun', line:{width:1,color:cssVar('--c-ichi-kijun')}},
+        {type:'scatter',x,y:ichi.chikou,yaxis:'y',name:'Chikou',line:{width:1,color:cssVar('--c-ichi-chikou')}}
+      );
+    }
+
+    data.push({
+      type:'candlestick', x, open, high, low, close, name:'Price',
+      increasing:{line:{color:cssVar('--c-up'),width:1.15}},
+      decreasing:{line:{color:cssVar('--c-down'),width:1.15}},
+      whiskerwidth:0.4, opacity:0.95
+    });
+
+    if(toggles.SMA20)  data.push({type:'scatter',x,y:sma20, yaxis:'y',name:'SMA 20', line:{width:1.2,color:cssVar('--c-sma20')},connectgaps:true});
+    if(toggles.SMA50)  data.push({type:'scatter',x,y:sma50, yaxis:'y',name:'SMA 50', line:{width:1.2,color:cssVar('--c-sma50')},connectgaps:true});
+    if(toggles.SMA200) data.push({type:'scatter',x,y:sma200,yaxis:'y',name:'SMA 200',line:{width:1.2,color:cssVar('--c-sma200')},connectgaps:true});
+
+    if(toggles.RSI){
+      data.push(
+        {type:'scatter',x,y:rsi,yaxis:'y2',name:'RSI',line:{width:1.1,color:cssVar('--c-rsi')}},
+        {type:'scatter',x,y:Array(x.length).fill(70),yaxis:'y2',name:'70',line:{width:.8,dash:'dot'}},
+        {type:'scatter',x,y:Array(x.length).fill(30),yaxis:'y2',name:'30',line:{width:.8,dash:'dot'}}
+      );
+    }
+    if(toggles.MACD){
+      data.push(
+        {type:'scatter',x,y:macd.macd,yaxis:'y4',name:'MACD',line:{width:1,color:cssVar('--c-macd')}},
+        {type:'scatter',x,y:macd.signal,yaxis:'y4',name:'Signal',line:{width:1}},
+        {type:'bar',x,y:macd.hist,yaxis:'y4',name:'Hist',opacity:.4}
+      );
+    }
+    if(toggles.VOL){
+      data.push({type:'bar',x,y:vol,yaxis:'y3',name:'Volume',opacity:.4,marker:{color:cssVar('--c-vol')}});
+    }
+
+    return data;
+  }
+
+  function currentToggles(){
+    const t={SMA20:false,SMA50:false,SMA200:false,RSI:false,MACD:false,VOL:false,AUTOFIB:false,ICHI:false};
+    els.toggles.querySelectorAll('.chip').forEach(c=>{ if(c.classList.contains('active')) t[c.dataset.k]=true; });
+    return t;
+  }
+
+  function layoutBase(){
+    const panelBg=getComputedStyle(els.chartCard).backgroundColor;
+    return {
+      margin:{ l:56, r:28, t:18, b:32 },
+      paper_bgcolor:panelBg, plot_bgcolor:panelBg,
+      xaxis:{ domain:[0,1], showgrid:true, gridcolor:cssVar('--grid'), rangeslider:{visible:false} },
+      yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:cssVar('--grid') },
+      yaxis2:{ domain:[0.00, 0.17], title:'RSI',  range:[0,100], gridcolor:cssVar('--grid') },
+      yaxis3:{ domain:[0.20, 0.31], title:'Vol',  gridcolor:cssVar('--grid') },
+      yaxis4:{ domain:[0.34, 0.49], title:'MACD', gridcolor:cssVar('--grid') },
+      legend:{orientation:'h'}
+    };
+  }
+
+  /* ---- main ---- */
+  async function render(sym){
+    els.headline.textContent=sym;
     try{
-      const r = await fetch('/stock_data.csv',{cache:'no-store'}); if(!r.ok) throw new Error('CSV not found');
-      let text = await r.text(); if (text.charCodeAt(0)===0xFEFF) text=text.slice(1);
-      const lines=text.split(/\r?\n/).filter(Boolean); if(!lines.length) throw new Error('CSV empty');
-      const cand=['|','\t','; ',',']; let delim=cand[0],best=-1;
-      for(const d of cand){ const score=lines.slice(0,Math.min(5,lines.length)).map(L=>L.split(d).length-1).filter(k=>k>0).reduce((a,b)=>a+b,0); if(score>best){best=score;delim=d;} }
-      const firstTok=lines[0].split(delim)[0].trim().toLowerCase(); const start=/(symbol|ticker)/.test(firstTok)?1:0;
-      const out=[]; for(let i=start;i<lines.length;i++){ const line=lines[i].trim(); const cut=line.indexOf(delim); if(cut===-1) continue;
-        const sym=line.slice(0,cut).trim().toUpperCase(); const name=line.slice(cut+1).trim();
-        if(/^[A-Z0-9.^$\-]{1,12}$/.test(sym)) out.push({symbol:sym,name});
-      }
-      if(!out.length) throw new Error('No symbols parsed'); LOCAL_SYMBOLS=out;
-    }catch{
-      LOCAL_SYMBOLS=[{symbol:'AAPL',name:'Apple Inc'},{symbol:'MSFT',name:'Microsoft Corp'},{symbol:'TSLA',name:'Tesla Inc'},{symbol:'NVDA',name:'NVIDIA Corp'},{symbol:'AMZN',name:'Amazon.com Inc'}];
-    }
-  }
-  function searchLocalSymbols(q){
-    if(!q) return [];
-    const out=[]; const qLower=q.toLowerCase();
-    for(const r of LOCAL_SYMBOLS){ if(r.symbol.startsWith(q)){ out.push(r); if(out.length>=12) break; } }
-    if(out.length<12){
-      const seen=new Set(out.map(r=>r.symbol));
-      for(const r of LOCAL_SYMBOLS){
-        if(seen.has(r.symbol)) continue;
-        if(r.symbol.includes(q) || (r.name && r.name.toLowerCase().includes(qLower))) { out.push(r); if(out.length>=12) break; }
-      }
-    }
-    const alias = SYMBOL_ALIASES[q]; if(alias && !out.some(r=>r.symbol===alias)) out.unshift({symbol:alias,name:`${q} (Crypto vs USD)`});
-    return out;
-  }
-  function renderAC(){
-    els.list.innerHTML=''; if(!suggestions.length){ els.list.classList.remove('show'); return; }
-    suggestions.forEach((it,i)=>{ const div=document.createElement('div'); div.className='ac-item'+(i===activeIndex?' active':''); div.dataset.i=i;
-      div.innerHTML=`<div class="ticker">${it.symbol}</div><div class="company">${escapeHTML(it.name||'')}</div>`;
-      div.addEventListener('mousedown',e=>{ e.preventDefault(); pick(i); }); els.list.appendChild(div);
-    }); els.list.classList.add('show');
-  }
-  const hideAC = () => { els.list.classList.remove('show'); activeIndex=-1; };
-  function pick(i){ const it=suggestions[i]; if(!it) return; const sym=normalizeTicker(it.symbol); els.input.value=sym; hideAC(); onSearch(sym,it.name||''); }
-
-  els.input.addEventListener('input', debounce(async ()=>{
-    if(!LOCAL_SYMBOLS.length) await loadSymbolsFromCSV();
-    const val=els.input.value; if(val!==val.toUpperCase()){ const st=els.input.selectionStart,en=els.input.selectionEnd; els.input.value=val.toUpperCase(); els.input.setSelectionRange(st,en); }
-    const qv=els.input.value.trim().toUpperCase(); if(!qv){ hideAC(); return; }
-    suggestions=searchLocalSymbols(qv); activeIndex=-1; renderAC();
-  },120));
-  els.input.addEventListener('keydown', e=>{
-    if(els.list.classList.contains('show')){
-      if(e.key==='ArrowDown'){ e.preventDefault(); activeIndex=(activeIndex+1)%suggestions.length; renderAC(); return; }
-      if(e.key==='ArrowUp'){ e.preventDefault(); activeIndex=(activeIndex-1+suggestions.length)%suggestions.length; renderAC(); return; }
-      if(e.key==='Enter'||e.key==='Tab'){ if(activeIndex>=0){ e.preventDefault(); pick(activeIndex); return; } }
-      if(e.key==='Escape'){ hideAC(); return; }
-    }
-    if(e.key==='Enter'){ e.preventDefault(); hideAC(); doSearchFromInput(); }
-  });
-  document.addEventListener('click', e=>{ if(!e.target.closest('.ticker-wrap')) hideAC(); });
-  els.input.addEventListener('blur', ()=> setTimeout(hideAC,100));
-  window.addEventListener('scroll', hideAC, { passive:true });
-  function niceTickerError(t){
-    els.headline.textContent='Symbol not found';
-    els.lastLine.innerHTML=`<span style="color:${css('--c-down')};font-weight:800">“${t}” isn’t a valid ticker. Please check the spelling and try again.</span>`;
-    els.prevCloseLine.textContent=''; els.ivLine.textContent='';
-  }
-  function doSearchFromInput(){
-    let t = normalizeTicker(els.input.value.trim().toUpperCase());
-    hideAC(); if(!/^[A-Z0-9.^$-]{1,12}$/.test(t)){ niceTickerError(t); return; }
-    const found=LOCAL_SYMBOLS.find(r=>r.symbol===t)||LOCAL_SYMBOLS.find(r=>(r.name||'').toUpperCase()===t); const comp=found?.name||'';
-    onSearch(t,comp);
-  }
-  els.searchBtn.addEventListener('click', ()=>{ hideAC(); doSearchFromInput(); });
-
-  /* ---------- Fetch & shape ---------- */
-  function normalizePair(time,freq){
-    const minFor={ '1m':'1d','5m':'5d','15m':'10d','60m':'1mo' };
-    const order=['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
-    const idx=v=>Math.max(0,order.indexOf(v));
-    if(['1m','5m','15m','60m'].includes(freq)){ const minRange=minFor[freq]; if(idx(time)<idx(minRange)) time=minRange; return { range:time, interval: freq==='60m' ? '60m' : freq }; }
-    // Yahoo doesn't actually serve "1y" bars; we’ll fetch monthly and aggregate to yearly
-    const map={'1d':'1d','1wk':'1wk','1mo':'1mo','3mo':'3mo','1y':'1mo'};
-    return { range:time, interval: map[freq]||'1d' };
-  }
-  function historyRangeFor(freq,time){
-    if(freq==='1m') return '7d';
-    if(freq==='5m'||freq==='15m'||freq==='60m') return '2mo';
-    const map={'1d':'1y','2d':'1y','5d':'1y','10d':'1y','1mo':'1y','2mo':'2y','3mo':'2y','6mo':'2y','ytd':'2y','1y':'3y','2y':'5y','3y':'5y','4y':'10y','5y':'10y','10y':'max','max':'max'};
-    return map[time]||'3y';
-  }
-  function aggregateToYear(rows){
-    if(!rows.length) return rows;
-    const byY = new Map();
-    for(const r of rows){
-      const y = toET(r.date).getFullYear();
-      let b = byY.get(y);
-      if(!b) byY.set(y, b={ o:r.o, h:r.h, l:r.l, c:r.c, v:r.v, date: new Date(y,0,1) });
-      b.h = Math.max(b.h, r.h);
-      b.l = Math.min(b.l, r.l);
-      b.c = r.c;
-      b.v += r.v;
-    }
-    return Array.from(byY.entries()).sort((a,b)=>a[0]-b[0]).map(([,v])=>v);
-  }
-  async function fetchFullHistory(ticker,time,freq){ const range=historyRangeFor(freq,time); return await fetchChart(ticker,range,freq); }
-  async function fetchChart(ticker,time,freq){
-    const widen={'1m':['1d','2d','5d'],'5m':['5d','10d','1mo','2mo'],'15m':['10d','1mo','2mo'],'60m':['1mo','2mo','3mo']};
-    const tryRanges=['1m','5m','15m','60m'].includes(freq)?[...new Set([time, ...(widen[freq]||[])])]:[time];
-    let lastErr; for(const candidate of tryRanges){
-      try{
-        const {range,interval}=normalizePair(candidate,freq);
-        const r=await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=${range}&interval=${interval}`,{cache:'no-store'}); if(!r.ok) throw new Error(`Proxy ${r.status}`);
-        const j=await r.json(); const res=j?.chart?.result?.[0]; if(!res) throw new Error('No result');
-        const q=res.indicators?.quote?.[0]||{}; const ts=res.timestamp||[];
-        const rows=[];
-        for(let i=0;i<ts.length;i++){
-          const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i];
-          const adj=res.indicators?.adjclose?.[0]?.adjclose;
-          const cRaw=(adj && adj[i]!=null) ? adj[i] : q.close?.[i];
-          const c=Number.isFinite(+cRaw)?+cRaw:null;
-          const v=Number.isFinite(q.volume?.[i])?+q.volume[i]:0;
-          if([o,h,l,c].every(Number.isFinite)) rows.push({date:new Date(ts[i]*1000),o:+o,h:+h,l:+l,c:+c,v});
-        }
-        return rows;
-      }catch(e){ lastErr=e; }
-    }
-    throw lastErr||new Error('Fetch failed');
-  }
-  function getVisibleData(fullData, range, freq){
-    const intraday=['1m','5m','15m','60m'].includes(freq);
-    const m = intraday ? /^(\d+)d$/.exec(range) : null;
-    if (m) {
-      const want=Math.max(1,+m[1]); let firstIdx=0, sessionsSeen=0, curKey=null;
-      for(let i=fullData.length-1;i>=0;i--){
-        const et=toET(fullData[i].date);
-        const key=et.getFullYear()+'-'+(et.getMonth()+1)+'-'+et.getDate();
-        if(key!==curKey){ sessionsSeen++; curKey=key; if(sessionsSeen>want){ firstIdx=i+1; break; } }
-      }
-      return fullData.slice(firstIdx);
-    }
-    if (range==='ytd'){
-      const now=new Date(); const jan1=new Date(now.getFullYear(),0,1);
-      return fullData.filter(it => toET(it.date) >= toET(jan1));
-    }
-    const daysMap={'1d':1,'2d':2,'5d':5,'10d':10,'1mo':31,'2mo':62,'3mo':93,'6mo':182,'1y':365,'2y':730,'3y':1095,'4y':1460,'5y':1825,'10y':3650,'max':36500};
-    const days=daysMap[range] ?? 365; const cutoff=new Date(Date.now()-days*864e5);
-    return fullData.filter(it => toET(it.date) >= toET(cutoff));
-  }
-  function prevDailyCloseFromIntraday(fullRows){
-    if(!fullRows?.length) return null;
-    const lastDayStr=toEastern(fullRows.at(-1).date).toDateString();
-    for(let i=fullRows.length-2;i>=0;i--){ const d=toEastern(fullRows[i].date).toDateString(); if(d!==lastDayStr) return fullRows[i].c ?? null; }
-    return null;
-  }
-
-  /* ---------- Price ticker ---------- */
-  async function fetchLastPriceLight(ticker){
-    try{
-      const r = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { cache:'no-store' });
-      if (r.ok) {
-        const j=await r.json();
-        const p=j?.price ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice;
-        if(Number.isFinite(+p)) return +p;
-      }
-    }catch{}
-    try{
-      const r = await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=1d&interval=1m`, { cache:'no-store' });
-      if(!r.ok) throw 0;
-      const j=await r.json();
-      const res=j?.chart?.result?.[0];
-      const q=res?.indicators?.quote?.[0];
-      const adj=res?.indicators?.adjclose?.[0]?.adjclose;
-      const close=(adj && adj.at(-1)!=null) ? adj.at(-1) : q?.close?.at(-1);
-      return Number.isFinite(+close) ? +close : null;
-    }catch{ return null; }
-  }
-  async function tickPriceOnce(){
-    if(!CURRENT?.ticker) return;
-    const last=await fetchLastPriceLight(CURRENT.ticker);
-    if(!Number.isFinite(last)) return;
-    const prev=CURRENT.prevClose ?? null;
-    const dayChg=(prev!=null)?last-prev:null;
-    const dayPct=(prev!=null && prev!==0)?(dayChg/prev)*100:null;
-    const upClr=css('--c-up'), dnClr=css('--c-down');
-    const chgClr=dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
-    const signChg=dayChg>0?'+':dayChg<0?'-':'';
-    const signPct=dayPct>0?'+':dayPct<0?'-':'';
-    els.lastLine.innerHTML = `Last: <b>$${fmt(last)}</b> · ` + (dayChg==null? 'Change: —' :
-      `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
-  }
-  function startPriceTicker(){
-    stopPriceTicker();
-    const base=['1m','5m','15m','60m'].includes(els.freqSel.value) ? 30000 : 60000;
-    const interval=isMarketOpenNow()?base:180000;
-    const run=()=>{ if(!document.hidden) tickPriceOnce(); };
-    run(); PRICE_TIMER=setInterval(run,interval);
-  }
-  const stopPriceTicker=()=>{ if(PRICE_TIMER){ clearInterval(PRICE_TIMER); PRICE_TIMER=null; } };
-  document.addEventListener('visibilitychange',()=>{ if(PRICE_TIMER && document.hidden) return; if(!PRICE_TIMER && !document.hidden && CURRENT.ticker) startPriceTicker(); });
-
-  /* ---------- Main flow ---------- */
-  async function onSearch(ticker, company){
-    if(!FUNDAMENTALS[ticker]){ try{ FUNDAMENTALS[ticker]=await getFundamentals(ticker); }catch{ FUNDAMENTALS[ticker]={}; } }
-    await go(ticker, company);
-  }
-  async function go(ticker, company){
-    CURRENT={...CURRENT,ticker,company};
-    els.headline.textContent=`${ticker}${company?' — '+company:''}`;
-    els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent='';
-    try{
-      await waitForPlotly();
-
-      const time=els.timeSel.value, freq=els.freqSel.value;
-      const fullRows = await fetchFullHistory(ticker, time, freq);
-      if(!fullRows.length) throw new Error('No price data');
-
-      let visibleRows = getVisibleData(fullRows, time, freq);
-      if (freq === '1y') visibleRows = aggregateToYear(visibleRows);
-
-      const startIdx = fullRows.length - visibleRows.length; /* <-- FIXED */
-
-      const x     = visibleRows.map(r => formatEasternISO(r.date));
-      const open  = visibleRows.map(r => r.o);
-      const high  = visibleRows.map(r => r.h);
-      const low   = visibleRows.map(r => r.l);
-      const close = visibleRows.map(r => r.c);
-      const vol   = visibleRows.map(r => r.v);
-
-      /* --- SMAs --- */
-      let sma20, sma50, sma200;
-      if (freq === '1y') {
-        sma20  = SMA(close, 20);
-        sma50  = SMA(close, 50);
-        sma200 = SMA(close, 200);
-      } else {
-        const sma20All  = SMA(fullRows.map(r=>r.c), 20);
-        const sma50All  = SMA(fullRows.map(r=>r.c), 50);
-        const sma200All = SMA(fullRows.map(r=>r.c), 200);
-        sma20  = alignAndExtendSMA(sma20All,  visibleRows.length, startIdx);
-        sma50  = alignAndExtendSMA(sma50All,  visibleRows.length, startIdx);
-        sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
-      }
-
-      /* --- Indicators --- */
-      const rsiVals = RSI(close,14);
-      const macd = MACD(close,12,26,9);
-
-      /* --- Last/Change lines & prev close --- */
-      const last = close.at(-1);
-      const prevClose = ['1m','5m','15m','60m'].includes(freq) ? prevDailyCloseFromIntraday(fullRows) : (close.length>=2 ? close.at(-2) : null);
-      CURRENT.prevClose = prevClose;
-      const ref = (prevClose!=null) ? prevClose : (close.length>=2 ? close.at(-2) : null);
-      const dayChg = (ref!=null) ? (last - ref) : null;
-      const dayPct = (ref!=null && ref!==0) ? (dayChg/ref)*100 : null;
-      const upClr=css('--c-up'), dnClr=css('--c-down');
-      const chgClr = dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
-      const signChg = dayChg>0?'+':dayChg<0?'-':'';
-      const signPct = dayPct>0?'+':dayPct<0?'-':'';
-      els.lastLine.innerHTML = `Last: <b>$${fmt(last)}</b> · ` + (dayChg==null? 'Change: —' :
-        `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
-      els.prevCloseLine.textContent = `Yesterday’s Close: ${prevClose==null ? '—' : '$'+fmt(prevClose)}`;
-
-      /* --- Intrinsic value (very rough) --- */
-      const f = FUNDAMENTALS[ticker] || {};
-      const ivs=[]; if(Number.isFinite(f.ivGraham)) ivs.push(f.ivGraham);
-      const s50=sma50.at(-1), s200=sma200.at(-1); if(Number.isFinite(s50)&&Number.isFinite(s200)) ivs.push((s50+s200)/2);
-      const iv = ivs.length ? (ivs.reduce((a,b)=>a+b,0)/ivs.length) : null;
-      els.ivLine.textContent = `Intrinsic Value: ${iv==null ? '—' : '$'+fmt(iv)}`;
-
-      /* --- Traces --- */
-      const candles = {
-        type:'candlestick', x, open, high, low, close, name:ticker,
-        increasing:{ line:{ color:css('--c-up'), width:1.15 } },
-        decreasing:{ line:{ color:css('--c-down'), width:1.15 } },
-        whiskerwidth:0.4, opacity:0.95,
-        hovertemplate:'O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>'
-      };
-
-      const trSMA20  = { type:'scatter', x, y:sma20,  yaxis:'y', name:'SMA 20',  line:{ width:1.2, color:css('--c-sma20') } };
-      const trSMA50  = { type:'scatter', x, y:sma50,  yaxis:'y', name:'SMA 50',  line:{ width:1.2, color:css('--c-sma50') } };
-      const trSMA200 = { type:'scatter', x, y:sma200, yaxis:'y', name:'SMA 200', line:{ width:1.2, color:css('--c-sma200') } };
-
-      const trRSI   = { type:'scatter', x, y:rsiVals, yaxis:'y2', name:'RSI', line:{ width:1.1, color:css('--c-rsi') } };
-      const trRSI70 = { type:'scatter', x, y:Array(x.length).fill(70), yaxis:'y2', name:'70', line:{ width:.8, dash:'dot' } };
-      const trRSI30 = { type:'scatter', x, y:Array(x.length).fill(30), yaxis:'y2', name:'30', line:{ width:.8, dash:'dot' } };
-
-      const trMACD   = { type:'scatter', x, y:macd.macd,  yaxis:'y4', name:'MACD',   line:{ width:1, color:css('--c-macd') } };
-      const trSignal = { type:'scatter', x, y:macd.signal,yaxis:'y4', name:'Signal', line:{ width:1 } };
-      const trHist   = { type:'bar',     x, y:macd.hist,  yaxis:'y4', name:'Hist',   opacity:.4 };
-
-      const trVol = { type:'bar', x, y:vol, yaxis:'y3', name:'Volume', opacity:.4, marker:{ color:css('--c-vol') } };
-
-      /* --- Ichimoku (bigger + full width + continuous) --- */
-      const ichi = calcIchimoku(visibleRows);
-      const hiVis=Math.max(...high.filter(Number.isFinite));
-      const loVis=Math.min(...low.filter(Number.isFinite));
-      const pad=(hiVis-loVis)*0.04;
-
-      let spanA = fillEdges(ichi.spanA);
-      let spanB = fillEdges(ichi.spanB);
-      ({spanA,spanB} = exaggerateCloud(spanA, spanB, 1.9, loVis-pad, hiVis+pad));
-
-      const cloud = segmentCloud(spanA, spanB);
-      const trCloudGreenBottom = { type:'scatter', x, y:cloud.gLow, yaxis:'y', line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true };
-      const trCloudGreenTop    = { type:'scatter', x, y:cloud.gUp,  yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-up'),   hoverinfo:'skip', name:'Kumo +', opacity:1, connectgaps:true };
-      const trCloudRedBottom   = { type:'scatter', x, y:cloud.rLow, yaxis:'y', line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true };
-      const trCloudRedTop      = { type:'scatter', x, y:cloud.rUp,  yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-down'), hoverinfo:'skip', name:'Kumo -', opacity:1, connectgaps:true };
-      const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1, color:css('--c-ichi-tenkan') } };
-      const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1, color:css('--c-ichi-kijun') } };
-      const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1, color:css('--c-ichi-chikou') } };
-
-      const data = [
-        trCloudGreenBottom, trCloudGreenTop, trCloudRedBottom, trCloudRedTop,
-        candles, trTenkan, trKijun, trChikou,
-        trSMA20, trSMA50, trSMA200,
-        trRSI, trRSI70, trRSI30,
-        trMACD, trSignal, trHist,
-        trVol
-      ];
-
-      // --- Plotly layout tweaks for main chart ---
-      const layout = {
-        margin:{ l:56, r:28, t:18, b:32 }, // a smidge more bottom room
-        xaxis:{
-          domain:[0,1],
-          showgrid:true,
-          gridcolor:css('--grid'),
-          rangeslider:{ visible:false }  // hides the mini chart at bottom
-        },
-        yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid') },
-        yaxis2:{ domain:[0.00, 0.17], anchor:'x', title:'RSI',  range:[0,100] },
-        yaxis3:{ domain:[0.20, 0.31], anchor:'x', title:'Vol' },
-        yaxis4:{ domain:[0.34, 0.49], anchor:'x', title:'MACD' },
-        legend:{orientation:'h'},
-        paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
-        plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor
-      };
-
-      await Plotly.newPlot(els.chart, data, layout, { responsive:true, displaylogo:false });
-
-      try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
-      try { Plotly.removeAllListeners?.(els.chart, 'plotly_relayout'); } catch {}
-      if (els.chart && els.chart.on) {
-        els.chart.on('plotly_relayout', () => { if (fibActive() && !FIB_LOCK) addOrUpdateAutoFibTraces(); });
-      }
-      if (fibActive()) setTimeout(addOrUpdateAutoFibTraces, 32);
-
-      traceMap = {
-        SMA20:data.indexOf(trSMA20), SMA50:data.indexOf(trSMA50), SMA200:data.indexOf(trSMA200),
-        RSI:[data.indexOf(trRSI),data.indexOf(trRSI70),data.indexOf(trRSI30)],
-        MACD:[data.indexOf(trMACD),data.indexOf(trSignal),data.indexOf(trHist)],
-        VOL:data.indexOf(trVol),
-        ICHI:[
-          data.indexOf(trCloudGreenBottom), data.indexOf(trCloudGreenTop),
-          data.indexOf(trCloudRedBottom),   data.indexOf(trCloudRedTop),
-          data.indexOf(trTenkan),           data.indexOf(trKijun),
-          data.indexOf(trChikou)
-        ]
-      };
-      applyVisibilityFromChips();
-
-      startPriceTicker();
-      wireHoverDismiss();
+      const full=await fetchChart(sym, els.timeSel.value, '1d');
+      const rows=getVisibleData(full, els.timeSel.value);
+      const data=buildData(rows, currentToggles());
+      await Plotly.newPlot(els.chart, data, layoutBase(), {displayModeBar:true, responsive:true});
     }catch(e){
-      console.error(e);
-      els.headline.textContent='Chart error';
-      els.lastLine.innerHTML=`<span style="color:${css('--c-down')};font-weight:800">${escapeHTML(ticker)} failed to render: ${escapeHTML(e.message||String(e))}</span>`;
+      els.headline.textContent = 'Error: '+(e.message||e);
     }
   }
 
-  function applyVisibilityFromChips(){
-    if(!els.chart||!window.Plotly) return;
-    Object.entries(traceMap).forEach(([key, idx])=>{
-      const chip=els.toggles.querySelector(`.chip[data-k="${key}"]`); if(!chip) return;
-      const visible = chip.classList.contains('active') ? true : 'legendonly';
-      const indices = Array.isArray(idx) ? idx : [idx];
-      try{ Plotly.restyle(els.chart,{ visible }, indices); } catch {}
-    });
-  }
-
-  /* ---------- Chips ---------- */
+  // toggle events
   els.toggles.addEventListener('click', (e)=>{
-    const chip = e.target.closest('.chip'); if(!chip) return;
-    const key  = chip.dataset.k;
-    if (key === 'AUTOFIB') {
-      const turningOn = !chip.classList.contains('active');
-      chip.classList.toggle('active', turningOn);
-      chip.setAttribute('aria-pressed', turningOn ? 'true' : 'false');
-      if (turningOn) {
-        try { FIB_LOCK = true; Plotly.relayout(els.chart, { shapes: [], annotations: [] }); } finally { FIB_LOCK = false; }
-        requestAnimationFrame(addOrUpdateAutoFibTraces);
-      } else {
-        clearAutoFib();
-      }
-      return;
-    }
+    const chip=e.target.closest('.chip'); if(!chip) return;
     chip.classList.toggle('active');
-    chip.setAttribute('aria-pressed', chip.classList.contains('active') ? 'true' : 'false');
-    const idx = traceMap[key]; if (idx == null) return;
-    const indices = Array.isArray(idx) ? idx : [idx];
-    try { Plotly.restyle(els.chart, { visible: chip.classList.contains('active') ? true : 'legendonly' }, indices); } catch {}
+    if(els.chart.data) { render(q('#q').value.trim().toUpperCase()||'AAPL'); }
   });
 
-  /* ---------- Controls ---------- */
-  [els.timeSel, els.freqSel].forEach(sel=> sel.addEventListener('change', ()=>{ if(CURRENT.ticker) go(CURRENT.ticker, CURRENT.company); }));
-  els.refreshBtn.addEventListener('click', ()=>{ if(CURRENT.ticker) go(CURRENT.ticker, CURRENT.company); });
-  els.wideBtn.addEventListener('click', ()=>{
-    document.querySelector('.container').classList.toggle('wide');
-    els.wideBtn.querySelector('.tool-txt').textContent = document.querySelector('.container').classList.contains('wide') ? 'Normal' : 'Wide';
-    if(els.chart && els.chart.data) Plotly.Plots.resize(els.chart);
-  });
-  function setMaxState(on){
-    els.chartCard.classList.toggle('max', on);
-    if(!q('#exitMax')){
-      const b=document.createElement('button'); b.id='exitMax'; b.type='button'; b.textContent='⤢ Exit';
-      Object.assign(b.style,{position:'absolute',top:'12px',right:'12px',zIndex:'10000'}); b.addEventListener('click',()=>setMaxState(false));
-      els.chartCard.appendChild(b);
-    }
-    const btnTxt=els.maxBtn.querySelector('.tool-txt'); if(btnTxt) btnTxt.textContent=on?'Min':'Max';
-    if(els.chart && els.chart.data) Plotly.Plots.resize(els.chart);
-  }
-  els.maxBtn.addEventListener('click', ()=> setMaxState(!els.chartCard.classList.contains('max')));
-  window.addEventListener('keydown', e=>{ if(e.key==='Escape' && els.chartCard.classList.contains('max')) setMaxState(false); });
-
-  /* ---------- Screeners, sheets, nav ---------- */
-  const FINVIZ_PRESETS = [
-    { title:'Oversold large caps (RSI < 30, Mcap > $10B, AvgVol > 1M)', lvl:'Beginner', url:'https://finviz.com/screener.ashx?v=111&f=cap_largeover,sh_avgvol_o1000,ta_rsi_os' },
-    { title:'New 52-week highs (liquid)', lvl:'Beginner', url:'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o1000,ta_highlow52w_nh' },
-    { title:'Price above 50 & 200 SMA (trend strength)', lvl:'Intermediate', url:'https://finviz.com/screener.ashx?v=111&f=ta_sma50_pa,ta_sma200_pa,sh_avgvol_o1000' },
-    { title:'High dividend yield ≥ 5% (liquid)', lvl:'Beginner', url:'https://finviz.com/screener.ashx?v=111&f=fa_div_o5,sh_avgvol_o500' },
-    { title:'Value: P/E < 15, P/B < 3, Debt/Equity < 1', lvl:'Intermediate', url:'https://finviz.com/screener.ashx?v=111&f=fa_pe_u15,fa_pb_u3,fa_debteq_u1,sh_avgvol_o500' },
-    { title:'Insider buying (recent)', lvl:'Advanced', url:'https://finviz.com/screener.ashx?v=111&f=sh_insiderbuy' },
-  ];
-  function renderScreeners(){
-    const list=q('#scrList'); if(!list) return; list.innerHTML='';
-    FINVIZ_PRESETS.forEach(p=>{
-      const a=document.createElement('a'); a.href=p.url; a.target='_blank'; a.rel='noopener'; a.className='scr-item'; a.dataset.lvl=p.lvl;
-      a.innerHTML=`<div style="flex:1;min-width:0"><div class="title">${p.title}</div><div class="desc">Finviz • Opens with filters applied</div></div><div style="display:flex;align-items:center;gap:8px"><span class="badge">${p.lvl}</span></div>`;
-      list.appendChild(a);
-    });
-  }
-
-  const sh=id=>q('#'+id);
-  q('#toolGPTs')?.addEventListener('click', ()=> sh('sheetGPTs').hidden=false);
-  q('#toolScreeners')?.addEventListener('click', ()=>{ renderScreeners(); sh('sheetScreeners').hidden=false; });
-  document.querySelectorAll('.sheet-close').forEach(btn=> btn.addEventListener('click', ()=>{ const id=btn.getAttribute('data-close'); sh(id).hidden=true; }));
-  const nav=q('#btmNav'); if(nav){
-    nav.addEventListener('click', (e)=>{
-      const tabBtn=e.target.closest('.tab'); if(!tabBtn) return;
-      nav.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-      tabBtn.classList.add('active');
-      const tab=tabBtn.dataset.tab;
-      if(tab==='home'){ ['sheetScreeners','sheetGPTs'].forEach(s=>sh(s)?.setAttribute('hidden','')); window.scrollTo({top:0,behavior:'smooth'}); }
-      else if(tab==='screeners'){ renderScreeners(); sh('sheetGPTs')?.setAttribute('hidden',''); sh('sheetScreeners')?.removeAttribute('hidden'); }
-      else if(tab==='gpts'){ sh('sheetScreeners')?.setAttribute('hidden',''); sh('sheetGPTs')?.removeAttribute('hidden'); }
-      else if(tab==='settings'){ els.themeToggle?.click(); }
-    });
-  }
-
-  /* ---------- Hover tooltip dismiss ---------- */
-  function dismissHover(){ if(!els.chart) return; try{ Plotly.Fx.unhover(els.chart); }catch(_){} }
-  function wireHoverDismiss(){
-    if(els.chart?._hoverDismissWired) return;
-    document.addEventListener('pointerdown', (e)=>{ const tappedHoverBox=e.target.closest?.('.hoverlayer'); const insideChart=els.chart.contains(e.target); if(!insideChart||tappedHoverBox) dismissHover(); }, {capture:true});
-    window.addEventListener('keydown', e=>{ if(e.key==='Escape') dismissHover(); });
-    window.addEventListener('scroll', dismissHover, { passive:true });
-    els.chart._hoverDismissWired=true;
-  }
-
-  /* ---------- Boot ---------- */
-  renderScreeners();
-  const bootTicker = localStorage.getItem('lastTicker') || 'AAPL';
-  els.input.value = bootTicker;
-  const _origOnSearch = onSearch;
-  onSearch = async (t,c)=>{ localStorage.setItem('lastTicker',t); return _origOnSearch(t,c); };
-  onSearch(bootTicker,'');
+  // initial
+  q('#q').value='AAPL';
+  q('#searchBtn').addEventListener('click', ()=> render(q('#q').value.trim().toUpperCase()||'AAPL'));
+  render('AAPL');
 })();
-  </script>
+</script>
 </body>
 </html>
