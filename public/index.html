@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Stratus Chart — Live Price + Delta + Fib v.035</title>
+  <title>Stratus Chart — Live Price + Delta + Fib v.038</title>
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
   <style>
     :root{
@@ -27,19 +27,19 @@
     .title{font-weight:900;letter-spacing:.2px;margin:0 0 10px 0;}
 
     .toolbar{
-      display:grid;gap:10px;grid-template-columns:260px 1fr 1fr auto;align-items:end;
+      display:grid;gap:10px;grid-template-columns:minmax(260px,1fr) 130px 150px 1fr;align-items:end;
       background:linear-gradient(180deg,rgba(59,130,246,.12),transparent 40%) , var(--panel);
       border:1px solid var(--border);border-radius:14px;padding:12px;
     }
-    @media (max-width:980px){ .toolbar{grid-template-columns:1fr 1fr; } }
-    @media (max-width:640px){ .toolbar{grid-template-columns:1fr; } }
+    @media (max-width:980px){ .toolbar{grid-template-columns:1fr 1fr;} }
+    @media (max-width:640px){ .toolbar{grid-template-columns:1fr;} }
 
     label{font-size:12px;font-weight:800;color:#cbd5ff;display:block;margin-bottom:6px;}
     select,input{width:100%;background:#0c1220;color:var(--text);border:1px solid var(--border);
                  border-radius:10px;padding:10px;outline:none}
     input:focus,select:focus{box-shadow:0 0 0 2px var(--focus)}
 
-    .chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+    .chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end;}
     .chip{padding:8px 12px;border-radius:999px;border:1px solid var(--border);
           background:radial-gradient(120% 140% at 50% 0%, rgba(255,255,255,.08), transparent 60%), var(--panel);
           color:var(--text);font-weight:700;cursor:pointer;user-select:none}
@@ -56,21 +56,24 @@
     .row{display:grid;gap:16px;margin-top:16px;}
     .box{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px;}
     .box-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-    .box-title{font-weight:900;font-size:22px;letter-spacing:.3px;}
+    .box-title{font-weight:900;font-size:22px;letter-spacing:.3px;white-space:nowrap;}
     .divider{height:2px;background:linear-gradient(90deg,#60a5fa,#22c55e);opacity:.9;border-radius:999px;margin:6px 0 8px;}
 
     #priceChart{height:56vh;min-height:420px;}
     #macdChart,#rsiChart{height:28vh;min-height:220px;}
 
     .legend-note{font-size:13px;color:#cbd5e1;display:flex;flex-wrap:wrap;gap:10px;align-items:center;}
-    .pill{
-      padding:2px 8px;border-radius:999px;border:1px solid transparent;
-      font-weight:800;letter-spacing:.2px
-    }
+    .pill{padding:2px 8px;border-radius:999px;border:1px solid transparent;font-weight:800;letter-spacing:.2px}
     .pill.up{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.45);color:#86efac;}
     .pill.down{background:rgba(239,68,68,.10);border-color:rgba(239,68,68,.45);color:#fecaca;}
-
     .muted{color:var(--muted)}
+
+    .input-row{display:flex;gap:8px;align-items:center}
+    #tickerInput{text-transform:uppercase}
+    .btn{height:40px;padding:0 12px;border:1px solid var(--border);background:#0c1220;color:#cbd5ff;
+         border-radius:10px;font-weight:800;cursor:pointer}
+    .btn:hover{background:#101831}
+    .btn-go{min-width:70px}
   </style>
 </head>
 <body>
@@ -79,34 +82,42 @@
     <div class="toolbar">
       <div>
         <label for="tickerInput">Ticker</label>
-        <input id="tickerInput"
-               type="text"
-               placeholder="TSLA"
-               autocapitalize="characters"
-               autocorrect="off"
-               spellcheck="false"
-               autocomplete="on"
-               list="tickerList"
-               enterkeyhint="go" />
+        <div class="input-row">
+          <input id="tickerInput"
+                 type="text"
+                 placeholder="TSLA"
+                 autocapitalize="characters"
+                 autocorrect="off"
+                 spellcheck="false"
+                 autocomplete="on"
+                 list="tickerList"
+                 enterkeyhint="go"
+                 aria-label="Ticker symbol" />
+          <button id="btnGo" class="btn btn-go" title="Load (Enter)">Go ↵</button>
+          <button id="btnRefresh" class="btn" title="Refresh current">↻</button>
+        </div>
         <datalist id="tickerList"></datalist>
       </div>
+
       <div>
         <label for="timeSel">Time</label>
-        <select id="timeSel">
-          <option value="1d">1 day</option><option value="2d">2 days</option><option value="5d">5 days</option><option value="10d">10 days</option>
+        <select id="timeSel" aria-label="Time range">
+          <option value="1d">1 d</option><option value="2d">2 d</option><option value="5d">5 d</option><option value="10d">10 d</option>
           <option disabled>──────────</option>
-          <option value="1mo">1 month</option><option value="2mo">2 months</option><option value="3mo">3 months</option>
-          <option value="6mo" selected>6 months</option><option value="ytd">YTD</option><option value="1y">1 year</option>
-          <option value="2y">2 years</option><option value="5y">5 years</option><option value="10y">10 years</option><option value="max">Max</option>
+          <option value="1mo">1 m</option><option value="2mo">2 m</option><option value="3mo">3 m</option>
+          <option value="6mo" selected>6 m</option><option value="ytd">YTD</option><option value="1y">1 y</option>
+          <option value="2y">2 y</option><option value="5y">5 y</option><option value="10y">10 y</option><option value="max">Max</option>
         </select>
       </div>
+
       <div>
         <label for="freqSel">Frequency</label>
-        <select id="freqSel">
-          <option value="1m">1-Minute</option><option value="5m">5-Minute</option><option value="15m">15-Minute</option><option value="60m">Hourly</option>
+        <select id="freqSel" aria-label="Frequency">
+          <option value="1m">1-min</option><option value="5m">5-min</option><option value="15m">15-min</option><option value="60m">Hourly</option>
           <option disabled>──────────</option><option value="1d" selected>Daily</option><option value="1wk">Weekly</option><option value="1mo">Monthly</option>
         </select>
       </div>
+
       <div class="chips" id="chips">
         <div class="chip active" data-k="SMA20">SMA 20</div>
         <div class="chip active" data-k="SMA50">SMA 50</div>
@@ -132,7 +143,6 @@
               <span id="updatedLine" class="muted">Updated: —</span>
             </div>
           </div>
-          <!-- removed the extra 'Price' label -->
         </div>
         <div class="divider" aria-hidden="true"></div>
         <div id="priceChart"></div>
@@ -169,7 +179,8 @@
     tkr: $('#tickerInput'), time: $('#timeSel'), freq: $('#freqSel'), chips: $('#chips'),
     headline: $('#headline'), last: $('#lastLine'), prev: $('#prevCloseLine'),
     delta: $('#deltaLine'), updated: $('#updatedLine'),
-    price: $('#priceChart'), macd: $('#macdChart'), rsi: $('#rsiChart')
+    price: $('#priceChart'), macd: $('#macdChart'), rsi: $('#rsiChart'),
+    goBtn: $('#btnGo'), refreshBtn: $('#btnRefresh')
   };
 
   /* ===== Utilities ===== */
@@ -268,21 +279,6 @@
     const shift=26, spanA=shiftFwd(spanA0,shift,n), spanB=shiftFwd(spanB0,shift,n), chikou=shiftBack(cl,shift,n);
     return { tenkan, kijun, spanA, spanB, chikou };
   }
-  function fillEdges(arr){
-    const out=arr.slice(); let last=null;
-    for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; }
-    const fi=out.findIndex(v=>Number.isFinite(v)); if(fi>0){ for(let i=fi-1;i>=0;i--) out[i]=out[fi]; }
-    let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } }
-    if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; }
-    return out;
-  }
-  function exaggerateCloud(A,B,mag=1.6,loClip=-Infinity,hiClip=Infinity){
-    if(!(mag>1)) return {A,B};
-    const a=A.slice(), b=B.slice();
-    for(let i=0;i<a.length;i++){ const x=a[i], y=b[i]; if(!Number.isFinite(x)||!Number.isFinite(y)) continue;
-      const mid=(x+y)/2, half=(x-y)/2; a[i]=Math.min(Math.max(mid+half*mag,loClip),hiClip); b[i]=Math.min(Math.max(mid-half*mag,loClip),hiClip); }
-    return {A:a,B:b};
-  }
 
   /* ===== Strict price fit & Auto Fib ===== */
   async function fitPriceAxisToCandlesStrict(){
@@ -301,6 +297,16 @@
     const pad=Math.max((hi-lo)*0.08,0.5);
     try{ await Plotly.relayout(gd,{ 'yaxis.autorange':false,'yaxis.range':[lo-pad,hi+pad],'yaxis.rangemode':'normal' }); }catch{}
   }
+
+  // Remove empty weekends (and overnight for intraday) to avoid "compressed days"
+  function rangeBreaksFor(interval){
+    const rb=[{pattern:'day of week', bounds:[6,1]}]; // drop Sat/Sun
+    if(['1m','5m','15m','60m'].includes(interval)){
+      rb.push({pattern:'hour', bounds:[16,9]}); // drop after-hours (approx)
+    }
+    return rb;
+  }
+
   function fibLevels(hi,lo){ const span=hi-lo; const P=[1,0.786,0.618,0.5,0.382,0.236,0]; return P.map(p=>({pct:p,y:lo+span*p})); }
   function rightX(gd){ const L=gd._fullLayout||gd.layout||{}, xa=L.xaxis||{}; if(Array.isArray(xa.range)) return xa.range[1]; const c=(gd.data||[]).find(t=>t.type==='candlestick'); return c?c.x[c.x.length-1]:null; }
   async function updateAutoFib(){
@@ -330,8 +336,8 @@
 
     // Ensure enough history for SMA-200 when Daily
     let fetchRange = displayRange;
-    const pairPeek = normalizePair(displayRange, freq);
-    if (active.has('SMA200') && pairPeek.interval==='1d') fetchRange = bumpToAtLeast(displayRange, '1y');
+    const peek = normalizePair(displayRange, freq);
+    if (active.has('SMA200') && peek.interval==='1d') fetchRange = bumpToAtLeast(displayRange, '1y');
 
     const {range:rg, interval:intv} = normalizePair(fetchRange, freq);
     const full=await fetchChart(ticker, rg, intv);
@@ -366,7 +372,6 @@
 
     /* --- PRICE traces --- */
     const traces=[];
-    // Ichimoku cloud (optional)
     if(active.has('ICHI')){
       const ichi=calcIchimoku(full);
       const tenkan=pick(ichi.tenkan), kijun=pick(ichi.kijun), spanA=pick(ichi.spanA), spanB=pick(ichi.spanB), chikou=pick(ichi.chikou);
@@ -387,18 +392,15 @@
       );
     }
 
-    // Candle + overlays
     traces.push({
       type:'candlestick', x, open:o, high:h, low:l, close:c, name:ticker,
       increasing:{line:{color:css('--up'),width:1.15}}, decreasing:{line:{color:css('--down'),width:1.15}},
       whiskerwidth:0.4, opacity:0.95,
       hovertemplate:'O %{open:.2f}<br>H %{high:.2f}<br>L %{low:.2f}<br>C %{close:.2f}<extra></extra>'
     });
-
     if(active.has('SMA20'))  traces.push({type:'scatter',x,y:sma20,name:'SMA 20',line:{color:css('--sma20'),width:1.4},connectgaps:true});
     if(active.has('SMA50'))  traces.push({type:'scatter',x,y:sma50,name:'SMA 50',line:{color:css('--sma50'),width:1.4},connectgaps:true});
     if(active.has('SMA200')) traces.push({type:'scatter',x,y:sma200,name:'SMA 200',line:{color:css('--sma200'),width:1.6},connectgaps:true});
-
     if(active.has('VOL')){
       const volColors = c.map((ci,i)=> ci>=o[i] ? 'rgba(34,197,94,.38)' : 'rgba(239,68,68,.34)');
       traces.push({type:'bar',x,y:v,name:'Volume',opacity:1,yaxis:'y2',marker:{color:volColors}});
@@ -406,8 +408,8 @@
 
     const layoutPrice={
       margin:{l:56,r:28,t:6,b:24},
-      xaxis:{showgrid:true,gridcolor:css('--grid'),rangeslider:{visible:false}},
-      yaxis:{title:'',side:'right',showgrid:true,gridcolor:css('--grid')},  /* hide lingering axis title */
+      xaxis:{showgrid:true,gridcolor:css('--grid'),rangeslider:{visible:false},rangebreaks:rangeBreaksFor(intv)},
+      yaxis:{title:'',side:'right',showgrid:true,gridcolor:css('--grid')},
       yaxis2:{overlaying:'y',side:'right',showgrid:false},
       legend:{orientation:'h'},
       paper_bgcolor:getComputedStyle($('#boxPrice')).backgroundColor,
@@ -426,7 +428,7 @@
     ];
     const layoutMACD={
       margin:{l:56,r:28,t:6,b:24},
-      xaxis:{showgrid:true,gridcolor:css('--grid'),rangeslider:{visible:false}},
+      xaxis:{showgrid:true,gridcolor:css('--grid'),rangeslider:{visible:false},rangebreaks:rangeBreaksFor(intv)},
       yaxis:{title:'MACD',side:'right',showgrid:true,gridcolor:css('--grid')},
       paper_bgcolor:getComputedStyle($('#boxMACD')).backgroundColor,
       plot_bgcolor:getComputedStyle($('#boxMACD')).backgroundColor,
@@ -442,7 +444,7 @@
     ];
     const layoutRSI={
       margin:{l:56,r:28,t:6,b:24},
-      xaxis:{showgrid:true,gridcolor:css('--grid'),rangeslider:{visible:false}},
+      xaxis:{showgrid:true,gridcolor:css('--grid'),rangeslider:{visible:false},rangebreaks:rangeBreaksFor(intv)},
       yaxis:{title:'RSI',range:[0,100],side:'right',showgrid:true,gridcolor:css('--grid')},
       paper_bgcolor:getComputedStyle($('#boxRSI')).backgroundColor,
       plot_bgcolor:getComputedStyle($('#boxRSI')).backgroundColor,
@@ -465,7 +467,11 @@
   });
   els.time.addEventListener('change',()=>go());
   els.freq.addEventListener('change',()=>go());
+
+  // Enter = Go
   els.tkr.addEventListener('keydown',e=>{ if(e.key==='Enter'){ window.location.hash = els.tkr.value.trim().toUpperCase(); go(); } });
+  els.goBtn.addEventListener('click',()=>{ window.location.hash = els.tkr.value.trim().toUpperCase(); go(); });
+  els.refreshBtn.addEventListener('click',()=> go());
 
   // Uppercase while typing (desktop browsers ignore autocapitalize)
   els.tkr.addEventListener('input', () => {
@@ -481,14 +487,17 @@
     window.location.hash = els.tkr.value.trim().toUpperCase();
     go();
   });
-  // Populate the datalist from a CSV of tickers (place stock_data.csv next to index.html)
+
+  // Populate the datalist from CSV, with a safe fallback list
+  const FALLBACK = ["AAPL","MSFT","GOOGL","AMZN","META","TSLA","NVDA","NFLX","AMD","INTC","AVGO","QCOM","ADBE","CSCO","SHOP","SQ","PYPL","PLTR","BABA","ORCL","CRM","IBM","UBER","LYFT","SNOW","NET","CRWD","PANW","MDB","TSM","ASML","SPY","QQQ","IWM","TLT","XLF","XLK","XLE","XLC","XLY","XLI","XLV","XLP","XLU","SMH","ARKK"];
   (async () => {
     try {
-      const csv = await (await fetch('./stock_data.csv', { cache: 'no-store' })).text();
-      // very light CSV split (handles quoted commas)
+      const res = await fetch('./stock_data.csv', { cache: 'no-store' });
+      const csv = await res.text();
       const rows = csv.trim().split(/\r?\n/).slice(1);
       const split = s => s.match(/("([^"]*)"|[^,]+)/g).map(x => x.replace(/^"|"$/g,''));
       const list = document.getElementById('tickerList');
+      let count = 0;
       for (const r of rows) {
         const [symbol, name] = split(r);
         if (!symbol) continue;
@@ -496,8 +505,12 @@
         opt.value = symbol.toUpperCase();
         opt.label = name ? `${symbol.toUpperCase()} — ${name}` : symbol.toUpperCase();
         list.appendChild(opt);
+        if (++count > 3000) break; // keep it snappy
       }
-    } catch (err) { console.warn('datalist load failed:', err); }
+    } catch {
+      const list = document.getElementById('tickerList');
+      FALLBACK.forEach(s => { const o=document.createElement('option'); o.value=s; list.appendChild(o); });
+    }
   })();
 
   async function go(){
