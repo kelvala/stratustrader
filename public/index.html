@@ -79,7 +79,16 @@
     <div class="toolbar">
       <div>
         <label for="tickerInput">Ticker</label>
-        <input id="tickerInput" type="text" placeholder="TSLA" spellcheck="false" autocomplete="off" />
+        <input id="tickerInput"
+               type="text"
+               placeholder="TSLA"
+               autocapitalize="characters"
+               autocorrect="off"
+               spellcheck="false"
+               autocomplete="on"
+               list="tickerList"
+               enterkeyhint="go" />
+        <datalist id="tickerList"></datalist>
       </div>
       <div>
         <label for="timeSel">Time</label>
@@ -457,6 +466,39 @@
   els.time.addEventListener('change',()=>go());
   els.freq.addEventListener('change',()=>go());
   els.tkr.addEventListener('keydown',e=>{ if(e.key==='Enter'){ window.location.hash = els.tkr.value.trim().toUpperCase(); go(); } });
+
+  // Uppercase while typing (desktop browsers ignore autocapitalize)
+  els.tkr.addEventListener('input', () => {
+    const { selectionStart:s, selectionEnd:e } = els.tkr;
+    const up = els.tkr.value.toUpperCase();
+    if (els.tkr.value !== up) {
+      els.tkr.value = up;
+      if (s != null && e != null) els.tkr.setSelectionRange(s, e);
+    }
+  });
+  // Trigger search when a datalist option is chosen
+  els.tkr.addEventListener('change', () => {
+    window.location.hash = els.tkr.value.trim().toUpperCase();
+    go();
+  });
+  // Populate the datalist from a CSV of tickers (place stock_data.csv next to index.html)
+  (async () => {
+    try {
+      const csv = await (await fetch('./stock_data.csv', { cache: 'no-store' })).text();
+      // very light CSV split (handles quoted commas)
+      const rows = csv.trim().split(/\r?\n/).slice(1);
+      const split = s => s.match(/("([^"]*)"|[^,]+)/g).map(x => x.replace(/^"|"$/g,''));
+      const list = document.getElementById('tickerList');
+      for (const r of rows) {
+        const [symbol, name] = split(r);
+        if (!symbol) continue;
+        const opt = document.createElement('option');
+        opt.value = symbol.toUpperCase();
+        opt.label = name ? `${symbol.toUpperCase()} — ${name}` : symbol.toUpperCase();
+        list.appendChild(opt);
+      }
+    } catch (err) { console.warn('datalist load failed:', err); }
+  })();
 
   async function go(){
     const t=getTicker(); els.tkr.value=t; await draw(t);
