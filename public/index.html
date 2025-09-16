@@ -3,48 +3,32 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Stratus Chart — Boxes + Auto Fib + Ticker Search v.002</title>
+  <title>Stratus Chart — Boxes + Auto Fib + Ticker Search v.034</title>
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
   <style>
     :root{
-      /* Finviz-style dark palette */
       --bg:#0f1115; --text:#e5e7eb; --muted:#9ca3af;
       --panel:#121827; --border:#22304a; --hover:#141b2a;
       --accent:#22c55e; --focus:#3b82f6; --grid:#253146;
-
       --up:#16a34a; --down:#e11d48;
       --sma20:#22c55e; --sma50:#60a5fa; --sma200:#f59e0b;
       --rsi:#a78bfa; --macd:#38bdf8; --vol:#10b981;
-
       --ichi-tenkan:#f59e0b; --ichi-kijun:#60a5fa; --ichi-chikou:#93c5fd;
       --ichi-up:rgba(34,197,94,.32); --ichi-down:rgba(239,68,68,.28);
-
-      --fib-line:#93c5fd;         /* fib line color */
-      --fib-major:#c084fc;        /* 61.8/38.2 labels */
-      --fib-zone:rgba(147,197,253,.12); /* 38.2–61.8 zone fill */
-      --fib-label-bg:#0b1020;     /* label chip bg */
+      --fib-line:#93c5fd; --fib-major:#c084fc; --fib-zone:rgba(147,197,253,.12); --fib-label-bg:#0b1020;
     }
     *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--text);
-         font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
+    body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;}
     .container{max-width:1200px;margin:16px auto;padding:0 16px;}
     .title{font-weight:900;letter-spacing:.2px;margin:0 0 10px 0;}
-
-    .toolbar{
-      display:grid;gap:10px;grid-template-columns:260px 1fr 1fr auto;align-items:end;
-      background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px;
-    }
-    @media (max-width:980px){ .toolbar{grid-template-columns:1fr 1fr; } }
-    @media (max-width:640px){ .toolbar{grid-template-columns:1fr; } }
-
+    .toolbar{display:grid;gap:10px;grid-template-columns:260px 1fr 1fr auto;align-items:end;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px;}
+    @media (max-width:980px){ .toolbar{grid-template-columns:1fr 1fr;} }
+    @media (max-width:640px){ .toolbar{grid-template-columns:1fr;} }
     label{font-size:12px;font-weight:800;color:#cbd5ff;display:block;margin-bottom:6px;}
-    select,input{width:100%;background:#0c1220;color:var(--text);border:1px solid var(--border);
-                 border-radius:10px;padding:10px;outline:none}
+    select,input{width:100%;background:#0c1220;color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px;outline:none}
     input:focus,select:focus{box-shadow:0 0 0 2px var(--focus)}
-
     .chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
-    .chip{padding:8px 12px;border-radius:999px;border:1px solid var(--border);
-          background:var(--panel);color:var(--text);font-weight:700;cursor:pointer;user-select:none}
+    .chip{padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-weight:700;cursor:pointer;user-select:none}
     .chip.active{box-shadow:0 0 0 1px currentColor, 0 0 14px 3px currentColor}
     .chip[data-k="SMA20"]{color:var(--sma20);border-color:var(--sma20)}
     .chip[data-k="SMA50"]{color:var(--sma50);border-color:var(--sma50)}
@@ -54,17 +38,14 @@
     .chip[data-k="MACD"]{color:var(--macd);border-color:var(--macd)}
     .chip[data-k="RSI"]{color:var(--rsi);border-color:var(--rsi)}
     .chip[data-k="FIB"]{color:var(--fib-line);border-color:var(--fib-line)}
-
     .row{display:grid;gap:16px;margin-top:16px;}
     .box{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:12px;}
     .box-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
     .box-title{font-weight:800;opacity:.95;}
     .box-sub{color:var(--muted);font-size:12px;}
     .divider{height:2px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.85;border-radius:999px;margin:6px 0 8px;}
-
     #priceChart{height:56vh;min-height:420px;}
     #macdChart,#rsiChart{height:28vh;min-height:220px;}
-
     .legend-note{font-size:12px;color:var(--muted);}
   </style>
 </head>
@@ -106,7 +87,6 @@
     </div>
 
     <div class="row">
-      <!-- PRICE BOX -->
       <section class="box" id="boxPrice">
         <div class="box-header">
           <div>
@@ -115,27 +95,19 @@
           </div>
           <div class="box-sub">Price</div>
         </div>
-        <div class="divider" aria-hidden="true"></div>
+        <div class="divider"></div>
         <div id="priceChart"></div>
       </section>
 
-      <!-- MACD BOX -->
       <section class="box" id="boxMACD">
-        <div class="box-header">
-          <div class="box-title">MACD (12, 26, 9)</div>
-          <div class="box-sub">Momentum</div>
-        </div>
-        <div class="divider" aria-hidden="true"></div>
+        <div class="box-header"><div class="box-title">MACD (12, 26, 9)</div><div class="box-sub">Momentum</div></div>
+        <div class="divider"></div>
         <div id="macdChart"></div>
       </section>
 
-      <!-- RSI BOX -->
       <section class="box" id="boxRSI">
-        <div class="box-header">
-          <div class="box-title">RSI (14)</div>
-          <div class="box-sub">Relative Strength</div>
-        </div>
-        <div class="divider" aria-hidden="true"></div>
+        <div class="box-header"><div class="box-title">RSI (14)</div><div class="box-sub">Relative Strength</div></div>
+        <div class="divider"></div>
         <div id="rsiChart"></div>
       </section>
     </div>
@@ -156,31 +128,37 @@
   const fmt = n => (Number.isFinite(n)?n.toFixed(2):'—');
   const debounce = (fn,ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
   const toET = (d)=> new Date(d.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const toETISO = (d)=> { const e=toET(d);
-    return new Date(Date.UTC(e.getFullYear(),e.getMonth(),e.getDate(),e.getHours(),e.getMinutes(),e.getSeconds(),e.getMilliseconds())).toISOString();
-  };
+  const toETISO = (d)=> { const e=toET(d); return new Date(Date.UTC(e.getFullYear(),e.getMonth(),e.getDate(),e.getHours(),e.getMinutes(),e.getSeconds(),e.getMilliseconds())).toISOString(); };
   const getTicker = () => (els.tkr.value.trim() || (window.location.hash.replace('#','') || 'TSLA')).toUpperCase();
 
   /* ---------- data fetch ---------- */
-  function normalizePair(range,freq){
+  const order = ['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','5y','10y','max'];
+  const daysMap={'1d':1,'2d':2,'5d':5,'10d':10,'1mo':31,'2mo':62,'3mo':93,'6mo':182,'ytd':365,'1y':365,'2y':730,'5y':1825,'10y':3650,'max':36500};
+  function bumpToAtLeast(range, target){
+    const i=order.indexOf(range), j=order.indexOf(target);
+    if(i<0||j<0) return target;
+    return i<j ? target : range;
+  }
+  function normalizePair(range,freq){ // returns {range, interval}
     const intraday=['1m','5m','15m','60m'];
     if(intraday.includes(freq)){
-      const minFor={ '1m':'1d', '5m':'5d', '15m':'10d', '60m':'1mo' };
-      const order=['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','5y','10y','max'];
-      const idx=v=>Math.max(0,order.indexOf(v));
-      const minRange=minFor[freq];
-      if(idx(range)<idx(minRange)) range=minRange;
-      return {range, interval:freq};
+      const minFor={ '1m':'1d','5m':'5d','15m':'10d','60m':'1mo' };
+      const minR = minFor[freq];
+      if(order.indexOf(range) < order.indexOf(minR)) range = minR;
+      return { range, interval: freq };
     }
-    const map={'1d':'1d','1wk':'1wk','1mo':'1mo'};
-    return {range, interval:map[freq]||'1d'};
+    const map={ '1d':'1d','1wk':'1wk','1mo':'1mo' };
+    return { range, interval: map[freq] || '1d' };
   }
-  function getVisibleData(fullRows, range){
-    if(range==='ytd'){ const now=new Date(); const jan1=new Date(now.getFullYear(),0,1);
-      return fullRows.filter(r=>toET(r.date)>=toET(jan1)); }
-    const daysMap={'1d':1,'2d':2,'5d':5,'10d':10,'1mo':31,'2mo':62,'3mo':93,'6mo':182,'1y':365,'2y':730,'5y':1825,'10y':3650,'max':36500};
-    const days=daysMap[range]??365; const cutoff=new Date(Date.now()-days*864e5);
-    return fullRows.filter(r=>toET(r.date)>=toET(cutoff));
+  function getVisibleIdx(fullRows, range){
+    let startCut;
+    if(range==='ytd'){ const now=new Date(); startCut = new Date(now.getFullYear(),0,1); }
+    else{ const days=daysMap[range]??365; startCut = new Date(Date.now()-days*864e5); }
+    const idx = [];
+    for(let i=0;i<fullRows.length;i++){
+      if(toET(fullRows[i].date) >= toET(startCut)) idx.push(i);
+    }
+    return idx;
   }
   async function fetchChart(ticker, range, interval){
     try{
@@ -227,7 +205,7 @@
     return {macd,signal,hist};
   }
 
-  /* ---------- Ichimoku ---------- */
+  /* ---------- Ichimoku helpers ---------- */
   function rollingHigh(arr,w){ const out=new Array(arr.length).fill(null);
     for(let i=0;i<arr.length;i++){ if(i<w-1) continue; let hi=-Infinity; for(let j=i-w+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
   function rollingLow(arr,w){ const out=new Array(arr.length).fill(null);
@@ -268,14 +246,14 @@
     return {gL,gU,rL,rU};
   }
 
-  /* ---------- Fit price axis strictly to candles ---------- */
+  /* ---------- Strict price fit ---------- */
   async function fitPriceAxisToCandlesStrict(){
     const gd=els.price, data=gd.data||[]; const c=data.find(t=>t.type==='candlestick'); if(!c) return;
     const toMs=v=>new Date(v).getTime();
     const L=gd._fullLayout||gd.layout||{}, xa=L.xaxis||{};
     let x0ms,x1ms;
     if(Array.isArray(xa.range)&&xa.autorange===false){ x0ms=toMs(xa.range[0]); x1ms=toMs(xa.range[1]); }
-    else { x0ms=toMs(c.x[0]); x1ms=toMs(c.x[c.length-1]); } // fallback safeguard
+    else { x0ms=toMs(c.x[0]); x1ms=toMs(c.x[c.x.length-1]); }
     const cx=c.x.map(toMs); let i0=0; while(i0<cx.length&&cx[i0]<x0ms) i0++; let i1=cx.length-1; while(i1>i0&&cx[i1]>x1ms) i1--;
     if(i1<=i0) return;
     let hi=-Infinity,lo=Infinity;
@@ -286,177 +264,173 @@
     try{ await Plotly.relayout(gd,{ 'yaxis.autorange':false,'yaxis.range':[lo-pad,hi+pad],'yaxis.rangemode':'normal' }); }catch{}
   }
 
-  /* ---------- Auto Fib (visible window) ---------- */
-  function fibLevels(hi,lo){
-    const span=hi-lo;
-    const P=[1,0.786,0.618,0.5,0.382,0.236,0]; // draw from top -> bottom
-    return P.map(p=>({ pct:p, y: lo + span*p }));
-  }
-  function rightX(gd){
-    const L=gd._fullLayout||gd.layout||{}, xa=L.xaxis||{};
-    if(Array.isArray(xa.range)){ return xa.range[1]; }
-    const c=(gd.data||[]).find(t=>t.type==='candlestick'); return c?c.x[c.x.length-1]:null;
-  }
+  /* ---------- Auto Fib ---------- */
+  function fibLevels(hi,lo){ const span=hi-lo; const P=[1,0.786,0.618,0.5,0.382,0.236,0]; return P.map(p=>({pct:p,y:lo+span*p})); }
+  function rightX(gd){ const L=gd._fullLayout||gd.layout||{}, xa=L.xaxis||{}; if(Array.isArray(xa.range)) return xa.range[1]; const c=(gd.data||[]).find(t=>t.type==='candlestick'); return c?c.x[c.x.length-1]:null; }
   async function updateAutoFib(){
     const show = active.has('FIB');
     const gd=els.price; if(!gd) return;
-    if(!show){
-      const L=gd.layout||gd._fullLayout||{};
-      const shapes=(L.shapes||[]).filter(s=>!s._fib);
-      const ann=(L.annotations||[]).filter(a=>!a._fib);
-      await Plotly.relayout(gd,{shapes,annotations:ann});
-      return;
-    }
+    if(!show){ const L=gd.layout||gd._fullLayout||{}; const shapes=(L.shapes||[]).filter(s=>!s._fib); const ann=(L.annotations||[]).filter(a=>!a._fib); await Plotly.relayout(gd,{shapes,annotations:ann}); return; }
     const data=gd.data||[]; const c=data.find(t=>t.type==='candlestick'); if(!c) return;
-    const toMs=v=>new Date(v).getTime();
-    const L=gd._fullLayout||gd.layout||{}, xa=L.xaxis||{};
-    let x0ms,x1ms;
-    if(Array.isArray(xa.range)&&xa.autorange===false){ x0ms=toMs(xa.range[0]); x1ms=toMs(xa.range[1]); }
-    else { x0ms=toMs(c.x[0]); x1ms=toMs(c.x[c.x.length-1]); }
+    const toMs=v=>new Date(v).getTime(); const L=gd._fullLayout||gd.layout||{}, xa=L.xaxis||{};
+    let x0ms,x1ms; if(Array.isArray(xa.range)&&xa.autorange===false){ x0ms=toMs(xa.range[0]); x1ms=toMs(xa.range[1]); } else { x0ms=toMs(c.x[0]); x1ms=toMs(c.x[c.x.length-1]); }
     const cx=c.x.map(toMs); let i0=0; while(i0<cx.length&&cx[i0]<x0ms) i0++; let i1=cx.length-1; while(i1>i0&&cx[i1]>x1ms) i1--;
     if(i1<=i0) return;
-    let hi=-Infinity,lo=Infinity;
-    for(let i=i0;i<=i1;i++){ hi=Math.max(hi,c.high[i]); lo=Math.min(lo,c.low[i]); }
-    const levels=fibLevels(hi,lo);
-    const x0=c.x[i0], x1=c.x[i1]; const rx=rightX(gd) ?? x1;
-    const zoneTop=levels.find(l=>l.pct===0.618).y;
-    const zoneBot=levels.find(l=>l.pct===0.382).y;
-    const shapes=[
-      {type:'rect', xref:'x', yref:'y', x0:x0, x1:x1, y0:zoneBot, y1:zoneTop, line:{width:0}, fillcolor:css('--fib-zone'), opacity:1, _fib:true},
-      ...levels.map(l=>({ type:'line', xref:'x', yref:'y', x0:x0, x1:x1, y0:l.y, y1:l.y,
-        line:{color:(l.pct===0.618||l.pct===0.382)?css('--fib-major'):css('--fib-line'), width:(l.pct===0.5?2:1), dash:(l.pct===0.5?'dash':'solid')}, _fib:true }))
-    ];
-    const annotations = levels.map(l=>({ _fib:true, x:rx, xref:'x', y:l.y, yref:'y', xanchor:'left',
-      text:`${(l.pct*100).toFixed(1)}%`, bgcolor:css('--fib-label-bg'), bordercolor:css('--fib-line'),
-      font:{size:10,color:css('--text')}, borderwidth:1, opacity:0.9, showarrow:false, ay:0, ax:6 }));
-    const prevShapes=(gd.layout?.shapes||[]).filter(s=>!s._fib);
-    const prevAnn=(gd.layout?.annotations||[]).filter(a=>!a._fib);
-    await Plotly.relayout(gd,{ shapes:[...prevShapes, ...shapes], annotations:[...prevAnn, ...annotations] });
+    let hi=-Infinity,lo=Infinity; for(let i=i0;i<=i1;i++){ hi=Math.max(hi,c.high[i]); lo=Math.min(lo,c.low[i]); }
+    const levels=fibLevels(hi,lo); const x0=c.x[i0], x1=c.x[i1]; const rx=rightX(gd) ?? x1;
+    const zoneTop=levels.find(l=>l.pct===0.618).y, zoneBot=levels.find(l=>l.pct===0.382).y;
+    const shapes=[ {type:'rect',xref:'x',yref:'y',x0:x0,x1:x1,y0:zoneBot,y1:zoneTop,line:{width:0},fillcolor:css('--fib-zone'),opacity:1,_fib:true},
+      ...levels.map(l=>({type:'line',xref:'x',yref:'y',x0:x0,x1:x1,y0:l.y,y1:l.y,line:{color:(l.pct===0.618||l.pct===0.382)?css('--fib-major'):css('--fib-line'),width:(l.pct===0.5?2:1),dash:(l.pct===0.5?'dash':'solid')},_fib:true})) ];
+    const annotations=levels.map(l=>({_fib:true,x:rx,xref:'x',y:l.y,yref:'y',xanchor:'left',text:`${(l.pct*100).toFixed(1)}%`,bgcolor:css('--fib-label-bg'),bordercolor:css('--fib-line'),font:{size:10,color:css('--text')},borderwidth:1,opacity:.9,showarrow:false,ay:0,ax:6}));
+    const prevShapes=(gd.layout?.shapes||[]).filter(s=>!s._fib); const prevAnn=(gd.layout?.annotations||[]).filter(a=>!a._fib);
+    await Plotly.relayout(gd,{shapes:[...prevShapes,...shapes],annotations:[...prevAnn,...annotations]});
   }
-  async function refreshPricePanelExtras(){
-    await fitPriceAxisToCandlesStrict();
-    await updateAutoFib();
-  }
+  async function refreshPricePanelExtras(){ await fitPriceAxisToCandlesStrict(); await updateAutoFib(); }
 
   /* ---------- draw ---------- */
   async function draw(ticker){
-    const range=els.time.value, freq=els.freq.value;
-    const {range:rg, interval:intv}=normalizePair(range,freq);
-    const full=await fetchChart(ticker,rg,intv);
+    const displayRange=els.time.value, freq=els.freq.value;
+
+    // Ensure enough history for SMA200: bump fetch range to >= 1y when SMA200 chip is active.
+    let fetchRange = displayRange;
+    if (active.has('SMA200')) fetchRange = bumpToAtLeast(displayRange, '1y');
+
+    // Map to API interval
+    const pair = normalizePair(fetchRange, freq);
+    const full = await fetchChart(ticker, pair.range, pair.interval);
     if(!full.length){ els.headline.textContent=ticker; els.last.textContent='Last: —'; els.prev.textContent='Prev Close: —'; return; }
 
-    const vis=getVisibleData(full,range);
-    const x=vis.map(r=>toETISO(r.date)), o=vis.map(r=>r.o), h=vis.map(r=>r.h), l=vis.map(r=>r.l), c=vis.map(r=>r.c), v=vis.map(r=>r.v);
-    const sma20=SMA(c,20), sma50=SMA(c,50), sma200=SMA(c,200);
-    const rsi=RSI(c,14); const m=MACD(c,12,26,9);
+    // Precompute arrays on FULL history
+    const xAll = full.map(r=>toETISO(r.date));
+    const oAll = full.map(r=>r.o), hAll=full.map(r=>r.h), lAll=full.map(r=>r.l), cAll=full.map(r=>r.c), vAll=full.map(r=>r.v);
+
+    // Indicators computed on FULL history
+    const sma20All = SMA(cAll,20), sma50All=SMA(cAll,50), sma200All=SMA(cAll,200);
+    const rsiAll = RSI(cAll,14);
+    const macdAll = MACD(cAll,12,26,9);
+
+    // Now slice down to the selected visible range
+    const vidx = getVisibleIdx(full, displayRange);
+    const pick = (arr)=> vidx.map(i=>arr[i]);
+
+    const x = pick(xAll), o=pick(oAll), h=pick(hAll), l=pick(lAll), c=pick(cAll), v=pick(vAll);
+    const sma20=pick(sma20All), sma50=pick(sma50All), sma200=pick(sma200All);
+    const rsi = pick(rsiAll);
+    const m = { macd: pick(macdAll.macd), signal: pick(macdAll.signal), hist: pick(macdAll.hist) };
 
     const last=c.at(-1), prev=c.length>1?c.at(-2):null;
     els.headline.textContent=ticker;
     els.last.textContent=`Last: $${fmt(last)}`;
     els.prev.textContent=`Prev Close: ${prev==null?'—':'$'+fmt(prev)}`;
 
-    /* price traces */
-    const priceTraces=[];
+    /* --- PRICE box --- */
+    const tracesPrice = [];
+
     if(active.has('ICHI')){
-      const ichi=calcIchimoku(vis);
+      const ichi = calcIchimoku( full ); // use full to keep spans consistent
+      // slice ichimoku lines to visible
+      const tenkan = pick(ichi.tenkan), kijun=pick(ichi.kijun), spanA=pick(ichi.spanA), spanB=pick(ichi.spanB), chikou=pick(ichi.chikou);
+      // create a slightly expanded range just for cloud exaggeration clipping
       const hiVis=Math.max(...h.filter(Number.isFinite)), loVis=Math.min(...l.filter(Number.isFinite)), pad=(hiVis-loVis)*0.04;
-      let A=fillEdges(ichi.spanA), B=fillEdges(ichi.spanB);
-      ({A,B}=exaggerateCloud(A,B,1.8,loVis-pad,hiVis+pad));
-      const seg=segmentCloud(A,B);
-      priceTraces.push(
-        {type:'scatter',x,y:seg.gL,line:{width:0},hoverinfo:'skip',showlegend:false,connectgaps:true},
-        {type:'scatter',x,y:seg.gU,fill:'tonexty',line:{width:0},fillcolor:css('--ichi-up'),hoverinfo:'skip',name:'Kumo +',opacity:1,connectgaps:true},
-        {type:'scatter',x,y:seg.rL,line:{width:0},hoverinfo:'skip',showlegend:false,connectgaps:true},
-        {type:'scatter',x,y:seg.rU,fill:'tonexty',line:{width:0},fillcolor:css('--ichi-down'),hoverinfo:'skip',name:'Kumo -',opacity:1,connectgaps:true},
-        {type:'scatter',x,y:ichi.tenkan,name:'Tenkan',line:{color:css('--ichi-tenkan'),width:1}},
-        {type:'scatter',x,y:ichi.kijun, name:'Kijun', line:{color:css('--ichi-kijun'),width:1}},
-        {type:'scatter',x,y:ichi.chikou,name:'Chikou',line:{color:css('--ichi-chikou'),width:1}}
+      const {A,B}=(()=>{ // exaggerate on the sliced parts
+        const A0 = spanA.slice(), B0 = spanB.slice();
+        // small util to fill edges so cloud covers gaps
+        const fill=(arr)=>{ const out=arr.slice(); let last=null; for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; } const fi=out.findIndex(v=>Number.isFinite(v)); if(fi>0){ for(let i=fi-1;i>=0;i--) out[i]=out[fi]; } let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } } if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; } return out; };
+        const Af=fill(A0), Bf=fill(B0);
+        // exaggerate
+        const a=Af.slice(), b=Bf.slice();
+        for(let i=0;i<a.length;i++){ const x1=a[i], y1=b[i]; if(!Number.isFinite(x1)||!Number.isFinite(y1)) continue; const mid=(x1+y1)/2, half=(x1-y1)/2; a[i]=Math.min(Math.max(mid+half*1.8,loVis-pad),hiVis+pad); b[i]=Math.min(Math.max(mid-half*1.8,loVis-pad),hiVis+pad); }
+        return {A:a,B:b};
+      })();
+      // build cloud segments
+      const gL=[],gU=[],rL=[],rU=[];
+      for(let i=0;i<A.length;i++){ const A1=A[i],B1=B[i]; if(!Number.isFinite(A1)||!Number.isFinite(B1)) {gL.push(null);gU.push(null);rL.push(null);rU.push(null);continue;}
+        if(A1>=B1){ gL.push(B1);gU.push(A1); rL.push(null);rU.push(null);} else { rL.push(A1);rU.push(B1); gL.push(null);gU.push(null); } }
+      tracesPrice.push(
+        {type:'scatter', x, y:gL, line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true},
+        {type:'scatter', x, y:gU, fill:'tonexty', line:{width:0}, fillcolor:css('--ichi-up'), hoverinfo:'skip', name:'Kumo +', opacity:1, connectgaps:true},
+        {type:'scatter', x, y:rL, line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true},
+        {type:'scatter', x, y:rU, fill:'tonexty', line:{width:0}, fillcolor:css('--ichi-down'), hoverinfo:'skip', name:'Kumo -', opacity:1, connectgaps:true},
+        {type:'scatter', x, y:tenkan, name:'Tenkan', line:{color:css('--ichi-tenkan'), width:1}, connectgaps:true},
+        {type:'scatter', x, y:kijun,  name:'Kijun',  line:{color:css('--ichi-kijun'),  width:1}, connectgaps:true},
+        {type:'scatter', x, y:chikou, name:'Chikou', line:{color:css('--ichi-chikou'), width:1}, connectgaps:true}
       );
     }
-    priceTraces.push({
-      type:'candlestick', x, open:o, high:h, low:l, close:c, name:ticker,
-      increasing:{line:{color:css('--up'),width:1.15}}, decreasing:{line:{color:css('--down'),width:1.15}},
-      whiskerwidth:0.4, opacity:0.95,
-      hovertemplate:'O %{open:.2f}<br>H %{high:.2f}<br>L %{low:.2f}<br>C %{close:.2f}<extra></extra>'
-    });
-    if(active.has('SMA20'))  priceTraces.push({type:'scatter',x,y:sma20,name:'SMA 20',line:{color:css('--sma20'),width:1.3}});
-    if(active.has('SMA50'))  priceTraces.push({type:'scatter',x,y:sma50,name:'SMA 50',line:{color:css('--sma50'),width:1.3}});
-    if(active.has('SMA200')) priceTraces.push({type:'scatter',x,y:sma200,name:'SMA 200',line:{color:css('--sma200'),width:1.3}});
-    if(active.has('VOL'))    priceTraces.push({type:'bar',x,y:v,name:'Volume',opacity:.35,yaxis:'y2',marker:{color:css('--vol')}});
 
-    const layoutPrice={
+    tracesPrice.push({
+      type:'candlestick', x, open:o, high:h, low:l, close:c, name:ticker,
+      increasing:{line:{color:css('--up'), width:1.15}}, decreasing:{line:{color:css('--down'), width:1.15}},
+      whiskerwidth:0.4, opacity:0.95, hovertemplate:'O %{open:.2f}<br>H %{high:.2f}<br>L %{low:.2f}<br>C %{close:.2f}<extra></extra>'
+    });
+    if(active.has('SMA20'))  tracesPrice.push({type:'scatter', x, y:sma20,  name:'SMA 20',  line:{color:css('--sma20'), width:1.3}, connectgaps:true});
+    if(active.has('SMA50'))  tracesPrice.push({type:'scatter', x, y:sma50,  name:'SMA 50',  line:{color:css('--sma50'), width:1.3}, connectgaps:true});
+    if(active.has('SMA200')) tracesPrice.push({type:'scatter', x, y:sma200, name:'SMA 200', line:{color:css('--sma200'), width:1.3}, connectgaps:true});
+    if(active.has('VOL'))    tracesPrice.push({type:'bar', x, y:v, name:'Volume', opacity:.35, yaxis:'y2', marker:{color:css('--vol')}});
+
+    const layoutPrice = {
       margin:{l:56,r:28,t:6,b:24},
-      xaxis:{showgrid:true,gridcolor:css('--grid'),rangeslider:{visible:false}}, /* 🔥 remove mini chart */
-      yaxis:{title:'Price',side:'right',showgrid:true,gridcolor:css('--grid')},
-      yaxis2:{overlaying:'y',side:'right',showgrid:false},
+      xaxis:{showgrid:true, gridcolor:css('--grid'), rangeslider:{visible:false}},
+      yaxis:{title:'Price', side:'right', showgrid:true, gridcolor:css('--grid')},
+      yaxis2:{overlaying:'y', side:'right', showgrid:false},
       legend:{orientation:'h'},
       paper_bgcolor:getComputedStyle($('#boxPrice')).backgroundColor,
       plot_bgcolor:getComputedStyle($('#boxPrice')).backgroundColor,
       shapes:[], annotations:[]
     };
-    await Plotly.newPlot(els.price,priceTraces,layoutPrice,{responsive:true,displaylogo:false});
+    await Plotly.newPlot(els.price, tracesPrice, layoutPrice, {responsive:true, displaylogo:false});
     await refreshPricePanelExtras();
-    els.price.on('plotly_relayout', debounce(refreshPricePanelExtras,60));
+    els.price.on('plotly_relayout', debounce(refreshPricePanelExtras, 60));
 
-    /* macd */
+    /* --- MACD box --- */
     const tracesMACD=[
-      {type:'scatter',x,y:m.macd,name:'MACD',line:{color:css('--macd'),width:1.2}},
-      {type:'scatter',x,y:m.signal,name:'Signal',line:{width:1}},
-      {type:'bar',x,y:m.hist,name:'Hist',opacity:.45}
+      {type:'scatter', x, y:m.macd,   name:'MACD',   line:{color:css('--macd'), width:1.2}},
+      {type:'scatter', x, y:m.signal, name:'Signal', line:{width:1}},
+      {type:'bar',     x, y:m.hist,   name:'Hist',   opacity:.45}
     ];
     const layoutMACD={
       margin:{l:56,r:28,t:6,b:24},
-      xaxis:{showgrid:true,gridcolor:css('--grid'),rangeslider:{visible:false}},
-      yaxis:{title:'MACD',side:'right',showgrid:true,gridcolor:css('--grid')},
+      xaxis:{showgrid:true, gridcolor:css('--grid'), rangeslider:{visible:false}},
+      yaxis:{title:'MACD', side:'right', showgrid:true, gridcolor:css('--grid')},
       paper_bgcolor:getComputedStyle($('#boxMACD')).backgroundColor,
       plot_bgcolor:getComputedStyle($('#boxMACD')).backgroundColor,
-      showlegend:true,legend:{orientation:'h'}
+      showlegend:true, legend:{orientation:'h'}
     };
-    await Plotly.newPlot(els.macd,tracesMACD,layoutMACD,{responsive:true,displaylogo:false});
+    await Plotly.newPlot(els.macd, tracesMACD, layoutMACD, {responsive:true, displaylogo:false});
 
-    /* rsi */
+    /* --- RSI box --- */
     const tracesRSI=[
-      {type:'scatter',x,y:rsi,name:'RSI',line:{color:css('--rsi'),width:1.2}},
-      {type:'scatter',x,y:Array(x.length).fill(70),name:'70',line:{dash:'dot',width:.9}},
-      {type:'scatter',x,y:Array(x.length).fill(30),name:'30',line:{dash:'dot',width:.9}}
+      {type:'scatter', x, y:rsi, name:'RSI', line:{color:css('--rsi'), width:1.2}},
+      {type:'scatter', x, y:Array(x.length).fill(70), name:'70', line:{dash:'dot', width:.9}},
+      {type:'scatter', x, y:Array(x.length).fill(30), name:'30', line:{dash:'dot', width:.9}}
     ];
     const layoutRSI={
       margin:{l:56,r:28,t:6,b:24},
-      xaxis:{showgrid:true,gridcolor:css('--grid'),rangeslider:{visible:false}},
-      yaxis:{title:'RSI',range:[0,100],side:'right',showgrid:true,gridcolor:css('--grid')},
+      xaxis:{showgrid:true, gridcolor:css('--grid'), rangeslider:{visible:false}},
+      yaxis:{title:'RSI', range:[0,100], side:'right', showgrid:true, gridcolor:css('--grid')},
       paper_bgcolor:getComputedStyle($('#boxRSI')).backgroundColor,
       plot_bgcolor:getComputedStyle($('#boxRSI')).backgroundColor,
-      showlegend:true,legend:{orientation:'h'}
+      showlegend:true, legend:{orientation:'h'}
     };
-    await Plotly.newPlot(els.rsi,tracesRSI,layoutRSI,{responsive:true,displaylogo:false});
+    await Plotly.newPlot(els.rsi, tracesRSI, layoutRSI, {responsive:true, displaylogo:false});
   }
 
   /* ---------- state & controls ---------- */
   const active=new Set(['SMA20','SMA50','SMA200','VOL','ICHI','FIB','MACD','RSI']);
-  function chipOn(k){ return active.has(k); }
   els.chips.addEventListener('click',e=>{
     const el=e.target.closest('.chip'); if(!el) return;
     const k=el.dataset.k; if(!k) return;
-    if(active.has(k)){ active.delete(k); el.classList.remove('active'); }
-    else { active.add(k); el.classList.add('active'); }
+    if(active.has(k)){ active.delete(k); el.classList.remove('active'); } else { active.add(k); el.classList.add('active'); }
     go();
   });
   els.time.addEventListener('change',()=>go());
   els.freq.addEventListener('change',()=>go());
-  els.tkr.addEventListener('keydown',e=>{
-    if(e.key==='Enter'){ window.location.hash = els.tkr.value.trim().toUpperCase(); go(); }
-  });
+  els.tkr.addEventListener('keydown',e=>{ if(e.key==='Enter'){ window.location.hash = els.tkr.value.trim().toUpperCase(); go(); } });
 
   async function go(){
-    const t=getTicker();
-    els.tkr.value=t;
-    await draw(t);
+    const t=getTicker(); els.tkr.value=t; await draw(t);
   }
-
-  // initialize
   document.querySelectorAll('.chip').forEach(c=>c.classList.add('active'));
-  els.tkr.value = getTicker();
-  go();
+  els.tkr.value = getTicker(); go();
 })();</script>
 </body>
 </html>
