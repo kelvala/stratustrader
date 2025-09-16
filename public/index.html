@@ -115,7 +115,10 @@
   .btmnav .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 8px;border-radius:10px;border:0;background:transparent;color:var(--text);font-weight:700;font-size:13px}
   .btmnav .tab.active{background:var(--hover)}
   .btmnav .tab span{font-size:11px;opacity:.85}
-  @media (max-width:720px){ .btmnav{display:flex;gap:8px} body{padding-bottom:64px} }
+  @media (max-width:720px) and (hover:none) and (pointer:coarse){
+    .btmnav{ display:flex; gap:8px }
+    body{ padding-bottom:64px }
+  }
   .scr-list{display:flex;flex-direction:column;gap:10px}
   .scr-item{
     position:relative; display:flex; gap:12px; align-items:flex-start;
@@ -833,13 +836,19 @@
         trVol
       ];
 
+      // --- Plotly layout tweaks for main chart ---
       const layout = {
-        margin:{l:56,r:28,t:18,b:26},
-        xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid') },
+        margin:{ l:56, r:28, t:18, b:32 }, // a smidge more bottom room
+        xaxis:{
+          domain:[0,1],
+          showgrid:true,
+          gridcolor:css('--grid'),
+          rangeslider:{ visible:false }  // hides the mini chart at bottom
+        },
         yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid') },
-        yaxis2:{ domain:[0,0.18], anchor:'x', title:'RSI', range:[0,100] },
-        yaxis3:{ domain:[0.18,0.28], anchor:'x', title:'Vol' },
-        yaxis4:{ domain:[0.28,0.42], anchor:'x', title:'MACD' },
+        yaxis2:{ domain:[0.00, 0.17], anchor:'x', title:'RSI',  range:[0,100] },
+        yaxis3:{ domain:[0.20, 0.31], anchor:'x', title:'Vol' },
+        yaxis4:{ domain:[0.34, 0.49], anchor:'x', title:'MACD' },
         legend:{orientation:'h'},
         paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
         plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor
