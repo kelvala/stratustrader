@@ -138,6 +138,43 @@
   .badge{ font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; background:var(--metric-bg); border:1px solid var(--metric-border); color:var(--muted); white-space:nowrap; margin-top:2px; }
   .scr-item .open-btn{ margin-left:8px; padding:6px 10px; border-radius:10px; border:1px solid var(--border); background:var(--panel); color:var(--text); text-decoration:none; font-weight:700; }
   .scr-item .open-btn:hover{ background:var(--hover); }
+
+/* --- Active chip glow (neon ring) --- */
+.chip {
+  position: relative;
+  z-index: 0;              /* establish stacking context */
+  overflow: visible;       /* let glow extend outside the chip */
+  box-shadow: none;        /* IMPORTANT: no default glow when inactive */
+}
+
+/* treat any of these as "active" */
+.chip.active,
+.chip[aria-pressed="true"],
+.chip[data-on="true"] {
+  border-color: var(--accent, #46d1ff);
+  box-shadow:
+    0 0 0 1px rgba(70, 209, 255, .75) inset,   /* crisp inner ring */
+    0 0 10px rgba(70, 209, 255, .45),          /* soft outer glow */
+    0 0 24px rgba(70, 209, 255, .25);
+}
+
+/* extra bloom behind the chip */
+.chip.active::after,
+.chip[aria-pressed="true"]::after,
+.chip[data-on="true"]::after {
+  content: "";
+  position: absolute;
+  inset: -6px;             /* grow beyond the chip’s edges */
+  border-radius: inherit;
+  background: radial-gradient(
+    60% 60% at 50% 50%,
+    rgba(70, 209, 255, .40) 0%,
+    rgba(70, 209, 255, 0) 70%
+  );
+  filter: blur(10px);
+  z-index: -1;             /* sit behind the chip */
+  pointer-events: none;
+}
 </style>
 </head>
 <body>
