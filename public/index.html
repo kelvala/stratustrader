@@ -79,7 +79,11 @@
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol;}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);}
+  /* Glow around active chips */
+  .chip.active{
+    box-shadow: 0 0 0 2px currentColor, 0 0 10px currentColor;
+  }
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -302,6 +306,8 @@
   let FUNDAMENTALS = {};
   let traceMap = {};
   let PRICE_TIMER = null;
+  /* Add FIB_UPDATING state var near other state vars */
+  let FIB_UPDATING = false;
 
   /* ---------- Utils ---------- */
   const fmt = n => (Number.isFinite(n) ? n.toFixed(2) : '—');
@@ -428,8 +434,18 @@
     return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
   }
   function relayoutPreserve(payload){
-    const S=getAxisState(); const keep=(axKey,s)=>{ if(!s) return {}; const out={}; if(s.range){out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false;} else if(s.autorange){out[`${axKey}.autorange`]=true;} return out; };
-    return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
+    const S=getAxisState();
+    const keep=(axKey,s)=>{ if(!s) return {}; const out={};
+      if(s.range){ out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false; }
+      else if(s.autorange){ out[`${axKey}.autorange`]=true; }
+      return out;
+    };
+    FIB_UPDATING = true;
+    return Plotly.relayout(els.chart, {
+      ...payload,
+      ...keep('xaxis',S.x), ...keep('yaxis',S.y),
+      ...keep('yaxis2',S.y2), ...keep('yaxis3',S.y3), ...keep('yaxis4',S.y4)
+    }).finally(()=>{ FIB_UPDATING = false; });
   }
   const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
   async function addOrUpdateAutoFibTraces(){
@@ -728,7 +744,9 @@
 
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
       try { Plotly.removeAllListeners?.(els.chart, 'plotly_relayout'); } catch {}
-      els.chart.on('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
+      els.chart.on('plotly_relayout', () => {
+        if (fibActive() && !FIB_UPDATING) addOrUpdateAutoFibTraces();
+      });
       if (fibActive()) setTimeout(addOrUpdateAutoFibTraces, 32);
 
       traceMap = {
@@ -753,19 +771,27 @@
     }
   }
 
-  function applyVisibilityFromChips(){
-    Object.entries(traceMap).forEach(([key, idx])=>{
-      const chip=els.toggles.querySelector(`.chip[data-k="${key}"]`); if(!chip) return;
-      const visible = chip.classList.contains('active') ? true : 'legendonly';
-      const indices = Array.isArray(idx) ? idx : [idx];
-      Plotly.restyle(els.chart,{ visible }, indices);
-    });
+  /* ---------- Visibility helpers ---------- */
+  // setVisibilityFor helper
+  function setVisibilityFor(key, on){
+    const idx = traceMap[key]; if (idx == null) return;
+    const indices = Array.isArray(idx) ? idx : [idx];
+    const visible = on ? true : (key === 'ICHI' ? false : 'legendonly');
+    Plotly.restyle(els.chart, { visible }, indices);
   }
 
   /* ---------- Chips ---------- */
+  function applyVisibilityFromChips(){
+    Object.keys(traceMap).forEach(key=>{
+      const chip=els.toggles.querySelector(`.chip[data-k="${key}"]`);
+      if(!chip) return;
+      setVisibilityFor(key, chip.classList.contains('active'));
+    });
+  }
   els.toggles.addEventListener('click', (e)=>{
     const chip = e.target.closest('.chip'); if(!chip) return;
     const key  = chip.dataset.k;
+
     if (key === 'AUTOFIB') {
       const turningOn = !chip.classList.contains('active');
       chip.classList.toggle('active', turningOn);
@@ -779,11 +805,11 @@
       }
       return;
     }
-    chip.classList.toggle('active');
-    chip.setAttribute('aria-pressed', chip.classList.contains('active') ? 'true' : 'false');
-    const idx = traceMap[key]; if (idx == null) return;
-    const indices = Array.isArray(idx) ? idx : [idx];
-    Plotly.restyle(els.chart, { visible: chip.classList.contains('active') ? true : 'legendonly' }, indices);
+
+    const turningOn = !chip.classList.contains('active');
+    chip.classList.toggle('active', turningOn);
+    chip.setAttribute('aria-pressed', turningOn ? 'true' : 'false');
+    setVisibilityFor(key, turningOn);
   });
 
   /* ---------- Controls ---------- */
