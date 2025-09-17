@@ -82,7 +82,7 @@
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol;}
+  .chip[data-k="VOL"] {border-color:var(--c-vol); color:var(--c-vol);}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -107,7 +107,10 @@
   .btmnav .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 8px;border-radius:10px;border:0;background:transparent;color:var(--text);font-weight:700;font-size:13px}
   .btmnav .tab.active{background:var(--hover)}
   .btmnav .tab span{font-size:11px;opacity:.85}
-  @media (max-width:720px){ .btmnav{display:flex;gap:8px} body{padding-bottom:64px} }
+  @media (max-width:720px) and (hover:none) and (pointer:coarse){
+    .btmnav{ display:flex; gap:8px }
+    body{ padding-bottom:64px }
+  }
   .scr-list{display:flex;flex-direction:column;gap:10px}
   .scr-item{
     position:relative; display:flex; gap:12px; align-items:flex-start;
@@ -324,7 +327,14 @@
   /* ---------- Utils ---------- */
   const fmt = n => (Number.isFinite(n) ? n.toFixed(2) : '—');
   const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-  const escapeHTML = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\\'':'&#39;'}[c]));
+  const escapeHTML = (s) =>
+    String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[c]));
   const debounce = (fn, ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
   const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
 
@@ -523,7 +533,7 @@
   }
   function renderAC(){
     els.list.innerHTML=''; if(!suggestions.length){ els.list.classList.remove('show'); return; }
-    suggestions.forEach((it,i)=>{ const div=document.createElement('div'); div.className='ac-item'+(i===activeIndex?' active':''); div.dataset.i=i;
+    suggestions.forEach((it,i)=>{ const div=document.createElement('div'); div.className = 'ac-item' + (i === activeIndex ? ' active' : ''); div.dataset.i=i;
       div.innerHTML=`<div class="ticker">\${it.symbol}</div><div class="company">\${escapeHTML(it.name||'')}</div>`;
       div.addEventListener('mousedown',e=>{ e.preventDefault(); pick(i); }); els.list.appendChild(div);
     }); els.list.classList.add('show');
