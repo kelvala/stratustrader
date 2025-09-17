@@ -6,7 +6,7 @@
 <title>Stock Analyzer v.033</title>
 
 <!-- Plotly (deferred) -->
-<script src="https://cdn.plot.ly/plotly-2.30.0.min.js" defer></script>
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
 
 <style>
   :root{
@@ -167,6 +167,33 @@
     z-index: -1;
     pointer-events: none;
     opacity: 0.55;
+  }
+
+  /* Force bright glow on active chips (overrides earlier rules) */
+  .toggle-row { overflow: visible; }
+  .chip { position: relative; }
+  .chip.active,
+  .chip[aria-pressed="true"],
+  .chip[data-on="true"] {
+    box-shadow:
+      0 0 0 2px currentColor,
+      0 0 10px currentColor,
+      0 0 24px 6px currentColor,
+      0 0 40px 12px currentColor;
+    position: relative;
+    z-index: 1;
+  }
+  .chip.active::after,
+  .chip[aria-pressed="true"]::after,
+  .chip[data-on="true"]::after {
+    content: "";
+    position: absolute;
+    inset: -10px;
+    border-radius: inherit;
+    background: radial-gradient(60% 60% at 50% 50%, currentColor 0%, rgba(0,0,0,0) 80%);
+    filter: blur(12px);
+    opacity: .55;
+    pointer-events: none;
   }
 
 </style>
@@ -889,39 +916,12 @@
       const trRSI70 = { type:'scatter', x, y:Array(x.length).fill(70), yaxis:'y2', name:'70', line:{ width:.8, dash:'dot' } };
       const trRSI30 = { type:'scatter', x, y:Array(x.length).fill(30), yaxis:'y2', name:'30', line:{ width:.8, dash:'dot' } };
 
-      const trMACD   = { type:'scatter', x, y:macd.macd,  yaxis:'y4', name:'MACD',   line:{ width:1, color:css('--c-macd') } };
-      const trSignal = { type:'scatter', x, y:macd.signal,yaxis:'y4', name:'Signal', line:{ width:1 } };
-      const trHist   = { type:'bar',     x, y:macd.hist,  yaxis:'y4', name:'Hist',   opacity:.4 };
+      const trMACD   = { type:'scatter', x, y:macd.macd,  yaxis:'y4', name:'MACD',   line:{ width:1,
+ color:css('--c-macd') } };
+      const trSignal = { type:'scatter', x, y:macd.signal, yaxis:'y4', name:'Signal', line:{ width:1, color:'#f97316' } };
+      const trHist   = { type:'bar', x, y:macd.hist,  yaxis:'y4', name:'Histogram', marker:{ color:macd.hist.map(v=>v>=0?css('--c-up'):css('--c-down')) }, opacity:0.7 };
 
-      const trVol = { type:'bar', x, y:vol, yaxis:'y3', name:'Volume', opacity:.4, marker:{ color:css('--c-vol') } };
-
-      /* --- Ichimoku (bigger + full width + continuous) --- */
-      const ichi = calcIchimoku(visibleRows);
-      const hiVis=Math.max(...high.filter(Number.isFinite));
-      const loVis=Math.min(...low.filter(Number.isFinite));
-      const pad=(hiVis-loVis)*0.04;
-
-      let spanA = fillEdges(ichi.spanA);
-      let spanB = fillEdges(ichi.spanB);
-      ({spanA,spanB} = exaggerateCloud(spanA, spanB, 1.9, loVis-pad, hiVis+pad));
-
-      const cloud = segmentCloud(spanA, spanB);
-      const trCloudGreenBottom = { type:'scatter', x, y:cloud.gLow, yaxis:'y', line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true };
-      const trCloudGreenTop    = { type:'scatter', x, y:cloud.gUp,  yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-up'),   hoverinfo:'skip', name:'Kumo +', opacity:1, connectgaps:true };
-      const trCloudRedBottom   = { type:'scatter', x, y:cloud.rLow, yaxis:'y', line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true };
-      const trCloudRedTop      = { type:'scatter', x, y:cloud.rUp,  yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-down'), hoverinfo:'skip', name:'Kumo -', opacity:1, connectgaps:true };
-      const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1, color:css('--c-ichi-tenkan') } };
-      const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1, color:css('--c-ichi-kijun') } };
-      const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1, color:css('--c-ichi-chikou') } };
-
-      const data = [
-        trCloudGreenBottom, trCloudGreenTop, trCloudRedBottom, trCloudRedTop,
-        candles, trTenkan, trKijun, trChikou,
-        trSMA20, trSMA50, trSMA200,
-        trRSI, trRSI70, trRSI30,
-        trMACD, trSignal, trHist,
-        trVol
-      ];
+      const trVol = { type:'bar', x, y:vol,  yaxis:'y3', name:'Volume', marker:{ color:vol.map(v=>v>=0?css('--c-up'):css('--c-down')) }, opacity:0.6 };
 
       const layout = {
         margin:{l:56,r:28,t:18,b:26},
@@ -938,9 +938,11 @@
       await fitPriceAxisToCandlesStrict();
       if (!els.chart._fitTightWired) { const _deb = (typeof debounce==='function'? debounce(fitPriceAxisToCandlesStrict, 60): fitPriceAxisToCandlesStrict); els.chart.on('plotly_relayout', _deb); els.chart._fitTightWired = true; }
 
-      try { Plotly.removeAllListeners?.(gd, 'plotly_relayout'); } catch {}
-      if (gd && typeof gd.on === 'function') {
-        gd.on('plotly_relayout', () => {
+      // Fix: guarded event wiring for plotly_relayout
+      try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
+      try { Plotly.removeAllListeners?.(els.chart, 'plotly_relayout'); } catch {}
+      if (els.chart && typeof els.chart.on === 'function') {
+        els.chart.on('plotly_relayout', () => {
           if (fibActive() && !FIB_UPDATING) addOrUpdateAutoFibTraces();
         });
       }
