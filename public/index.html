@@ -940,7 +940,9 @@
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
       try { Plotly.removeAllListeners?.(els.chart, 'plotly_relayout'); } catch {}
       if (els.chart && els.chart.on) {
-        els.chart.on('plotly_relayout', () => { if (fibActive() && !FIB_LOCK) addOrUpdateAutoFibTraces(); });
+        els.chart.on('plotly_relayout', () => {
+          if (fibActive()) addOrUpdateAutoFibTraces();
+        });
       }
       if (fibActive()) setTimeout(addOrUpdateAutoFibTraces, 32);
 
