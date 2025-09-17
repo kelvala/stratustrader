@@ -936,7 +936,6 @@
       };
 
       await fitPriceAxisToCandlesStrict();
-      if (!els.chart._fitTightWired) { const _deb = (typeof debounce==='function'? debounce(fitPriceAxisToCandlesStrict, 60): fitPriceAxisToCandlesStrict); els.chart.on('plotly_relayout', _deb); els.chart._fitTightWired = true; }
 
       // Fix: guarded event wiring for plotly_relayout
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
