@@ -80,9 +80,12 @@
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);}
-  /* Glow around active chips */
-  .chip.active{
+  /* Glow around active chips (all, including VOL, AUTOFIB, ICHI) */
+  .chip.active,
+  .chip[aria-pressed="true"],
+  .chip[data-on="true"] {
     box-shadow: 0 0 0 2px currentColor, 0 0 10px currentColor;
+    z-index: 1;
   }
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
