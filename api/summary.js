@@ -1,34 +1,32 @@
 // /api/summary.js
 // Proxies Yahoo Finance quote summary through Vercel (same-origin -> no CORS issues)
-export default async function handler(req, res) {
-  try {
-    // Accept both ?symbol= and ?ticker= (frontend uses ?ticker=)
-    const symbol = (req.query.symbol || req.query.ticker || "").toUpperCase().trim();
-    if (!symbol) return res.status(400).json({ error: "Missing symbol" });
+export const config = { runtime: 'edge' };
 
-    // Accept optional ?modules= passthrough (safe default below)
-    const modules =
-      req.query.modules ||
-      "defaultKeyStatistics,financialData,earningsTrend,summaryDetail";
-
-    const url = `https://query2.finance.yahoo.com/v6/finance/quoteSummary/${encodeURIComponent(
-      symbol
-    )}?modules=${encodeURIComponent(modules)}`;
-
-    const r = await fetch(url, {
-      // Some deploys are picky without a UA
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; StratusTrader/1.0)" },
-      cache: "no-store",
+export default async function handler(req) {
+  const { searchParams } = new URL(req.url);
+  const ticker  = (searchParams.get('ticker') || '').trim();
+  const modules = (searchParams.get('modules') || 'defaultKeyStatistics,financialData,earningsTrend').trim();
+  if (!ticker) {
+    return new Response(JSON.stringify({ error: 'ticker required' }), {
+      status: 400, headers: { 'content-type': 'application/json' }
     });
+  }
 
-    if (!r.ok) {
-      const text = await r.text();
-      throw new Error(`Yahoo summary HTTP ${r.status}: ${text.slice(0, 200)}`);
-    }
-
+  try {
+    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}`;
+    const r = await fetch(url, {
+      headers: { 'user-agent': 'Mozilla/5.0' },
+      cache: 'no-store'
+    });
+    if (!r.ok) throw new Error(`Yahoo ${r.status}`);
     const data = await r.json();
-    return res.status(200).json(data);
-  } catch (err) {
-    return res.status(500).json({ error: String(err?.message || err) });
+    // Normalize to stable shape so your client code never crashes.
+    return new Response(JSON.stringify({ quoteSummary: data?.quoteSummary ?? { result: [{}] } }), {
+      status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+    });
+  } catch (e) {
+    return new Response(JSON.stringify({ quoteSummary: { result: [{}] }, error: String(e) }), {
+      status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+    });
   }
 }
