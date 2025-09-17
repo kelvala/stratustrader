@@ -3,11 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stratus Trader — Chart v.3</title>
-
-<!-- Plotly (deferred) -->
-<script src="https://cdn.plot.ly/plotly-2.30.0.min.js" defer></script>
-
+<title>Stock Analyzer v.032</title>
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
 <style>
   :root{
     --bg:#0f1115;--panel:#151923;--text:#e5e7eb;--muted:#9ca3af;
@@ -25,7 +22,7 @@
   }
   .light{
     --bg:#f8fafc;--panel:#fff;--text:#222;--muted:#64748b;
-    --accent:#22c55e;--focus:#3b82f3;--border:#e2e8f0;--hover:#f1f5f9;
+    --accent:#22c55e;--focus:#3b82f6;--border:#e2e8f0;--hover:#f1f5f9;
     --metric-bg:#f1f5f9;--metric-border:#e2e8f0;
     --c-up:#16a34a;--c-down:#dc2626;
     --c-sma20:#22c55e;--c-sma50:#2563eb;--c-sma200:#f59e0b;
@@ -82,7 +79,7 @@
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
-  .chip[data-k="VOL"] {border-color:var(--c-vol); color:var(--c-vol);}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol;}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -107,15 +104,12 @@
   .btmnav .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 8px;border-radius:10px;border:0;background:transparent;color:var(--text);font-weight:700;font-size:13px}
   .btmnav .tab.active{background:var(--hover)}
   .btmnav .tab span{font-size:11px;opacity:.85}
-  @media (max-width:720px) and (hover:none) and (pointer:coarse){
-    .btmnav{ display:flex; gap:8px }
-    body{ padding-bottom:64px }
-  }
+  @media (max-width:720px){ .btmnav{display:flex;gap:8px} body{padding-bottom:64px} }
   .scr-list{display:flex;flex-direction:column;gap:10px}
   .scr-item{
     position:relative; display:flex; gap:12px; align-items:flex-start;
     padding:12px 14px; border:1px solid var(--border); border-radius:12px;
-    background:rgba(21,25,35,.65); /* fallback if color-mix unsupported */
+    background:color-mix(in hsl, var(--panel), var(--bg) 35%);
     text-decoration:none; color:inherit; cursor:pointer;
     transition:background .15s,border-color .15s,transform .06s;
   }
@@ -286,22 +280,11 @@
     <button data-tab="settings" class="tab" aria-label="Settings">⚙️<span>Settings</span></button>
   </nav>
 
-  <!-- Single app script -->
+  <!-- Cleaned single script -->
   <script>
 (() => {
+  /* ---------- Tiny helper ---------- */
   const q = s => document.querySelector(s);
-
-  /* ---------- Fail fast ---------- */
-  for (const sel of ['#q', '#searchBtn', '#chart']) {
-    if (!document.querySelector(sel)) {
-      console.error(\`[Stratus] Missing \${sel} — not the main analyzer page.\`);
-      const msg = document.createElement('div');
-      msg.style.cssText = 'margin:16px;padding:12px;border:1px solid #ef4444;border-radius:10px;color:#ef4444;background:#1b0f0f;font-weight:800';
-      msg.textContent = '⚠️ This is not the Stock Analyzer page (missing core elements). Open the correct HTML.';
-      document.body.prepend(msg);
-      return;
-    }
-  }
 
   /* ---------- Elements ---------- */
   const els = {
@@ -320,54 +303,16 @@
   let traceMap = {};
   let PRICE_TIMER = null;
 
-  /* Guard to prevent relayout recursion (Auto Fib) */
-  let FIB_LOCK = false;
-  const fibActive = () => els.autoFib?.classList?.contains('active');
-
   /* ---------- Utils ---------- */
   const fmt = n => (Number.isFinite(n) ? n.toFixed(2) : '—');
-  const cssVar = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-  const escapeHTML = (s) =>
-    String(s).replace(/[&<>"']/g, c => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
-    }[c]));
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const escapeHTML = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
   const debounce = (fn, ms) => { let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; };
-  const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
 
-  // Robust ET conversion (no locale string parsing)
-  function toETDate(d=new Date()){
-    const fmtParts = new Intl.DateTimeFormat('en-US', {
-      timeZone:'America/New_York',
-      year:'numeric', month:'2-digit', day:'2-digit',
-      hour:'2-digit', minute:'2-digit', second:'2-digit',
-      hour12:false
-    }).formatToParts(d).reduce((acc,p)=>(acc[p.type]=p.value,acc),{});
-    const y=+fmtParts.year, m=+fmtParts.month-1, day=+fmtParts.day, h=+fmtParts.hour, mi=+fmtParts.minute, s=+fmtParts.second;
-    return new Date(Date.UTC(y,m,day,h,mi,s));
-  }
-  const formatEasternISO = (date) => toETDate(date).toISOString();
-  const toET = (d=new Date()) => toETDate(d); // returns a Date in ET (as UTC-based container)
-
-  const isMarketOpenNow = () => {
-    const d = toET();
-    const wd=d.getUTCDay(); // ET date packed in UTC container
-    if(wd===0||wd===6) return false;
-    const m=d.getUTCHours()*60+d.getUTCMinutes();
-    // 9:30 - 16:00 ET
-    return m>=(9*60+30)&&m<(16*60);
-  };
-
-  async function waitForPlotly(timeoutMs=12000){
-    const start=Date.now();
-    while(!(window.Plotly && window.Plotly.newPlot)){
-      if(Date.now()-start>timeoutMs) throw new Error('Plotly failed to load');
-      await sleep(25);
-    }
-  }
+  function toEastern(date) { return new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' })); }
+  function formatEasternISO(date) { return toEastern(date), date.toISOString(); }
+  const toET = (d=new Date()) => new Date(d.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const isMarketOpenNow = () => { const d=toET(); const wd=d.getDay(); if(wd===0||wd===6) return false; const m=d.getHours()*60+d.getMinutes(); return m>=(9*60+30)&&m<(16*60); };
 
   /* ---------- Theme ---------- */
   const THEMES = {
@@ -375,17 +320,15 @@
     light:{'--bg':'#f8fafc','--panel':'#fff','--text':'#222','--muted':'#64748b','--accent':'#22c55e','--focus':'#3b82f6','--border':'#e2e8f0','--hover':'#f1f5f9','--metric-bg':'#f1f5f9','--metric-border':'#e2e8f0'}
   };
   function applyChartTheme() {
-    if (!els.chart || !window.Plotly || !els.chart.data) return;
+    if (!els.chart || !els.chart.layout) return;
     const panelBg = getComputedStyle(els.chartCard).backgroundColor;
-    const txt  = cssVar('--text') || '#e5e7eb';
-    const grid = cssVar('--grid') || '#222837';
-    try {
-      Plotly.relayout(els.chart, {
-        paper_bgcolor: panelBg, plot_bgcolor: panelBg,
-        'xaxis.gridcolor': grid, 'yaxis.gridcolor': grid, 'yaxis2.gridcolor': grid, 'yaxis3.gridcolor': grid, 'yaxis4.gridcolor': grid,
-        'xaxis.tickfont.color': txt, 'yaxis.tickfont.color': txt, 'yaxis2.tickfont.color': txt, 'yaxis3.tickfont.color': txt, 'yaxis4.tickfont.color': txt
-      });
-    } catch {}
+    const txt  = css('--text') || '#e5e7eb';
+    const grid = css('--grid') || '#222837';
+    Plotly.relayout(els.chart, {
+      paper_bgcolor: panelBg, plot_bgcolor: panelBg,
+      'xaxis.gridcolor': grid, 'yaxis.gridcolor': grid, 'yaxis2.gridcolor': grid, 'yaxis3.gridcolor': grid, 'yaxis4.gridcolor': grid,
+      'xaxis.tickfont.color': txt, 'yaxis.tickfont.color': txt, 'yaxis2.tickfont.color': txt, 'yaxis3.tickfont.color': txt, 'yaxis4.tickfont.color': txt
+    });
   }
   function setTheme(t){
     Object.entries(THEMES[t]).forEach(([k,v])=>document.documentElement.style.setProperty(k,v));
@@ -393,7 +336,7 @@
     els.themeToggle.textContent = t==='dark' ? '☀️ Light' : '🌙 Dark';
     els.themeToggle.classList.toggle('active', t==='dark');
     localStorage.setItem('theme',t);
-    requestAnimationFrame(applyChartTheme); // no data reload here to avoid thrash
+    requestAnimationFrame(() => { applyChartTheme(); if (CURRENT.ticker) go(CURRENT.ticker, CURRENT.company); });
   }
   const getTheme = () => localStorage.getItem('theme')||'dark';
   els.themeToggle.addEventListener('click',()=> setTheme(getTheme()==='dark'?'light':'dark'));
@@ -442,7 +385,7 @@
     return {macd,signal,hist};
   }
 
-  /* ---------- Ichimoku ---------- */
+  /* ---------- Ichimoku helpers ---------- */
   function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
     for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
   function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
@@ -467,7 +410,7 @@
     return { gLow, gUp, rLow, rUp };
   }
 
-  /* ---------- SMA helper ---------- */
+  /* ---------- SMA spanning helper ---------- */
   function alignAndExtendSMA(smaAll, visibleLen, startIdx){
     let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
     while (arr.length < visibleLen) arr.unshift(null);
@@ -478,19 +421,19 @@
   }
 
   /* ---------- Auto-Fib ---------- */
+  const fibActive = () => els.autoFib?.classList?.contains('active');
   function getAxisState(){
     const L = els.chart && (els.chart._fullLayout || els.chart.layout);
     const g = ax => ({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false });
     return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
   }
   function relayoutPreserve(payload){
-    if(!window.Plotly || !els.chart) return;
     const S=getAxisState(); const keep=(axKey,s)=>{ if(!s) return {}; const out={}; if(s.range){out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false;} else if(s.autorange){out[`${axKey}.autorange`]=true;} return out; };
     return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
   }
   const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
-  const addOrUpdateAutoFibTraces = debounce(async () => {
-    if(!fibActive()||!els.chart||FIB_LOCK) return;
+  async function addOrUpdateAutoFibTraces(){
+    if(!fibActive()||!els.chart) return;
     const c=getCandleTrace(); if(!c) return;
     const cx=c.x, ch=c.high, cl=c.low; if(!cx?.length) return;
     const L=els.chart._fullLayout||els.chart.layout||{}, xa=L.xaxis||{};
@@ -499,12 +442,12 @@
     const i0=Math.max(0, cx.findIndex(d=>d>=x0)); let i1=cx.findIndex(d=>d>x1); if(i1===-1) i1=cx.length; if(i1<=i0) return;
     let hi=-Infinity, lo=Infinity; for(let i=i0;i<i1;i++){ if(Number.isFinite(ch[i])) hi=Math.max(hi,ch[i]); if(Number.isFinite(cl[i])) lo=Math.min(lo,cl[i]); }
     if(!Number.isFinite(hi)||!Number.isFinite(lo)||hi===lo) return;
-    const lvls=[1,.786,.618,.5,.382,.236,0], color=cssVar('--c-rsi')||'#8b5cf6', prices=lvls.map(p=>hi-(hi-lo)*p);
+    const lvls=[1,.786,.618,.5,.382,.236,0], color=css('--c-rsi')||'#8b5cf6', prices=lvls.map(p=>hi-(hi-lo)*p);
     const shapes=prices.map(y=>({type:'line',xref:'x',yref:'y',x0,x1,y0:y,y1:y,line:{color,width:1.25,dash:'dot'},layer:'above',opacity:.95}));
     const anns=prices.map((y,i)=>({x:x1,y,xref:'x',yref:'y',xanchor:'right',yanchor:'middle',text:`${(lvls[i]*100).toFixed(1)}%  ${y.toFixed(2)}`,showarrow:false,font:{size:11,color}}));
-    try { FIB_LOCK = true; await relayoutPreserve({ shapes, annotations: anns }); } finally { FIB_LOCK = false; }
-  }, 30);
-  const clearAutoFib = () => { if(!els.chart) return; try{ FIB_LOCK=true; relayoutPreserve({shapes:[],annotations:[]}); } finally { FIB_LOCK=false; } };
+    return relayoutPreserve({ shapes, annotations: anns });
+  }
+  const clearAutoFib = () => els.chart && relayoutPreserve({shapes:[],annotations:[]});
 
   /* ---------- Search & autocomplete ---------- */
   let LOCAL_SYMBOLS=[], suggestions=[], activeIndex=-1;
@@ -524,17 +467,14 @@
     }catch{ LOCAL_SYMBOLS=[{symbol:'AAPL',name:'Apple Inc'},{symbol:'MSFT',name:'Microsoft Corp'},{symbol:'TSLA',name:'Tesla Inc'},{symbol:'NVDA',name:'NVIDIA Corp'},{symbol:'AMZN',name:'Amazon.com Inc'}]; }
   }
   function searchLocalSymbols(q){
-    if(!q) return []; const out=[];
-    for(const r of LOCAL_SYMBOLS){ if(r.symbol.startsWith(q)){ out.push(r); if(out.length>=12) break; } }
-    if(out.length<12){ const seen=new Set(out.map(r=>r.symbol));
-      for(const r of LOCAL_SYMBOLS){ if(seen.has(r.symbol)) continue;
-        if(r.symbol.includes(q)||(r.name&&r.name.toUpperCase().includes(q))){ out.push(r); if(out.length>=12) break; } } }
+    if(!q) return []; const out=[]; for(const r of LOCAL_SYMBOLS){ if(r.symbol.startsWith(q)){ out.push(r); if(out.length>=12) break; } }
+    if(out.length<12){ const seen=new Set(out.map(r=>r.symbol)); for(const r of LOCAL_SYMBOLS){ if(seen.has(r.symbol)) continue; if(r.symbol.includes(q)||(r.name&&r.name.toUpperCase().includes(q))){ out.push(r); if(out.length>=12) break; } } }
     return out;
   }
   function renderAC(){
     els.list.innerHTML=''; if(!suggestions.length){ els.list.classList.remove('show'); return; }
-    suggestions.forEach((it,i)=>{ const div=document.createElement('div'); div.className = 'ac-item' + (i === activeIndex ? ' active' : ''); div.dataset.i=i;
-      div.innerHTML=`<div class="ticker">\${it.symbol}</div><div class="company">\${escapeHTML(it.name||'')}</div>`;
+    suggestions.forEach((it,i)=>{ const div=document.createElement('div'); div.className='ac-item'+(i===activeIndex?' active':''); div.dataset.i=i;
+      div.innerHTML=`<div class="ticker">${it.symbol}</div><div class="company">${escapeHTML(it.name||'')}</div>`;
       div.addEventListener('mousedown',e=>{ e.preventDefault(); pick(i); }); els.list.appendChild(div);
     }); els.list.classList.add('show');
   }
@@ -562,7 +502,7 @@
 
   function niceTickerError(t){
     els.headline.textContent='Symbol not found';
-    els.lastLine.innerHTML=`<span style="color:${cssVar('--c-down')};font-weight:800">“${t}” isn’t a valid ticker. Please check the spelling and try again.</span>`;
+    els.lastLine.innerHTML=`<span style="color:${css('--c-down')};font-weight:800">“${t}” isn’t a valid ticker. Please check the spelling and try again.</span>`;
     els.prevCloseLine.textContent=''; els.ivLine.textContent='';
   }
   function doSearchFromInput(){
@@ -594,7 +534,7 @@
     let lastErr; for(const candidate of tryRanges){
       try{
         const {range,interval}=normalizePair(candidate,freq);
-        const r=await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=${range}&interval=${interval}`,{cache:'no-store'}); if(!r.ok) throw new Error(\`Proxy \${r.status}\`);
+        const r=await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=${range}&interval=${interval}`,{cache:'no-store'}); if(!r.ok) throw new Error(`Proxy ${r.status}`);
         const j=await r.json(); const res=j?.chart?.result?.[0]; if(!res) throw new Error('No result');
         const q=res.indicators?.quote?.[0]||{}; const adj=res.indicators?.adjclose?.[0]?.adjclose; const ts=res.timestamp||[];
         const rows=[]; for(let i=0;i<ts.length;i++){ const o=q.open?.[i],h=q.high?.[i],l=q.low?.[i], c=(adj?.[i]!==undefined?adj[i]:q.close?.[i]), v=q.volume?.[i];
@@ -607,20 +547,20 @@
   function getVisibleData(fullData, range, freq){
     if(range==='1d' && freq==='1m'){
       if(!fullData.length) return [];
-      const lastDate=toETDate(fullData.at(-1).date);
-      const preOpen=new Date(lastDate); preOpen.setUTCHours(4,0,0,0);
-      const post=new Date(lastDate);    post.setUTCHours(20,0,0,0);
-      return fullData.filter(it=>{ const d=toETDate(it.date); return d>=preOpen && d<=post && d.getUTCDate()===lastDate.getUTCDate(); });
+      const lastDate=toEastern(fullData.at(-1).date);
+      const preOpen=new Date(lastDate); preOpen.setHours(4,0,0,0);
+      const post=new Date(lastDate); post.setHours(20,0,0,0);
+      return fullData.filter(it=>{ const d=toEastern(it.date); return d>=preOpen && d<=post && d.getDate()===lastDate.getDate(); });
     }
-    if(range==='ytd'){ const now=toETDate(new Date()); const jan1=new Date(Date.UTC(now.getUTCFullYear(),0,1)); return fullData.filter(it=>toETDate(it.date)>=jan1); }
+    if(range==='ytd'){ const now=new Date(); const jan1=new Date(now.getFullYear(),0,1); return fullData.filter(it=>toEastern(it.date)>=toEastern(jan1)); }
     const days={'1d':1,'2d':2,'5d':5,'10d':10,'1mo':31,'2mo':62,'3mo':93,'6mo':182,'1y':365,'2y':730,'3y':1095,'4y':1460,'5y':1825,'10y':3650,'max':36500}[range]||365;
     const cutoff=new Date(Date.now()-days*864e5);
-    return fullData.filter(it=>toETDate(it.date)>=toETDate(cutoff));
+    return fullData.filter(it=>toEastern(it.date)>=toEastern(cutoff));
   }
   function prevDailyCloseFromIntraday(fullRows){
     if(!fullRows?.length) return null;
-    const lastDayStr=toETDate(fullRows.at(-1).date).toUTCString().slice(0,16);
-    for(let i=fullRows.length-2;i>=0;i--){ const dStr=toETDate(fullRows[i].date).toUTCString().slice(0,16); if(dStr!==lastDayStr) return fullRows[i].c ?? null; }
+    const lastDayStr=toEastern(fullRows.at(-1).date).toDateString();
+    for(let i=fullRows.length-2;i>=0;i--){ const d=toEastern(fullRows[i].date).toDateString(); if(d!==lastDayStr) return fullRows[i].c ?? null; }
     return null;
   }
 
@@ -652,7 +592,7 @@
     const prev = CURRENT.prevClose ?? null;
     const dayChg = (prev!=null) ? last - prev : null;
     const dayPct = (prev!=null && prev!==0) ? (dayChg / prev) * 100 : null;
-    const upClr = cssVar('--c-up'), dnClr = cssVar('--c-down');
+    const upClr = css('--c-up'), dnClr = css('--c-down');
     const chgClr = dayChg > 0 ? upClr : dayChg < 0 ? dnClr : '#cbd5e1';
     const signChg = dayChg > 0 ? '+' : dayChg < 0 ? '-' : '';
     const signPct = dayPct > 0 ? '+' : dayPct < 0 ? '-' : '';
@@ -690,7 +630,6 @@
     els.lastLine.textContent = 'Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent='';
 
     try{
-      await waitForPlotly();
       const time=els.timeSel.value, freq=els.freqSel.value;
       const fullRows = await fetchFullHistory(ticker, time, freq);
       if(!fullRows.length) throw new Error('No price data');
@@ -719,7 +658,7 @@
       const ref = (prevClose != null) ? prevClose : (close.length>=2 ? close.at(-2) : null);
       const dayChg = (ref!=null) ? (last - ref) : null;
       const dayPct = (ref!=null && ref!==0) ? (dayChg/ref)*100 : null;
-      const upClr = cssVar('--c-up'), dnClr = cssVar('--c-down');
+      const upClr = css('--c-up'), dnClr = css('--c-down');
       const signChg = dayChg>0?'+':dayChg<0?'-':'';
       const signPct = dayPct>0?'+':dayPct<0?'-':'';
       const chgClr  = dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
@@ -743,30 +682,30 @@
       els.ivLine.innerHTML += ` &nbsp;|&nbsp; <b style="color:${rec.color};font-weight:800">${rec.rec}</b>`;
 
       const candles = { type:'candlestick', x, open, high, low, close, name:ticker,
-        increasing:{line:{color:upClr}}, decreasing:{line:{color:dnClr}} };
-      const volColors = close.map((c,i)=> i===0?cssVar('--c-vol'):(c>=close[i-1]?upClr:dnClr));
+        increasing:{line:{color:css('--c-up')}}, decreasing:{line:{color:css('--c-down')}} };
+      const volColors = close.map((c,i)=> i===0?css('--c-vol'):(c>=close[i-1]?css('--c-up'):css('--c-down')));
       const trVol = {type:'bar',x,y:vol,marker:{color:volColors},name:'Volume',yaxis:'y3',hovertemplate:'Vol: %{y:,}<extra></extra>'};
-      const trSMA20  = {type:'scatter',mode:'lines',x,y:sma20 ,name:'SMA20' ,line:{width:1.8,color:cssVar('--c-sma20')}};
-      const trSMA50  = {type:'scatter',mode:'lines',x,y:sma50 ,name:'SMA50' ,line:{width:1.8,color:cssVar('--c-sma50')}};
-      const trSMA200 = {type:'scatter',mode:'lines',x,y:sma200,name:'SMA200',line:{width:2.6,color:cssVar('--c-sma200')}};
-      const trRSI   = {type:'scatter',mode:'lines',x,y:rsiVals,name:'RSI',line:{width:1.6,color:cssVar('--c-rsi')},yaxis:'y2'};
+      const trSMA20  = {type:'scatter',mode:'lines',x,y:sma20 ,name:'SMA20' ,line:{width:1.8,color:css('--c-sma20')}};
+      const trSMA50  = {type:'scatter',mode:'lines',x,y:sma50 ,name:'SMA50' ,line:{width:1.8,color:css('--c-sma50')}};
+      const trSMA200 = {type:'scatter',mode:'lines',x,y:sma200,name:'SMA200',line:{width:2.6,color:css('--c-sma200')}};
+      const trRSI   = {type:'scatter',mode:'lines',x,y:rsiVals,name:'RSI',line:{width:1.6,color:css('--c-rsi')},yaxis:'y2'};
       const trRSI70 = {type:'scatter',mode:'lines',x,y:rsiVals.map(()=>70),name:'70',line:{width:1,dash:'dot',color:'#ef4444'},yaxis:'y2',hoverinfo:'skip'};
       const trRSI30 = {type:'scatter',mode:'lines',x,y:rsiVals.map(()=>30),name:'30',line:{width:1,dash:'dot',color:'#22c55e'},yaxis:'y2',hoverinfo:'skip'};
-      const mac = macd; const trMACD   = {type:'scatter',mode:'lines',x,y:mac.macd  ,name:'MACD' ,line:{width:1.6,color:cssVar('--c-macd')},yaxis:'y4'};
+      const mac = macd; const trMACD   = {type:'scatter',mode:'lines',x,y:mac.macd  ,name:'MACD' ,line:{width:1.6,color:css('--c-macd')},yaxis:'y4'};
       const trSignal= {type:'scatter',mode:'lines',x,y:mac.signal,name:'Signal',line:{width:1.6,color:'#f97316'},yaxis:'y4'};
-      const trHist  = {type:'bar',x,y:mac.hist,name:'Hist',marker:{color:mac.hist.map(h=>h>=0?upClr:dnClr)},yaxis:'y4'};
+      const trHist  = {type:'bar',x,y:mac.hist,name:'Hist',marker:{color:mac.hist.map(h=>h>=0?css('--c-up'):css('--c-down'))},yaxis:'y4'};
 
       const ichiAll = calcIchimoku(fullRows);
       const take = arr => arr.slice(startIdx, startIdx + visibleRows.length);
       const tenkan = take(ichiAll.tenkan), kijun = take(ichiAll.kijun), spanA = take(ichiAll.spanA), spanB = take(ichiAll.spanB), chikou = take(ichiAll.chikou);
       const { gLow, gUp, rLow, rUp } = segmentCloud(spanA, spanB);
       const trCloudGreenBottom = { type:'scatter', x, y:gLow,  line:{width:0}, hoverinfo:'skip', yaxis:'y' };
-      const trCloudGreenTop    = { type:'scatter', x, y:gUp,   line:{width:0}, fill:'tonexty', fillcolor:cssVar('--c-ichi-up'),  hoverinfo:'skip', yaxis:'y' };
+      const trCloudGreenTop    = { type:'scatter', x, y:gUp,   line:{width:0}, fill:'tonexty', fillcolor:css('--c-ichi-up'),  hoverinfo:'skip', yaxis:'y' };
       const trCloudRedBottom   = { type:'scatter', x, y:rLow,  line:{width:0}, hoverinfo:'skip', yaxis:'y' };
-      const trCloudRedTop      = { type:'scatter', x, y:rUp,   line:{width:0}, fill:'tonexty', fillcolor:cssVar('--c-ichi-down'), hoverinfo:'skip', yaxis:'y' };
-      const trTenkan = { type:'scatter', mode:'lines', x, y:tenkan, line:{ width:1.4, color:cssVar('--c-ichi-tenkan'), dash:'dot' }, yaxis:'y' };
-      const trKijun  = { type:'scatter', mode:'lines', x, y:kijun,  line:{ width:1.4, color:cssVar('--c-ichi-kijun'),  dash:'dash' }, yaxis:'y' };
-      const trChikou = { type:'scatter', mode:'lines', x, y:chikou, line:{ width:1.1, color:cssVar('--c-ichi-chikou') }, yaxis:'y', opacity:.9 };
+      const trCloudRedTop      = { type:'scatter', x, y:rUp,   line:{width:0}, fill:'tonexty', fillcolor:css('--c-ichi-down'), hoverinfo:'skip', yaxis:'y' };
+      const trTenkan = { type:'scatter', mode:'lines', x, y:tenkan, line:{ width:1.4, color:css('--c-ichi-tenkan'), dash:'dot' }, yaxis:'y' };
+      const trKijun  = { type:'scatter', mode:'lines', x, y:kijun,  line:{ width:1.4, color:css('--c-ichi-kijun'),  dash:'dash' }, yaxis:'y' };
+      const trChikou = { type:'scatter', mode:'lines', x, y:chikou, line:{ width:1.1, color:css('--c-ichi-chikou') }, yaxis:'y', opacity:.9 };
 
       const data = [
         trCloudGreenBottom, trCloudGreenTop, trCloudRedBottom, trCloudRedTop,
@@ -774,7 +713,7 @@
         candles, trSMA20, trSMA50, trSMA200, trRSI, trRSI70, trRSI30, trMACD, trSignal, trHist, trVol
       ];
 
-      const panelBg=getComputedStyle(els.chartCard).backgroundColor, txt=cssVar('--text')||'#e5e7eb', grid=cssVar('--grid')||'#222837';
+      const panelBg=getComputedStyle(els.chartCard).backgroundColor, txt=css('--text')||'#e5e7eb', grid=css('--grid')||'#222837';
       const layout={
         paper_bgcolor:panelBg, plot_bgcolor:panelBg, showlegend:false, margin:{l:60,r:24,t:10,b:24},
         xaxis:{domain:[0,1],rangeslider:{visible:false},gridcolor:grid,tickfont:{color:txt}},
@@ -789,11 +728,7 @@
 
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
       try { Plotly.removeAllListeners?.(els.chart, 'plotly_relayout'); } catch {}
-      if (els.chart && els.chart.on) {
-        els.chart.on('plotly_relayout', () => {
-          if (fibActive() && !FIB_LOCK) addOrUpdateAutoFibTraces();
-        });
-      }
+      els.chart.on('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
       if (fibActive()) setTimeout(addOrUpdateAutoFibTraces, 32);
 
       traceMap = {
@@ -812,7 +747,6 @@
 
       startPriceTicker();
       wireHoverDismiss();
-      applyChartTheme();
     }catch(e){
       console.error(e);
       niceTickerError(ticker);
@@ -820,13 +754,11 @@
   }
 
   function applyVisibilityFromChips(){
-    if(!els.chart || !window.Plotly || !els.chart.data) return;
     Object.entries(traceMap).forEach(([key, idx])=>{
       const chip=els.toggles.querySelector(`.chip[data-k="${key}"]`); if(!chip) return;
       const visible = chip.classList.contains('active') ? true : 'legendonly';
       const indices = Array.isArray(idx) ? idx : [idx];
-      if(indices.some(i => i<0)) return;
-      try{ Plotly.restyle(els.chart,{ visible }, indices); } catch {}
+      Plotly.restyle(els.chart,{ visible }, indices);
     });
   }
 
@@ -839,8 +771,9 @@
       chip.classList.toggle('active', turningOn);
       chip.setAttribute('aria-pressed', turningOn ? 'true' : 'false');
       if (turningOn) {
-        try { FIB_LOCK = true; Plotly.relayout(els.chart, { shapes: [], annotations: [] }); } finally { FIB_LOCK = false; }
-        requestAnimationFrame(addOrUpdateAutoFibTraces);
+        Plotly.relayout(els.chart, { shapes: [], annotations: [] }).then(() => {
+          requestAnimationFrame(() => addOrUpdateAutoFibTraces());
+        });
       } else {
         clearAutoFib();
       }
@@ -850,8 +783,7 @@
     chip.setAttribute('aria-pressed', chip.classList.contains('active') ? 'true' : 'false');
     const idx = traceMap[key]; if (idx == null) return;
     const indices = Array.isArray(idx) ? idx : [idx];
-    if(indices.some(i => i<0)) return;
-    try { Plotly.restyle(els.chart, { visible: chip.classList.contains('active') ? true : 'legendonly' }, indices); } catch {}
+    Plotly.restyle(els.chart, { visible: chip.classList.contains('active') ? true : 'legendonly' }, indices);
   });
 
   /* ---------- Controls ---------- */
@@ -860,7 +792,7 @@
   els.wideBtn.addEventListener('click', ()=>{
     document.querySelector('.container').classList.toggle('wide');
     els.wideBtn.querySelector('.tool-txt').textContent = document.querySelector('.container').classList.contains('wide') ? 'Normal' : 'Wide';
-    if(window.Plotly && els.chart && els.chart.data) Plotly.Plots.resize(els.chart);
+    if(els.chart && els.chart.data) Plotly.Plots.resize(els.chart);
   });
   function setMaxState(on){
     els.chartCard.classList.toggle('max', on);
@@ -870,7 +802,7 @@
       els.chartCard.appendChild(b);
     }
     const btnTxt=els.maxBtn.querySelector('.tool-txt'); if(btnTxt) btnTxt.textContent=on?'Min':'Max';
-    if(window.Plotly && els.chart && els.chart.data) Plotly.Plots.resize(els.chart);
+    if(els.chart && els.chart.data) Plotly.Plots.resize(els.chart);
   }
   els.maxBtn.addEventListener('click', ()=> setMaxState(!els.chartCard.classList.contains('max')));
   window.addEventListener('keydown', e=>{ if(e.key==='Escape' && els.chartCard.classList.contains('max')) setMaxState(false); });
