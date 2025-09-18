@@ -8,8 +8,8 @@
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
 
-<!-- Plotly (deferred) -->
-<script src="https://cdn.plot.ly/plotly-2.30.0.min.js" defer></script>
+<!-- Plotly (no defer) -->
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
 
 <style>
   :root{
@@ -86,7 +86,7 @@
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol;}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -905,7 +905,7 @@
       const pad=(hiVis-loVis)*0.04;
 
       let spanA = fillEdges(ichi.spanA);
-      let spanB = fillEdges(ichi.spanB, 1.9, loVis-pad, hiVis+pad);
+      let spanB = fillEdges(ichi.spanB,  1.9, loVis-pad, hiVis+pad);
 
       const cloud = segmentCloud(spanA, spanB);
       const trCloudGreenBottom = { type:'scatter', x, y:cloud.gLow, yaxis:'y', line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true };
