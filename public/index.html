@@ -82,7 +82,7 @@
   .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50;}
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);}
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi;}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
@@ -905,7 +905,7 @@
       const pad=(hiVis-loVis)*0.04;
 
       let spanA = fillEdges(ichi.spanA);
-      let spanB = fillEdges(ichi.spanB, 1.9, loVis-pad, hiVis+pad));
+      let spanB = fillEdges(ichi.spanB, 1.9, loVis-pad, hiVis+pad);
 
       const cloud = segmentCloud(spanA, spanB);
       const trCloudGreenBottom = { type:'scatter', x, y:cloud.gLow, yaxis:'y', line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true };

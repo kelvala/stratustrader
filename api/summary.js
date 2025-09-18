@@ -1,32 +1,25 @@
-// /api/summary.js
-// Proxies Yahoo Finance quote summary through Vercel (same-origin -> no CORS issues)
-export const config = { runtime: 'edge' };
-
-export default async function handler(req) {
-  const { searchParams } = new URL(req.url);
-  const ticker  = (searchParams.get('ticker') || '').trim();
-  const modules = (searchParams.get('modules') || 'defaultKeyStatistics,financialData,earningsTrend').trim();
-  if (!ticker) {
-    return new Response(JSON.stringify({ error: 'ticker required' }), {
-      status: 400, headers: { 'content-type': 'application/json' }
-    });
-  }
-
+// /api/summary
+module.exports = async (req, res) => {
   try {
-    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}`;
-    const r = await fetch(url, {
-      headers: { 'user-agent': 'Mozilla/5.0' },
-      cache: 'no-store'
-    });
-    if (!r.ok) throw new Error(`Yahoo ${r.status}`);
-    const data = await r.json();
-    // Normalize to stable shape so your client code never crashes.
-    return new Response(JSON.stringify({ quoteSummary: data?.quoteSummary ?? { result: [{}] } }), {
-      status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
-    });
+    const t = String((req.query.ticker || '')).trim();
+    const modules = String(req.query.modules || 'defaultKeyStatistics,financialData,earningsTrend');
+    if (!t) return res.status(400).json({ error: 'ticker required' });
+
+    const urls = [
+      `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(t)}?modules=${encodeURIComponent(modules)}`,
+      `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(t)}?modules=${encodeURIComponent(modules)}`
+    ];
+
+    for (const url of urls) {
+      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' } });
+      if (r.ok) {
+        const j = await r.json();
+        res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=3600');
+        return res.status(200).json(j);
+      }
+    }
+    return res.status(502).json({ error: 'upstream summary failed' });
   } catch (e) {
-    return new Response(JSON.stringify({ quoteSummary: { result: [{}] }, error: String(e) }), {
-      status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
-    });
+    return res.status(500).json({ error: String(e) });
   }
-}
+};

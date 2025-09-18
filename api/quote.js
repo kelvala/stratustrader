@@ -10,20 +10,26 @@ export default async function handler(req) {
   }
 
   try {
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}`;
-    const r = await fetch(url, {
-      headers: { 'user-agent': 'Mozilla/5.0' },
-      cache: 'no-store'
+    const urls = [
+      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}`,
+      `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}`
+    ];
+
+    for (const url of urls) {
+      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' } });
+      if (r.ok) {
+        const j = await r.json();
+        return new Response(JSON.stringify(j), {
+          status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+        });
+      }
+    }
+    return new Response(JSON.stringify({ error: 'upstream quote failed' }), {
+      status: 502, headers: { 'content-type': 'application/json' }
     });
-    if (!r.ok) throw new Error(`Yahoo ${r.status}`);
-    const data = await r.json();
-    return new Response(JSON.stringify({
-      price: data?.quoteResponse?.result?.[0]?.regularMarketPrice ?? null,
-      quoteResponse: data?.quoteResponse ?? null
-    }), { status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }});
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), {
-      status: 502, headers: { 'content-type': 'application/json' }
+      status: 500, headers: { 'content-type': 'application/json' }
     });
   }
 }

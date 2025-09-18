@@ -1,31 +1,26 @@
-// /api/chart.js
-// Proxies Yahoo Finance chart endpoint through Vercel
-export default async function handler(req, res) {
+// /api/chart
+module.exports = async (req, res) => {
   try {
-    // Accept both ?symbol= and ?ticker= (frontend uses ?ticker=)
-    const symbol = (req.query.symbol || req.query.ticker || "").toUpperCase().trim();
-    if (!symbol) return res.status(400).json({ error: "Missing symbol" });
+    const t = String((req.query.ticker || '')).trim();
+    const range = String(req.query.range || '6mo');
+    const interval = String(req.query.interval || '1d');
+    if (!t) return res.status(400).json({ error: 'ticker required' });
 
-    const interval = (req.query.interval || "1d").trim(); // e.g., 1m, 5m, 1d
-    const range = (req.query.range || "6mo").trim();      // e.g., 1d, 5d, 6mo, 1y
+    const urls = [
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits`,
+      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits`
+    ];
 
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
-      symbol
-    )}?interval=${encodeURIComponent(interval)}&range=${encodeURIComponent(range)}`;
-
-    const r = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; StratusTrader/1.0)" },
-      cache: "no-store",
-    });
-
-    if (!r.ok) {
-      const text = await r.text();
-      throw new Error(`Yahoo chart HTTP ${r.status}: ${text.slice(0, 200)}`);
+    for (const url of urls) {
+      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' } });
+      if (r.ok) {
+        const j = await r.json();
+        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+        return res.status(200).json(j);
+      }
     }
-
-    const data = await r.json();
-    return res.status(200).json(data);
-  } catch (err) {
-    return res.status(500).json({ error: String(err?.message || err) });
+    return res.status(502).json({ error: 'upstream chart failed' });
+  } catch (e) {
+    return res.status(500).json({ error: String(e) });
   }
-}
+};
