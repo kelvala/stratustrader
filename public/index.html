@@ -83,10 +83,9 @@
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);}
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);}
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -875,60 +874,11 @@
       const iv = ivs.length ? (ivs.reduce((a,b)=>a+b,0)/ivs.length) : null;
       els.ivLine.textContent = `Intrinsic Value: ${iv==null ? '—' : '$'+fmt(iv)}`;
 
-      /* --- Traces --- */
-      const candles = {
-        type:'candlestick', x, open, high, low, close, name:ticker,
-        increasing:{ line:{ color:css('--c-up'), width:1.15 } },
-        decreasing:{ line:{ color:css('--c-down'), width:1.15 } },
-        whiskerwidth:0.4, opacity:0.95,
-        hovertemplate:'O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>'
-      };
-
-      const trSMA20  = { type:'scatter', x, y:sma20,  yaxis:'y', name:'SMA 20',  line:{ width:1.2, color:css('--c-sma20') } };
-      const trSMA50  = { type:'scatter', x, y:sma50,  yaxis:'y', name:'SMA 50',  line:{ width:1.2, color:css('--c-sma50') } };
-      const trSMA200 = { type:'scatter', x, y:sma200, yaxis:'y', name:'SMA 200', line:{ width:1.2, color:css('--c-sma200') } };
-
-      const trRSI   = { type:'scatter', x, y:rsiVals, yaxis:'y2', name:'RSI', line:{ width:1.1, color:css('--c-rsi') } };
-      const trRSI70 = { type:'scatter', x, y:Array(x.length).fill(70), yaxis:'y2', name:'70', line:{ width:.8, dash:'dot' } };
-      const trRSI30 = { type:'scatter', x, y:Array(x.length).fill(30), yaxis:'y2', name:'30', line:{ width:.8, dash:'dot' } };
-
-      const trMACD   = { type:'scatter', x, y:macd.macd,  yaxis:'y4', name:'MACD',   line:{ width:1, color:css('--c-macd') } };
-      const trSignal = { type:'scatter', x, y:macd.signal,yaxis:'y4', name:'Signal', line:{ width:1 } };
-      const trHist   = { type:'bar',     x, y:macd.hist,  yaxis:'y4', name:'Hist',   opacity:.4 };
-
-      const trVol = { type:'bar', x, y:vol, yaxis:'y3', name:'Volume', opacity:.4, marker:{ color:css('--c-vol') } };
-
-      /* --- Ichimoku (bigger + full width + continuous) --- */
-      const ichi = calcIchimoku(visibleRows);
-      const hiVis=Math.max(...high.filter(Number.isFinite));
-      const loVis=Math.min(...low.filter(Number.isFinite));
-      const pad=(hiVis-loVis)*0.04;
-
-      let spanA = fillEdges(ichi.spanA);
-      let spanB = fillEdges(ichi.spanB,  1.9, loVis-pad, hiVis+pad);
-
-      const cloud = segmentCloud(spanA, spanB);
-      const trCloudGreenBottom = { type:'scatter', x, y:cloud.gLow, yaxis:'y', line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true };
-      const trCloudGreenTop    = { type:'scatter', x, y:cloud.gUp,  yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-up'),   hoverinfo:'skip', name:'Kumo +', opacity:1, connectgaps:true };
-      const trCloudRedBottom   = { type:'scatter', x, y:cloud.rLow, yaxis:'y', line:{width:0}, hoverinfo:'skip', showlegend:false, connectgaps:true };
-      const trCloudRedTop      = { type:'scatter', x, y:cloud.rUp,  yaxis:'y', fill:'tonexty', line:{width:0}, fillcolor:css('--c-ichi-down'), hoverinfo:'skip', name:'Kumo -', opacity:1, connectgaps:true };
-      const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1, color:css('--c-ichi-tenkan') } };
-      const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1, color:css('--c-ichi-kijun') } };
-      const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1, color:css('--c-ichi-chikou') } };
-
-      const data = [
-        trCloudGreenBottom, trCloudGreenTop, trCloudRedBottom, trCloudRedTop,
-        candles, trTenkan, trKijun, trChikou,
-        trSMA20, trSMA50, trSMA200,
-        trRSI, trRSI70, trRSI30,
-        trMACD, trSignal, trHist,
-        trVol
-      ];
-
+      // --- Chart layout with proper domains ---
       const layout = {
         margin:{l:56,r:28,t:18,b:26},
         xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid') },
-        yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid') },
+        yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), domain:[0.42, 1] },
         yaxis2:{ domain:[0,0.18], anchor:'x', title:'RSI', range:[0,100] },
         yaxis3:{ domain:[0.18,0.28], anchor:'x', title:'Vol' },
         yaxis4:{ domain:[0.28,0.42], anchor:'x', title:'MACD' },
@@ -937,31 +887,43 @@
         plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor
       };
 
-      await fitPriceAxisToCandlesStrict();
+      // --- Actually plot the chart and wire up events ---
+      const data = [
+        candles,       // 0
+        trSMA20,       // 1
+        trSMA50,       // 2
+        trSMA200,      // 3
+        trVol,         // 4  (y3)
+        trRSI,         // 5  (y2)
+        trRSI70,       // 6
+        trRSI30,       // 7
+        trMACD,        // 8  (y4)
+        trSignal,      // 9
+        trHist         // 10
+      ];
+
+      await Plotly.newPlot(els.chart, data, layout, {
+        responsive: true,
+        scrollZoom: true,
+        displaylogo: false
+      });
+
+      applyChartTheme();
 
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
-      try { Plotly.removeAllListeners?.(els.chart, 'plotly_relayout'); } catch {}
-      if (els.chart && els.chart.on) {
-        els.chart.on('plotly_relayout', () => {
-          if (fibActive()) addOrUpdateAutoFibTraces();
-        });
-      }
-      if (fibActive()) setTimeout(addOrUpdateAutoFibTraces, 32);
+      els.chart.on?.('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
+      if (fibActive()) addOrUpdateAutoFibTraces();
 
       traceMap = {
-        SMA20:data.indexOf(trSMA20), SMA50:data.indexOf(trSMA50), SMA200:data.indexOf(trSMA200),
-        RSI:[data.indexOf(trRSI),data.indexOf(trRSI70),data.indexOf(trRSI30)],
-        MACD:[data.indexOf(trMACD),data.indexOf(trSignal),data.indexOf(trHist)],
-        VOL:data.indexOf(trVol),
-        ICHI:[
-          data.indexOf(trCloudGreenBottom), data.indexOf(trCloudGreenTop),
-          data.indexOf(trCloudRedBottom),   data.indexOf(trCloudRedTop),
-          data.indexOf(trTenkan),           data.indexOf(trKijun),
-          data.indexOf(trChikou)
-        ]
+        SMA20: 1,
+        SMA50: 2,
+        SMA200: 3,
+        RSI: [5,6,7],
+        MACD: [8,9,10],
+        VOL: 4
       };
-      applyVisibilityFromChips();
 
+      applyVisibilityFromChips();
       startPriceTicker();
       wireHoverDismiss();
     }catch(e){
@@ -977,7 +939,7 @@
       const chip=els.toggles.querySelector(`.chip[data-k="${key}"]`); if(!chip) return;
       const visible = chip.classList.contains('active') ? true : 'legendonly';
       const indices = Array.isArray(idx) ? idx : [idx];
-      try{ Plotly.restyle(els.chart,{ visible }, indices); } catch {}
+           try{ Plotly.restyle(els.chart,{ visible }, indices); } catch {}
     });
   }
 
