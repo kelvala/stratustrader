@@ -893,18 +893,21 @@
       try {
         const res = await fetch(`/api/chart.js?symbol=${encodeURIComponent(ticker)}`);
         chartData = await res.json();
+        // Restore previous permissive logic: accept chartData.candles or chartData directly
         if (chartData && Array.isArray(chartData.candles)) {
           candles = chartData.candles;
         } else if (Array.isArray(chartData)) {
           candles = chartData;
         } else {
-          candles = [];
+          candles = undefined;
         }
       } catch (e) {
-        console.error('Chart data fetch failed:', e);
-        candles = [];
+        showError('Chart data fetch failed: ' + e.message);
+        Plotly.purge('chart');
+        return;
       }
-      if (!Array.isArray(candles) || candles.length === 0) {
+      if (!candles || !Array.isArray(candles) || candles.length === 0) {
+        // Only show error if fetch succeeded but data is truly empty
         showError('No chart data available for ' + ticker);
         Plotly.purge('chart');
         return;
