@@ -907,31 +907,48 @@
         return;
       }
       if (!candles || !Array.isArray(candles) || candles.length === 0) {
-        // Only show error if fetch succeeded but data is truly empty
         showError('No chart data available for ' + ticker);
         Plotly.purge('chart');
         return;
       }
 
-      const data = [
-        candles,       // 0
-        trSMA20,       // 1
-        trSMA50,       // 2
-        trSMA200,      // 3
-        trVol,         // 4  (y3)
-        trRSI,         // 5  (y2)
-        trRSI70,       // 6
-        trRSI30,       // 7
-        trMACD,        // 8  (y4)
-        trSignal,      // 9
-        trHist         // 10
-      ];
+      // Transform candles array into Plotly candlestick and volume traces
+      const o = [], h = [], l = [], c = [], v = [], t = [];
+      for (const row of candles) {
+        t.push(row[0] || row.date || row.t || row.time || '');
+        o.push(row[1] || row.open || row.o || 0);
+        h.push(row[2] || row.high || row.h || 0);
+        l.push(row[3] || row.low || row.l || 0);
+        c.push(row[4] || row.close || row.c || 0);
+        v.push(row[5] || row.volume || row.v || 0);
+      }
+      const candleTrace = {
+        x: t,
+        open: o,
+        high: h,
+        low: l,
+        close: c,
+        type: 'candlestick',
+        name: ticker,
+        yaxis: 'y1',
+        increasing: { line: { color: '#16a34a' } },
+        decreasing: { line: { color: '#dc2626' } }
+      };
+      const volumeTrace = {
+        x: t,
+        y: v,
+        type: 'bar',
+        name: 'Volume',
+        yaxis: 'y2',
+        marker: { color: '#64748b', opacity: 0.3 },
+        hoverinfo: 'skip',
+      };
+      const data = [candleTrace, volumeTrace];
 
       await Plotly.newPlot(els.chart, data, layout, {
-        responsive: true,
-        scrollZoom: true,
         displaylogo: false
       });
+      wireHoverDismiss();
 
       applyChartTheme();
 
