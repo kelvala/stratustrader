@@ -1,26 +1,32 @@
-// /api/chart
-module.exports = async (req, res) => {
-  try {
-    const t = String((req.query.ticker || '')).trim();
-    const range = String(req.query.range || '6mo');
-    const interval = String(req.query.interval || '1d');
-    if (!t) return res.status(400).json({ error: 'ticker required' });
+export const config = { runtime: 'edge' };
 
-    const urls = [
-      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits`,
-      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits`
-    ];
-
-    for (const url of urls) {
-      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' } });
-      if (r.ok) {
-        const j = await r.json();
-        res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
-        return res.status(200).json(j);
-      }
-    }
-    return res.status(502).json({ error: 'upstream chart failed' });
-  } catch (e) {
-    return res.status(500).json({ error: String(e) });
+export default async function handler(req) {
+  const { searchParams } = new URL(req.url);
+  const ticker = (searchParams.get('ticker') || '').trim();
+  const range = (searchParams.get('range') || '6mo').trim();
+  const interval = (searchParams.get('interval') || '1d').trim();
+  if (!ticker) {
+    return new Response(JSON.stringify({ error: 'ticker required' }), {
+      status: 400, headers: { 'content-type': 'application/json' }
+    });
   }
-};
+
+  const urls = [
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits`,
+    `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits`
+  ];
+
+  for (const url of urls) {
+    const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' } });
+    if (r.ok) {
+      const j = await r.json();
+      return new Response(JSON.stringify(j), {
+        status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
+      });
+    }
+  }
+
+  return new Response(JSON.stringify({ error: 'upstream chart failed' }), {
+    status: 502, headers: { 'content-type': 'application/json' }
+  });
+}
