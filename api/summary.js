@@ -18,8 +18,11 @@ module.exports = async (req, res) => {
         return res.status(200).json(j);
       }
     }
-    return res.status(502).json({ error: 'upstream summary failed' });
+
+    // Graceful fallback: empty shape keeps the UI happy.
+    res.setHeader('Cache-Control', 's-maxage=300');
+    return res.status(200).json({ quoteSummary: { result: [] }, note: 'fallback-empty' });
   } catch (e) {
-    return res.status(500).json({ error: String(e) });
+    return res.status(200).json({ quoteSummary: { result: [] }, note: 'fallback-empty', error: String(e) });
   }
 };
