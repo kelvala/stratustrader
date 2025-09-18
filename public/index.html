@@ -888,74 +888,137 @@
       };
 
       // --- Actually plot the chart and wire up events ---
-      let candles = [];
-      let chartData;
-      try {
-        const res = await fetch(`/api/chart.js?symbol=${encodeURIComponent(ticker)}`);
-        chartData = await res.json();
-        // Restore previous permissive logic: accept chartData.candles or chartData directly
-        if (chartData && Array.isArray(chartData.candles)) {
-          candles = chartData.candles;
-        } else if (Array.isArray(chartData)) {
-          candles = chartData;
-        } else {
-          candles = undefined;
-        }
-      } catch (e) {
-        showError('Chart data fetch failed: ' + e.message);
-        Plotly.purge('chart');
-        return;
-      }
-      if (!candles || !Array.isArray(candles) || candles.length === 0) {
-        showError('No chart data available for ' + ticker);
-        Plotly.purge('chart');
-        return;
-      }
-
-      // Transform candles array into Plotly candlestick and volume traces
-      const o = [], h = [], l = [], c = [], v = [], t = [];
-      for (const row of candles) {
-        t.push(row[0] || row.date || row.t || row.time || '');
-        o.push(row[1] || row.open || row.o || 0);
-        h.push(row[2] || row.high || row.h || 0);
-        l.push(row[3] || row.low || row.l || 0);
-        c.push(row[4] || row.close || row.c || 0);
-        v.push(row[5] || row.volume || row.v || 0);
-      }
-      const candleTrace = {
-        x: t,
-        open: o,
-        high: h,
-        low: l,
-        close: c,
+      // Build Plotly traces from visibleRows and indicator arrays
+      const trCandles = {
         type: 'candlestick',
+        x: x,
+        open: open,
+        high: high,
+        low: low,
+        close: close,
         name: ticker,
-        yaxis: 'y1',
-        increasing: { line: { color: '#16a34a' } },
-        decreasing: { line: { color: '#dc2626' } }
+        yaxis: 'y',
+        increasing: { line: { color: css('--c-up') || '#16a34a' } },
+        decreasing: { line: { color: css('--c-down') || '#dc2626' } },
+        showlegend: false,
+        hovertemplate: 'Date: %{x}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>'
       };
-      const volumeTrace = {
-        x: t,
-        y: v,
+      const trSMA20 = {
+        type: 'scatter',
+        x: x,
+        y: sma20,
+        mode: 'lines',
+        name: 'SMA 20',
+        line: { color: css('--c-sma20') || '#22c55e', width: 2 },
+        yaxis: 'y'
+      };
+      const trSMA50 = {
+        type: 'scatter',
+        x: x,
+        y: sma50,
+        mode: 'lines',
+        name: 'SMA 50',
+        line: { color: css('--c-sma50') || '#60a5fa', width: 2 },
+        yaxis: 'y'
+      };
+      const trSMA200 = {
+        type: 'scatter',
+        x: x,
+        y: sma200,
+        mode: 'lines',
+        name: 'SMA 200',
+        line: { color: css('--c-sma200') || '#f59e0b', width: 2 },
+        yaxis: 'y'
+      };
+      const trVol = {
         type: 'bar',
+        x: x,
+        y: vol,
         name: 'Volume',
-        yaxis: 'y2',
-        marker: { color: '#64748b', opacity: 0.3 },
-        hoverinfo: 'skip',
+        marker: { color: css('--c-vol') || '#10b981', opacity: 0.45 },
+        yaxis: 'y3',
+        opacity: 0.45
       };
-      const data = [candleTrace, volumeTrace];
-
+      const trRSI = {
+        type: 'scatter',
+        x: x,
+        y: rsiVals,
+        mode: 'lines',
+        name: 'RSI',
+        line: { color: css('--c-rsi') || '#a78bfa', width: 2 },
+        yaxis: 'y2'
+      };
+      const trRSI70 = {
+        type: 'scatter',
+        x: x,
+        y: Array(x.length).fill(70),
+        mode: 'lines',
+        name: 'RSI 70',
+        line: { color: '#f59e0b', width: 1, dash: 'dot' },
+        yaxis: 'y2',
+        showlegend: false,
+        hoverinfo: 'skip'
+      };
+      const trRSI30 = {
+        type: 'scatter',
+        x: x,
+        y: Array(x.length).fill(30),
+        mode: 'lines',
+        name: 'RSI 30',
+        line: { color: '#60a5fa', width: 1, dash: 'dot' },
+        yaxis: 'y2',
+        showlegend: false,
+        hoverinfo: 'skip'
+      };
+      const trMACD = {
+        type: 'scatter',
+        x: x,
+        y: macd.macd,
+        mode: 'lines',
+        name: 'MACD',
+        line: { color: css('--c-macd') || '#38bdf8', width: 2 },
+        yaxis: 'y4'
+      };
+      const trSignal = {
+        type: 'scatter',
+        x: x,
+        y: macd.signal,
+        mode: 'lines',
+        name: 'Signal',
+        line: { color: '#f59e0b', width: 1.5, dash: 'dot' },
+        yaxis: 'y4'
+      };
+      const trHist = {
+        type: 'bar',
+        x: x,
+        y: macd.hist,
+        name: 'MACD Hist',
+        marker: { color: '#64748b', opacity: 0.5 },
+        yaxis: 'y4',
+        opacity: 0.5
+      };
+      const data = [
+        trCandles,   // 0
+        trSMA20,     // 1
+        trSMA50,     // 2
+        trSMA200,    // 3
+        trVol,       // 4 (y3)
+        trRSI,       // 5 (y2)
+        trRSI70,     // 6
+        trRSI30,     // 7
+        trMACD,      // 8 (y4)
+        trSignal,    // 9
+        trHist       // 10
+      ];
       await Plotly.newPlot(els.chart, data, layout, {
+        responsive: true,
+        scrollZoom: true,
         displaylogo: false
       });
-      wireHoverDismiss();
-
       applyChartTheme();
-
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
       els.chart.on?.('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
       if (fibActive()) addOrUpdateAutoFibTraces();
-
       traceMap = {
         SMA20: 1,
         SMA50: 2,
@@ -964,7 +1027,6 @@
         MACD: [8,9,10],
         VOL: 4
       };
-
       applyVisibilityFromChips();
       startPriceTicker();
       wireHoverDismiss();
