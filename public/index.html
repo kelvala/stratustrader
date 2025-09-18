@@ -1063,5 +1063,25 @@
   onSearch(bootTicker,'');
 })();
   </script>
+
+  <script>
+  function showError(msg) {
+    let errBox = document.getElementById('chart-error-box');
+    if (!errBox) {
+      errBox = document.createElement('div');
+      errBox.id = 'chart-error-box';
+      errBox.style.cssText = 'color:#fff;background:#c00;padding:8px 16px;margin:8px 0;border-radius:6px;font-weight:bold;text-align:center;z-index:10;';
+      const chartParent = document.getElementById('chart')?.parentNode;
+      if (chartParent) chartParent.insertBefore(errBox, document.getElementById('chart'));
+      else document.body.prepend(errBox);
+    }
+    errBox.textContent = msg;
+    errBox.style.display = 'block';
+  }
+  function clearError() {
+    const errBox = document.getElementById('chart-error-box');
+    if (errBox) errBox.style.display = 'none';
+  }
+  </script>
 </body>
 </html>
