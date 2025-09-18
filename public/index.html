@@ -83,7 +83,7 @@
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);}
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;}
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
@@ -888,6 +888,28 @@
       };
 
       // --- Actually plot the chart and wire up events ---
+      let candles = [];
+      let chartData;
+      try {
+        const res = await fetch(`/api/chart.js?symbol=${encodeURIComponent(ticker)}`);
+        chartData = await res.json();
+        if (chartData && Array.isArray(chartData.candles)) {
+          candles = chartData.candles;
+        } else if (Array.isArray(chartData)) {
+          candles = chartData;
+        } else {
+          candles = [];
+        }
+      } catch (e) {
+        console.error('Chart data fetch failed:', e);
+        candles = [];
+      }
+      if (!Array.isArray(candles) || candles.length === 0) {
+        showError('No chart data available for ' + ticker);
+        Plotly.purge('chart');
+        return;
+      }
+
       const data = [
         candles,       // 0
         trSMA20,       // 1
@@ -944,7 +966,7 @@
   }
 
   /* ---------- Chips ---------- */
-  els.toggles.addEventListener('click', (e)=>{
+  els.toggles.addEventListener('click', e => {
     const chip = e.target.closest('.chip'); if(!chip) return;
     const key  = chip.dataset.k;
     if (key === 'AUTOFIB') {
