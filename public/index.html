@@ -487,86 +487,40 @@
     return {macd,signal,hist};
   }
 
-  /* ---------- Ichimoku helpers ---------- */
-  function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
-    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
-  function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
-    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let lo=Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) lo=Math.min(lo,arr[j]); out[i]=Number.isFinite(lo)?lo:null; } return out; }
-  function arrShiftFwd(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i+k<n) out[i+k]=arr[i]; return out; }
-  function arrShiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
-  function calcIchimoku(rows) {
-    // Ichimoku parameters
-    const convPeriod = 9, basePeriod = 26, spanBPeriod = 52, displacement = 26;
+  // --- Ichimoku helpers ---
+  function calcIchimoku(rows){
     const n = rows.length;
-    const high = rows.map(r => r.h), low = rows.map(r => r.l), close = rows.map(r => r.c);
-    // Conversion Line (Tenkan-sen)
-    const conv = high.map((_,i) => {
-      if (i < convPeriod-1) return null;
-      let hi = Math.max(...high.slice(i-convPeriod+1,i+1));
-      let lo = Math.min(...low.slice(i-convPeriod+1,i+1));
-      return (hi+lo)/2;
-    });
-    // Base Line (Kijun-sen)
-    const base = high.map((_,i) => {
-      if (i < basePeriod-1) return null;
-      let hi = Math.max(...high.slice(i-basePeriod+1,i+1));
-      let lo = Math.min(...low.slice(i-basePeriod+1,i+1));
-      return (hi+lo)/2;
-    });
-    // Leading Span A (Senkou Span A)
-    const spanA = conv.map((v,i) => (v!=null&&base[i]!=null)?(v+base[i])/2:null);
-    // Leading Span B (Senkou Span B)
-    const spanB = high.map((_,i) => {
-      if (i < spanBPeriod-1) return null;
-      let hi = Math.max(...high.slice(i-spanBPeriod+1,i+1));
-      let lo = Math.min(...low.slice(i-spanBPeriod+1,i+1));
-      return (hi+lo)/2;
-    });
-    // Displace Span A and B forward
-    const spanADisp = Array(displacement).fill(null).concat(spanA).slice(0,n);
-    const spanBDisp = Array(displacement).fill(null).concat(spanB).slice(0,n);
-    // Lagging Span (Chikou)
-    const chikou = close.map((v,i) => (i+displacement<n)?close[i+displacement]:null);
-    return {conv,base,spanA:spanADisp,spanB:spanBDisp,chikou};
+    const high  = rows.map(r=>r.h);
+    const low   = rows.map(r=>r.l);
+    const close = rows.map(r=>r.c);
+    const hi = (a,w)=> a.map((_,i)=> i<w-1 ? null : Math.max(...a.slice(i-w+1,i+1)));
+    const lo = (a,w)=> a.map((_,i)=> i<w-1 ? null : Math.min(...a.slice(i-w+1,i+1)));
+    const avg = (a,b)=> (a!=null && b!=null) ? (a+b)/2 : null;
+    const tenkan = hi(high,9 ).map((h,i)=> avg(h, lo(low,9 )[i]));
+    const kijun  = hi(high,26).map((h,i)=> avg(h, lo(low,26)[i]));
+    const spanA0 = tenkan.map((t,i)=> avg(t, kijun[i]));
+    const spanB0 = hi(high,52).map((h,i)=> avg(h, lo(low,52)[i]));
+    const shift = 26;
+    const fwd  = a => Array(n).fill(null).map((_,i)=> i+shift<n ? a[i] : null);
+    const back = a => Array(n).fill(null).map((_,i)=> i-shift>=0 ? a[i] : null);
+    return { tenkan, kijun, spanA: fwd(spanA0), spanB: fwd(spanB0), chikou: back(close) };
   }
-
-  function ichimokuCloudTraces(x, ichi) {
-    // Green cloud where SpanA > SpanB, Red where SpanA < SpanB
-    const n = x.length;
-    let cloudGreenX = [], cloudGreenA = [], cloudGreenB = [], cloudRedX = [], cloudRedA = [], cloudRedB = [];
-    for (let i = 1; i < n; ++i) {
-      if (ichi.spanA[i] != null && ichi.spanB[i] != null) {
-        if (ichi.spanA[i] >= ichi.spanB[i]) {
-          cloudGreenX.push(x[i-1], x[i]);
-          cloudGreenA.push(ichi.spanA[i-1], ichi.spanA[i]);
-          cloudGreenB.push(ichi.spanB[i-1], ichi.spanB[i]);
-        } else {
-          cloudRedX.push(x[i-1], x[i]);
-          cloudRedA.push(ichi.spanA[i-1], ichi.spanA[i]);
-          cloudRedB.push(ichi.spanB[i-1], ichi.spanB[i]);
-        }
-      }
+  function fillEdges(arr){
+    const out = arr.slice(); let last=null;
+    for (let i=0;i<out.length;i++){
+      if (Number.isFinite(out[i])) last = out[i]; else if (last!=null) out[i] = last;
     }
-    return [
-      // Green cloud
-      {
-        x: cloudGreenX.concat(cloudGreenX.slice().reverse()),
-        y: cloudGreenA.concat(cloudGreenB.slice().reverse()),
-        fill: 'toself', fillcolor: 'rgba(34,197,94,0.18)', line: {width:0}, type: 'scatter', mode: 'lines', name: 'Ichimoku Cloud (Bull)', yaxis: 'y', hoverinfo: 'skip', showlegend: false
-      },
-      // Red cloud
-      {
-        x: cloudRedX.concat(cloudRedX.slice().reverse()),
-        y: cloudRedA.concat(cloudRedB.slice().reverse()),
-        fill: 'toself', fillcolor: 'rgba(239,68,68,0.18)', line: {width:0}, type: 'scatter', mode: 'lines', name: 'Ichimoku Cloud (Bear)', yaxis: 'y', hoverinfo: 'skip', showlegend: false
-      },
-      // Tenkan-sen
-      { x, y: ichi.conv, type: 'scatter', mode: 'lines', name: 'Tenkan-sen', line: {color: css('--c-ichi-tenkan')||'#f59e0b', width:1.5}, yaxis:'y' },
-      // Kijun-sen
-      { x, y: ichi.base, type: 'scatter', mode: 'lines', name: 'Kijun-sen', line: {color: css('--c-ichi-kijun')||'#60a5fa', width:1.5}, yaxis:'y' },
-      // Chikou
-      { x, y: ichi.chikou, type: 'scatter', mode: 'lines', name: 'Chikou', line: {color: css('--c-ichi-chikou')||'#93c5fd', width:1.2, dash:'dot'}, yaxis:'y' }
-    ];
+    return out;
+  }
+  function segmentCloud(a,b){
+    const n=a.length;
+    const gLow=Array(n).fill(null), gUp=Array(n).fill(null);
+    const rLow=Array(n).fill(null), rUp=Array(n).fill(null);
+    for (let i=0;i<n;i++){
+      const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue;
+      if (A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; }
+    }
+    return { gLow,gUp,rLow,rUp };
   }
 
   /* ---------- Search & autocomplete ---------- */
@@ -871,30 +825,18 @@
       const rsiVals = RSI(close,14);
       const macd = MACD(close,12,26,9);
 
-      /* --- Last/Change lines & prev close --- */
-      const last = close.at(-1);
-      const prevClose = ['1m','5m','15m','60m'].includes(freq) ? prevDailyCloseFromIntraday(fullRows) : (close.length>=2 ? close.at(-2) : null);
-      CURRENT.prevClose = prevClose;
-      const ref = (prevClose!=null) ? prevClose : (close.length>=2 ? close.at(-2) : null);
-      const dayChg = (ref!=null) ? (last - ref) : null;
-      const dayPct = (ref!=null && ref!==0) ? (dayChg/ref)*100 : null;
-      const upClr=css('--c-up'), dnClr=css('--c-down');
-      const chgClr = dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
-      const signChg = dayChg>0?'+':dayChg<0?'-':'';
-      const signPct = dayPct>0?'+':dayPct<0?'-':'';
-      // Only update price line if not on timer
-      if (!window.PRICE_TIMER_ACTIVE) {
-        els.lastLine.innerHTML = `Last: <b id='livePrice'>$${fmt(last)}</b> <span id='priceTimestamp' style='font-size:0.9em;opacity:0.7'></span> · ` + (dayChg==null? 'Change: —' :
-          `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
-      }
-      els.prevCloseLine.textContent = `Yesterday’s Close: ${prevClose==null ? '—' : '$'+fmt(prevClose)}`;
-
-      /* --- Intrinsic value (very rough) --- */
-      const f = FUNDAMENTALS[ticker] || {};
-      const ivs=[]; if(Number.isFinite(f.ivGraham)) ivs.push(f.ivGraham);
-      const s50=sma50.at(-1), s200=sma200.at(-1); if(Number.isFinite(s50)&&Number.isFinite(s200)) ivs.push((s50+s200)/2);
-      const iv = ivs.length ? (ivs.reduce((a,b)=>a+b,0)/ivs.length) : null;
-      els.ivLine.textContent = `Intrinsic Value: ${iv==null ? '—' : '$'+fmt(iv)}`;
+      // --- Ichimoku ---
+      const ichi   = calcIchimoku(visibleRows);
+      const spanA  = fillEdges(ichi.spanA);
+      const spanB  = fillEdges(ichi.spanB);
+      const cloud  = segmentCloud(spanA, spanB);
+      const trCloudGreenBottom = { type:'scatter', x, y:cloud.gLow, yaxis:'y', name:'Cloud+', line:{width:0}, fill:'tonexty', fillcolor:css('--c-ichi-up'),  hoverinfo:'skip' };
+      const trCloudGreenTop    = { type:'scatter', x, y:cloud.gUp,  yaxis:'y', name:'Cloud+', line:{width:0},               fillcolor:css('--c-ichi-up'),  hoverinfo:'skip' };
+      const trCloudRedBottom   = { type:'scatter', x, y:cloud.rLow, yaxis:'y', name:'Cloud-', line:{width:0}, fill:'tonexty', fillcolor:css('--c-ichi-down'), hoverinfo:'skip' };
+      const trCloudRedTop      = { type:'scatter', x, y:cloud.rUp,  yaxis:'y', name:'Cloud-', line:{width:0},               fillcolor:css('--c-ichi-down'), hoverinfo:'skip' };
+      const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1.2, color:css('--c-ichi-tenkan') }, connectgaps:true };
+      const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1.2, color:css('--c-ichi-kijun')  }, connectgaps:true };
+      const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1.0, color:css('--c-ichi-chikou')}, connectgaps:true };
 
       // --- Chart layout with proper domains ---
       const layout = {
@@ -912,12 +854,13 @@
       // --- Actually plot the chart and wire up events ---
       const data = [
         trCandles,
+        trCloudGreenBottom, trCloudGreenTop,
+        trCloudRedBottom,   trCloudRedTop,
         trSMA20, trSMA50, trSMA200,
         trVol,
         trRSI, trRSI70, trRSI30,
         trMACD, trSignal, trHist,
-        // Ichimoku (five traces)
-        trCloudBull, trCloudBear, trTenkan, trKijun, trChikou
+        trTenkan, trKijun, trChikou
       ];
       await Plotly.newPlot(els.chart, data, layout, {
         responsive: true,
@@ -929,17 +872,16 @@
       els.chart.on?.('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
       if (fibActive()) addOrUpdateAutoFibTraces();
       traceMap = {
-        SMA20:  data.indexOf(trSMA20),
-        SMA50:  data.indexOf(trSMA50),
+        SMA20: data.indexOf(trSMA20),
+        SMA50: data.indexOf(trSMA50),
         SMA200: data.indexOf(trSMA200),
-        VOL:    data.indexOf(trVol),
         RSI:   [data.indexOf(trRSI), data.indexOf(trRSI70), data.indexOf(trRSI30)],
         MACD:  [data.indexOf(trMACD), data.indexOf(trSignal), data.indexOf(trHist)],
+        VOL:   data.indexOf(trVol),
         ICHI:  [
-          data.indexOf(trCloudBull),
-          data.indexOf(trCloudBear),
-          data.indexOf(trTenkan),
-          data.indexOf(trKijun),
+          data.indexOf(trCloudGreenBottom), data.indexOf(trCloudGreenTop),
+          data.indexOf(trCloudRedBottom),   data.indexOf(trCloudRedTop),
+          data.indexOf(trTenkan),           data.indexOf(trKijun),
           data.indexOf(trChikou)
         ]
       };
