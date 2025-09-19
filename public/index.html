@@ -838,6 +838,22 @@
       const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1.2, color:css('--c-ichi-kijun')  }, connectgaps:true };
       const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1.0, color:css('--c-ichi-chikou')}, connectgaps:true };
 
+      // --- Candlestick trace ---
+      const trCandles = {
+        type: 'candlestick',
+        x: x,
+        open: open,
+        high: high,
+        low: low,
+        close: close,
+        name: ticker,
+        yaxis: 'y',
+        increasing: { line: { color: css('--c-up') || '#16a34a' } },
+        decreasing: { line: { color: css('--c-down') || '#dc2626' } },
+        showlegend: false,
+        hovertemplate: 'Date: %{x}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>'
+      };
+
       // --- Chart layout with proper domains ---
       const layout = {
         margin:{l:56,r:28,t:18,b:26},
@@ -959,23 +975,7 @@
     { title:'Insider buying (recent)', lvl:'Advanced', url:'https://finviz.com/screener.ashx?v=111&f=sh_insiderbuy' },
   ];
   function renderScreeners(){
-    const list=q('#scrList'); if(!list) return; list.innerHTML='';
-    FINVIZ_PRESETS.forEach(p=>{
-      const a=document.createElement('a'); a.href=p.url; a.target='_blank'; a.rel='noopener'; a.className='scr-item'; a.dataset.lvl=p.lvl;
-      a.innerHTML=`<div style="flex:1;min-width:0"><div class="title">${p.title}</div><div class="desc">Finviz • Opens with filters applied</div></div><div style="display:flex;align-items:center;gap:8px"><span class="badge">${p.lvl}</span></div>`;
-      list.appendChild(a);
-    });
-  }
-
-  const sh=id=>q('#'+id);
-  q('#toolGPTs')?.addEventListener('click', ()=> sh('sheetGPTs').hidden=false);
-  q('#toolScreeners')?.addEventListener('click', ()=>{ renderScreeners(); sh('sheetScreeners').hidden=false; });
-  document.querySelectorAll('.sheet-close').forEach(btn=> btn.addEventListener('click', ()=>{ const id=btn.getAttribute('data-close'); sh(id).hidden=true; }));
-  const nav=q('#btmNav'); if(nav){
-    nav.addEventListener('click', (e)=>{
-      const tabBtn=e.target.closest('.tab'); if(!tabBtn) return;
-      nav.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-      tabBtn.classList.add('active');
+    const list=q('#
       const tab=tabBtn.dataset.tab;
       if(tab==='home'){ ['sheetScreeners','sheetGPTs'].forEach(s=>sh(s)?.setAttribute('hidden','')); window.scrollTo({top:0,behavior:'smooth'}); }
       else if(tab==='screeners'){ renderScreeners(); sh('sheetGPTs')?.setAttribute('hidden',''); sh('sheetScreeners')?.removeAttribute('hidden'); }
