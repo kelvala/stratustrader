@@ -1158,6 +1158,16 @@
     els.chart._hoverDismissWired=true;
   }
 
+  /* ---------- SMA helper ---------- */
+  function alignAndExtendSMA(smaAll, visibleLen, startIdx){
+    let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
+    while (arr.length < visibleLen) arr.unshift(null);
+    const firstIdx = arr.findIndex(v => Number.isFinite(v));
+    if (firstIdx > 0){ const firstVal = arr[firstIdx]; for (let i=0;i<firstIdx;i++) arr[i]=firstVal; }
+    for (let i=1;i<arr.length;i++) if (arr[i]==null && Number.isFinite(arr[i-1])) arr[i]=arr[i-1];
+    return arr;
+  }
+
   /* ---------- Boot ---------- */
   renderScreeners();
   const bootTicker = localStorage.getItem('lastTicker') || 'AAPL';
