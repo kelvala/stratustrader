@@ -104,7 +104,7 @@
   .light .chip.active::after{opacity:.36;filter:blur(12px)}
   .chip:focus-visible{outline:2px solid currentColor;outline-offset:3px}
   .section-sep{margin:20px -16px 16px;padding:0 16px}
-  .section-sep .rule{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.9}
+  .section-sep .rule{height:4px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.95}
   .sheet{position:fixed;left:0;right:0;bottom:0;top:auto;background:transparent;display:flex;justify-content:center;z-index:2000}
   .sheet[hidden]{display:none!important}
   .sheet-inner{width:min(760px,100%);background:var(--panel);border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.35);padding:14px;animation:sheetUp .18s ease-out;padding-bottom:max(14px, env(safe-area-inset-bottom))}
@@ -173,6 +173,15 @@
 
   /* --- Chart section separation --- */
   .chart-section { background: #181c20; border-radius: 12px; margin: 18px 0; padding: 12px; box-shadow: 0 2px 8px #0002; }
+  .section-sep { margin: 24px 0 24px 0; padding: 0; }
+  .section-sep .rule { height: 4px; border-radius: 999px; background: linear-gradient(90deg,var(--focus),var(--accent)); opacity: .95; }
+  .chart-section .chart-title { font-weight: 800; font-size: 1.1em; color: var(--muted); margin-bottom: 8px; letter-spacing: 0.5px; }
+  #mainChartBox { min-height: 420px; }
+  #macdBox, #volBox, #rsiBox { min-height: 180px; }
+  @media (max-width: 720px) {
+    #mainChartBox { min-height: 260px; }
+    #macdBox, #volBox, #rsiBox { min-height: 120px; }
+  }
 </style>
 </head>
 <body>
