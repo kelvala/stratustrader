@@ -975,15 +975,33 @@
     { title:'Insider buying (recent)', lvl:'Advanced', url:'https://finviz.com/screener.ashx?v=111&f=sh_insiderbuy' },
   ];
   function renderScreeners(){
-    const list=q('#
-      const tab=tabBtn.dataset.tab;
-      if(tab==='home'){ ['sheetScreeners','sheetGPTs'].forEach(s=>sh(s)?.setAttribute('hidden','')); window.scrollTo({top:0,behavior:'smooth'}); }
-      else if(tab==='screeners'){ renderScreeners(); sh('sheetGPTs')?.setAttribute('hidden',''); sh('sheetScreeners')?.removeAttribute('hidden'); }
-      else if(tab==='gpts'){ sh('sheetScreeners')?.setAttribute('hidden',''); sh('sheetGPTs')?.removeAttribute('hidden'); }
-      else if(tab==='settings'){ els.themeToggle?.click(); }
+    const list=q('#scrList');
+    if(!list) return;
+    list.innerHTML='';
+    FINVIZ_PRESETS.forEach(p=>{
+      const a=document.createElement('a');
+      a.className='scr-item';
+      a.href=p.url; a.target='_blank'; a.rel='noopener';
+      a.dataset.lvl=p.lvl;
+      a.innerHTML=`<div style="flex:1;min-width:0"><div class="title">${p.title}</div></div>`;
+      list.appendChild(a);
     });
   }
 
+  // Fix nav event handler
+  const sh=id=>q('#'+id);
+  const nav=q('#btmNav');
+  if(nav){
+    nav.querySelectorAll('.tab').forEach(tabBtn=>{
+      tabBtn.addEventListener('click',()=>{
+        const tab=tabBtn.dataset.tab;
+        if(tab==='home'){ ['sheetScreeners','sheetGPTs'].forEach(s=>sh(s)?.setAttribute('hidden','')); window.scrollTo({top:0,behavior:'smooth'}); }
+        else if(tab==='screeners'){ renderScreeners(); sh('sheetGPTs')?.setAttribute('hidden',''); sh('sheetScreeners')?.removeAttribute('hidden'); }
+        else if(tab==='gpts'){ sh('sheetScreeners')?.setAttribute('hidden',''); sh('sheetGPTs')?.removeAttribute('hidden'); }
+        else if(tab==='settings'){ els.themeToggle?.click(); }
+      });
+    });
+  }
   /* ---------- Hover tooltip dismiss ---------- */
   function dismissHover(){ if(!els.chart) return; try{ Plotly.Fx.unhover(els.chart); }catch(_){} }
   function wireHoverDismiss(){
