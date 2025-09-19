@@ -494,82 +494,80 @@
     for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let lo=Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) lo=Math.min(lo,arr[j]); out[i]=Number.isFinite(lo)?lo:null; } return out; }
   function arrShiftFwd(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i+k<n) out[i+k]=arr[i]; return out; }
   function arrShiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
-  function calcIchimoku(rows){
-    const n=rows.length, high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c);
-    const convHi=rollingHigh(high,9),  convLo=rollingLow(low,9);
-    const kijHi =rollingHigh(high,26), kijLo=rollingLow(low,26);
-    const senBHi=rollingHigh(high,52),  senBLo=rollingLow(low,52);
-    const tenkan=convHi.map((h,i)=> (h!=null&&convLo[i]!=null)?(h+convLo[i])/2:null);
-    const kijun =kijHi .map((h,i)=> (h!=null&&kijLo[i]!=null)?(h+kijLo[i])/2:null);
-    const senA0=tenkan.map((t,i)=> (t!=null&&kijun[i]!=null)?(t+kijun[i])/2:null);
-    const senB0=senBHi.map((h,i)=> (h!=null&&senBLo[i]!=null)?(h+senBLo[i])/2:null);
-    const shift=26, spanA=arrShiftFwd(senA0,shift,n), spanB=arrShiftFwd(senB0,shift,n), chikou=arrShiftBack(close,shift,n);
-    return { tenkan, kijun, spanA, spanB, chikou };
+  function calcIchimoku(rows) {
+    // Ichimoku parameters
+    const convPeriod = 9, basePeriod = 26, spanBPeriod = 52, displacement = 26;
+    const n = rows.length;
+    const high = rows.map(r => r.h), low = rows.map(r => r.l), close = rows.map(r => r.c);
+    // Conversion Line (Tenkan-sen)
+    const conv = high.map((_,i) => {
+      if (i < convPeriod-1) return null;
+      let hi = Math.max(...high.slice(i-convPeriod+1,i+1));
+      let lo = Math.min(...low.slice(i-convPeriod+1,i+1));
+      return (hi+lo)/2;
+    });
+    // Base Line (Kijun-sen)
+    const base = high.map((_,i) => {
+      if (i < basePeriod-1) return null;
+      let hi = Math.max(...high.slice(i-basePeriod+1,i+1));
+      let lo = Math.min(...low.slice(i-basePeriod+1,i+1));
+      return (hi+lo)/2;
+    });
+    // Leading Span A (Senkou Span A)
+    const spanA = conv.map((v,i) => (v!=null&&base[i]!=null)?(v+base[i])/2:null);
+    // Leading Span B (Senkou Span B)
+    const spanB = high.map((_,i) => {
+      if (i < spanBPeriod-1) return null;
+      let hi = Math.max(...high.slice(i-spanBPeriod+1,i+1));
+      let lo = Math.min(...low.slice(i-spanBPeriod+1,i+1));
+      return (hi+lo)/2;
+    });
+    // Displace Span A and B forward
+    const spanADisp = Array(displacement).fill(null).concat(spanA).slice(0,n);
+    const spanBDisp = Array(displacement).fill(null).concat(spanB).slice(0,n);
+    // Lagging Span (Chikou)
+    const chikou = close.map((v,i) => (i+displacement<n)?close[i+displacement]:null);
+    return {conv,base,spanA:spanADisp,spanB:spanBDisp,chikou};
   }
-  function segmentCloud(a,b){
-    const n=a.length, gLow=Array(n).fill(null), gUp=Array(n).fill(null), rLow=Array(n).fill(null), rUp=Array(n).fill(null);
-    for(let i=0;i<n;i++){ const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue; if(A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; } }
-    return { gLow, gUp, rLow, rUp };
-  }
-  function fillEdges(arr){
-    const out = arr.slice();
-    let last = null;
-    for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; }
-    const fi = out.findIndex(v=>Number.isFinite(v));
-    if(fi>0){ for(let i=0;i<fi;i++) out[i]=out[fi]; }
-    let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } }
-    if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; }
-    return out;
-  }
-  function exaggerateCloud(spanA, spanB, mag=1.8, loClip=-Infinity, hiClip=Infinity){
-    if(!(mag>1)) return {spanA,spanB};
-    const A=spanA.slice(), B=spanB.slice();
-    for(let i=0;i<A.length;i++){
-      const a=A[i], b=B[i]; if(!Number.isFinite(a)||!Number.isFinite(b)) continue;
-      const mid=(a+b)/2, half=(a-b)/2;
-      A[i]=Math.min(Math.max(mid+half*mag, loClip), hiClip);
-      B[i]=Math.min(Math.max(mid-half*mag, loClip), hiClip);
+
+  function ichimokuCloudTraces(x, ichi) {
+    // Green cloud where SpanA > SpanB, Red where SpanA < SpanB
+    const n = x.length;
+    let cloudGreenX = [], cloudGreenA = [], cloudGreenB = [], cloudRedX = [], cloudRedA = [], cloudRedB = [];
+    for (let i = 1; i < n; ++i) {
+      if (ichi.spanA[i] != null && ichi.spanB[i] != null) {
+        if (ichi.spanA[i] >= ichi.spanB[i]) {
+          cloudGreenX.push(x[i-1], x[i]);
+          cloudGreenA.push(ichi.spanA[i-1], ichi.spanA[i]);
+          cloudGreenB.push(ichi.spanB[i-1], ichi.spanB[i]);
+        } else {
+          cloudRedX.push(x[i-1], x[i]);
+          cloudRedA.push(ichi.spanA[i-1], ichi.spanA[i]);
+          cloudRedB.push(ichi.spanB[i-1], ichi.spanB[i]);
+        }
+      }
     }
-    return {spanA:A, spanB:B};
+    return [
+      // Green cloud
+      {
+        x: cloudGreenX.concat(cloudGreenX.slice().reverse()),
+        y: cloudGreenA.concat(cloudGreenB.slice().reverse()),
+        fill: 'toself', fillcolor: 'rgba(34,197,94,0.18)', line: {width:0}, type: 'scatter', mode: 'lines', name: 'Ichimoku Cloud (Bull)', yaxis: 'y', hoverinfo: 'skip', showlegend: false
+      },
+      // Red cloud
+      {
+        x: cloudRedX.concat(cloudRedX.slice().reverse()),
+        y: cloudRedA.concat(cloudRedB.slice().reverse()),
+        fill: 'toself', fillcolor: 'rgba(239,68,68,0.18)', line: {width:0}, type: 'scatter', mode: 'lines', name: 'Ichimoku Cloud (Bear)', yaxis: 'y', hoverinfo: 'skip', showlegend: false
+      },
+      // Tenkan-sen
+      { x, y: ichi.conv, type: 'scatter', mode: 'lines', name: 'Tenkan-sen', line: {color: css('--c-ichi-tenkan')||'#f59e0b', width:1.5}, yaxis:'y' },
+      // Kijun-sen
+      { x, y: ichi.base, type: 'scatter', mode: 'lines', name: 'Kijun-sen', line: {color: css('--c-ichi-kijun')||'#60a5fa', width:1.5}, yaxis:'y' },
+      // Chikou
+      { x, y: ichi.chikou, type: 'scatter', mode: 'lines', name: 'Chikou', line: {color: css('--c-ichi-chikou')||'#93c5fd', width:1.2, dash:'dot'}, yaxis:'y' }
+    ];
   }
-
-  /* ---------- SMA helper ---------- */
-  function alignAndExtendSMA(smaAll, visibleLen, startIdx){
-    let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
-    while (arr.length < visibleLen) arr.unshift(null);
-    const firstIdx = arr.findIndex(v => Number.isFinite(v));
-    if (firstIdx > 0){ const firstVal=arr[firstIdx]; for(let i=0;i<firstIdx;i++) arr[i]=firstVal; }
-    for (let i=1;i<arr.length;i++) if (arr[i]==null && Number.isFinite(arr[i-1])) arr[i]=arr[i-1];
-    return arr;
-  }
-
-  /* ---------- Auto-Fib ---------- */
-  function getAxisState(){
-    const L = els.chart && (els.chart._fullLayout || els.chart.layout);
-    const g = ax => ({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false });
-    return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
-  }
-  function relayoutPreserve(payload){
-    const S=getAxisState(); const keep=(axKey,s)=>{ if(!s) return {}; const out={}; if(s.range){out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false;} else if(s.autorange){out[`${axKey}.autorange`]=true;} return out; };
-    return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
-  }
-  const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
-  const addOrUpdateAutoFibTraces = debounce(async () => {
-    if(!fibActive()||!els.chart||FIB_LOCK) return;
-    const c=getCandleTrace(); if(!c) return;
-    const cx=c.x, ch=c.high, cl=c.low; if(!cx?.length) return;
-    const L=els.chart._fullLayout||els.chart.layout||{}, xa=L.xaxis||{};
-    const x0=(Array.isArray(xa.range)&&xa.autorange===false)?xa.range[0]:cx[0];
-    const x1=(Array.isArray(xa.range)&&xa.autorange===false)?xa.range[1]:cx[cx.length-1];
-    const i0=Math.max(0, cx.findIndex(d=>d>=x0)); let i1=cx.findIndex(d=>d>x1); if(i1===-1) i1=cx.length; if(i1<=i0) return;
-    let hi=-Infinity, lo=Infinity; for(let i=i0;i<i1;i++){ if(Number.isFinite(ch[i])) hi=Math.max(hi,ch[i]); if(Number.isFinite(cl[i])) lo=Math.min(lo,cl[i]); }
-    if(!Number.isFinite(hi)||!Number.isFinite(lo)||hi===lo) return;
-    const lvls=[1,.786,.618,.5,.382,.236,0], color=css('--c-rsi')||'#8b5cf6', prices=lvls.map(p=>hi-(hi-lo)*p);
-    const shapes=prices.map(y=>({type:'line',xref:'x',yref:'y',x0,x1,y0:y,y1:y,line:{color,width:1.25,dash:'dot'},layer:'above',opacity:.95}));
-    const anns=prices.map((y,i)=>({x:x1,y,xref:'x',yref:'y',xanchor:'right',yanchor:'middle',text:`${(lvls[i]*100).toFixed(1)}%  ${y.toFixed(2)}`,showarrow:false,font:{size:11,color}}));
-    try { FIB_LOCK = true; await relayoutPreserve({ shapes, annotations: anns }); } finally { FIB_LOCK = false; }
-  }, 30);
-  const clearAutoFib = () => { if(!els.chart) return; try{ FIB_LOCK=true; relayoutPreserve({shapes:[],annotations:[]}); } finally { FIB_LOCK=false; } };
 
   /* ---------- Search & autocomplete ---------- */
   let LOCAL_SYMBOLS=[], suggestions=[], activeIndex=-1;
