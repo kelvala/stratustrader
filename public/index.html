@@ -899,7 +899,7 @@
       // --- Chart layout with proper domains ---
       const layout = {
         margin:{l:56,r:28,t:18,b:26},
-        xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid'), rangeslider: { visible: false } }, // Remove mini chart
+        xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid'), rangeslider: { visible: false } },
         yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), domain:[0.42, 1] },
         yaxis2:{ domain:[0,0.18], anchor:'x', title:'RSI', range:[0,100] },
         yaxis3:{ domain:[0.18,0.28], anchor:'x', title:'Vol' },
@@ -910,127 +910,14 @@
       };
 
       // --- Actually plot the chart and wire up events ---
-      // Build Plotly traces from visibleRows and indicator arrays
-      const trCandles = {
-        type: 'candlestick',
-        x: x,
-        open: open,
-        high: high,
-        low: low,
-        close: close,
-        name: ticker,
-        yaxis: 'y',
-        increasing: { line: { color: css('--c-up') || '#16a34a' } },
-        decreasing: { line: { color: css('--c-down') || '#dc2626' } },
-        showlegend: false,
-        hovertemplate: 'Date: %{x}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>'
-      };
-      const trSMA20 = {
-        type: 'scatter',
-        x: x,
-        y: sma20,
-        mode: 'lines',
-        name: 'SMA 20',
-        line: { color: css('--c-sma20') || '#22c55e', width: 2 },
-        yaxis: 'y'
-      };
-      const trSMA50 = {
-        type: 'scatter',
-        x: x,
-        y: sma50,
-        mode: 'lines',
-        name: 'SMA 50',
-        line: { color: css('--c-sma50') || '#60a5fa', width: 2 },
-        yaxis: 'y'
-      };
-      const trSMA200 = {
-        type: 'scatter',
-        x: x,
-        y: sma200,
-        mode: 'lines',
-        name: 'SMA 200',
-        line: { color: css('--c-sma200') || '#f59e0b', width: 2 },
-        yaxis: 'y'
-      };
-      const trVol = {
-        type: 'bar',
-        x: x,
-        y: vol,
-        name: 'Volume',
-        marker: { color: css('--c-vol') || '#10b981', opacity: 0.45 },
-        yaxis: 'y3',
-        opacity: 0.45
-      };
-      const trRSI = {
-        type: 'scatter',
-        x: x,
-        y: rsiVals,
-        mode: 'lines',
-        name: 'RSI',
-        line: { color: css('--c-rsi') || '#a78bfa', width: 2 },
-        yaxis: 'y2'
-      };
-      const trRSI70 = {
-        type: 'scatter',
-        x: x,
-        y: Array(x.length).fill(70),
-        mode: 'lines',
-        name: 'RSI 70',
-        line: { color: '#f59e0b', width: 1, dash: 'dot' },
-        yaxis: 'y2',
-        showlegend: false,
-        hoverinfo: 'skip'
-      };
-      const trRSI30 = {
-        type: 'scatter',
-        x: x,
-        y: Array(x.length).fill(30),
-        mode: 'lines',
-        name: 'RSI 30',
-        line: { color: '#60a5fa', width: 1, dash: 'dot' },
-        yaxis: 'y2',
-        showlegend: false,
-        hoverinfo: 'skip'
-      };
-      const trMACD = {
-        type: 'scatter',
-        x: x,
-        y: macd.macd,
-        mode: 'lines',
-        name: 'MACD',
-        line: { color: css('--c-macd') || '#38bdf8', width: 2 },
-        yaxis: 'y4'
-      };
-      const trSignal = {
-        type: 'scatter',
-        x: x,
-        y: macd.signal,
-        mode: 'lines',
-        name: 'Signal',
-        line: { color: '#f59e0b', width: 1.5, dash: 'dot' },
-        yaxis: 'y4'
-      };
-      const trHist = {
-        type: 'bar',
-        x: x,
-        y: macd.hist,
-        name: 'MACD Hist',
-        marker: { color: '#64748b', opacity: 0.5 },
-        yaxis: 'y4',
-        opacity: 0.5
-      };
       const data = [
-        trCandles,   // 0
-        trSMA20,     // 1
-        trSMA50,     // 2
-        trSMA200,    // 3
-        trVol,       // 4 (y3)
-        trRSI,       // 5 (y2)
-        trRSI70,     // 6
-        trRSI30,     // 7
-        trMACD,      // 8 (y4)
-        trSignal,    // 9
-        trHist       // 10
+        trCandles,
+        trSMA20, trSMA50, trSMA200,
+        trVol,
+        trRSI, trRSI70, trRSI30,
+        trMACD, trSignal, trHist,
+        // Ichimoku (five traces)
+        trCloudBull, trCloudBear, trTenkan, trKijun, trChikou
       ];
       await Plotly.newPlot(els.chart, data, layout, {
         responsive: true,
@@ -1042,12 +929,19 @@
       els.chart.on?.('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
       if (fibActive()) addOrUpdateAutoFibTraces();
       traceMap = {
-        SMA20: 1,
-        SMA50: 2,
-        SMA200: 3,
-        RSI: [5,6,7],
-        MACD: [8,9,10],
-        VOL: 4
+        SMA20:  data.indexOf(trSMA20),
+        SMA50:  data.indexOf(trSMA50),
+        SMA200: data.indexOf(trSMA200),
+        VOL:    data.indexOf(trVol),
+        RSI:   [data.indexOf(trRSI), data.indexOf(trRSI70), data.indexOf(trRSI30)],
+        MACD:  [data.indexOf(trMACD), data.indexOf(trSignal), data.indexOf(trHist)],
+        ICHI:  [
+          data.indexOf(trCloudBull),
+          data.indexOf(trCloudBear),
+          data.indexOf(trTenkan),
+          data.indexOf(trKijun),
+          data.indexOf(trChikou)
+        ]
       };
       applyVisibilityFromChips();
       startPriceTicker();
