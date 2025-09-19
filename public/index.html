@@ -171,6 +171,8 @@
     opacity: 0.55;
   }
 
+  /* --- Chart section separation --- */
+  .chart-section { background: #181c20; border-radius: 12px; margin: 18px 0; padding: 12px; box-shadow: 0 2px 8px #0002; }
 </style>
 </head>
 <body>
@@ -250,7 +252,18 @@
         <div class="chip active" data-k="ICHI">Ichimoku</div>
       </div>
 
-      <div id="chart"></div>
+      <div class="chart-section" id="mainChartBox">
+        <div id="chart"></div>
+      </div>
+      <div class="chart-section" id="macdBox" style="display:none">
+        <div id="macdChart" style="height:300px"></div>
+      </div>
+      <div class="chart-section" id="volBox" style="display:none">
+        <div id="volChart" style="height:300px"></div>
+      </div>
+      <div class="chart-section" id="rsiBox" style="display:none">
+        <div id="rsiChart" style="height:300px"></div>
+      </div>
     </div>
 
     <div class="section-sep" aria-hidden="true"><div class="rule"></div></div>
@@ -725,19 +738,18 @@
       return Number.isFinite(+close) ? +close : null;
     }catch{ return null; }
   }
+  function updateLivePrice(price) {
+    const priceEl = document.getElementById('livePrice');
+    if (priceEl) priceEl.textContent = `$${fmt(price)}`;
+    const tsEl = document.getElementById('priceTimestamp');
+    if (tsEl) tsEl.textContent = `(${new Date().toLocaleTimeString()})`;
+  }
   async function tickPriceOnce(){
     if(!CURRENT?.ticker) return;
+    window.PRICE_TIMER_ACTIVE = true;
     const last=await fetchLastPriceLight(CURRENT.ticker);
-    if(!Number.isFinite(last)) return;
-    const prev=CURRENT.prevClose ?? null;
-    const dayChg=(prev!=null)?last-prev:null;
-    const dayPct=(prev!=null && prev!==0)?(dayChg/prev)*100:null;
-    const upClr=css('--c-up'), dnClr=css('--c-down');
-    const chgClr=dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
-    const signChg=dayChg>0?'+':dayChg<0?'-':'';
-    const signPct=dayPct>0?'+':dayPct<0?'-':'';
-    els.lastLine.innerHTML = `Last: <b>$${fmt(last)}</b> · ` + (dayChg==null? 'Change: —' :
-      `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
+    if(Number.isFinite(last)) updateLivePrice(last);
+    window.PRICE_TIMER_ACTIVE = false;
   }
   function startPriceTicker(){
     stopPriceTicker();
@@ -863,8 +875,11 @@
       const chgClr = dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
       const signChg = dayChg>0?'+':dayChg<0?'-':'';
       const signPct = dayPct>0?'+':dayPct<0?'-':'';
-      els.lastLine.innerHTML = `Last: <b>$${fmt(last)}</b> · ` + (dayChg==null? 'Change: —' :
-        `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
+      // Only update price line if not on timer
+      if (!window.PRICE_TIMER_ACTIVE) {
+        els.lastLine.innerHTML = `Last: <b id='livePrice'>$${fmt(last)}</b> <span id='priceTimestamp' style='font-size:0.9em;opacity:0.7'></span> · ` + (dayChg==null? 'Change: —' :
+          `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
+      }
       els.prevCloseLine.textContent = `Yesterday’s Close: ${prevClose==null ? '—' : '$'+fmt(prevClose)}`;
 
       /* --- Intrinsic value (very rough) --- */
@@ -877,7 +892,7 @@
       // --- Chart layout with proper domains ---
       const layout = {
         margin:{l:56,r:28,t:18,b:26},
-        xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid') },
+        xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid'), rangeslider: { visible: false } }, // Remove mini chart
         yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), domain:[0.42, 1] },
         yaxis2:{ domain:[0,0.18], anchor:'x', title:'RSI', range:[0,100] },
         yaxis3:{ domain:[0.18,0.28], anchor:'x', title:'Vol' },
