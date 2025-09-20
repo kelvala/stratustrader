@@ -677,14 +677,32 @@
       const trVol    = { type:'bar',     x, y:vol,         yaxis:'y3', name:'Volume',    marker:{ color:vol.map(()=>css('--c-vol')) }, opacity:0.6 };
 
       // Ichimoku (professional)
+      // --- Ichimoku ---
       const ichi   = calcIchimoku(visibleRows);
       const spanA  = fillEdges(ichi.spanA);
       const spanB  = fillEdges(ichi.spanB);
       const cloud  = segmentCloud(spanA, spanB);
-      const trCloudGreenBottom = { type:'scatter', x, y:cloud.gLow, yaxis:'y', name:'Cloud+', line:{width:0}, fill:'tonexty', fillcolor:css('--c-ichi-up'),  hoverinfo:'skip' };
-      const trCloudGreenTop    = { type:'scatter', x, y:cloud.gUp,  yaxis:'y', name:'Cloud+', line:{width:0},               fillcolor:css('--c-ichi-up'),  hoverinfo:'skip' };
-      const trCloudRedBottom   = { type:'scatter', x, y:cloud.rLow, yaxis:'y', name:'Cloud-', line:{width:0}, fill:'tonexty', fillcolor:css('--c-ichi-down'), hoverinfo:'skip' };
-      const trCloudRedTop      = { type:'scatter', x, y:cloud.rUp,  yaxis:'y', name:'Cloud-', line:{width:0},               fillcolor:css('--c-ichi-down'), hoverinfo:'skip' };
+      // --- correct order & fill rules ---
+      // GREEN cloud (Span A ≥ Span B)
+      const trCloudGreenBottom = {
+        type: 'scatter', x, y: cloud.gLow, yaxis: 'y',
+        name: 'Cloud+', line: { width: 0 }, hoverinfo: 'skip' // no fill here
+      };
+      const trCloudGreenTop = {
+        type: 'scatter', x, y: cloud.gUp,  yaxis: 'y',
+        name: 'Cloud+', line: { width: 0 }, fill: 'tonexty',
+        fillcolor: css('--c-ichi-up'), hoverinfo: 'skip'
+      };
+      // RED cloud (Span A < Span B)
+      const trCloudRedBottom = {
+        type: 'scatter', x, y: cloud.rLow, yaxis: 'y',
+        name: 'Cloud-', line: { width: 0 }, hoverinfo: 'skip' // no fill here
+      };
+      const trCloudRedTop = {
+        type: 'scatter', x, y: cloud.rUp,  yaxis: 'y',
+        name: 'Cloud-', line: { width: 0 }, fill: 'tonexty',
+        fillcolor: css('--c-ichi-down'), hoverinfo: 'skip'
+      };
       const trTenkan = { type:'scatter', x, y:ichi.tenkan, yaxis:'y', name:'Tenkan', line:{ width:1.2, color:css('--c-ichi-tenkan') }, connectgaps:true };
       const trKijun  = { type:'scatter', x, y:ichi.kijun,  yaxis:'y', name:'Kijun',  line:{ width:1.2, color:css('--c-ichi-kijun')  }, connectgaps:true };
       const trChikou = { type:'scatter', x, y:ichi.chikou, yaxis:'y', name:'Chikou', line:{ width:1.0, color:css('--c-ichi-chikou')}, connectgaps:true };
