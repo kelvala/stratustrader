@@ -89,9 +89,9 @@
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);}
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);}
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi;}
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -638,43 +638,34 @@
       const close = visibleRows.map(r => r.c);
       const vol   = visibleRows.map(r => r.v);
 
-      // Candles FIRST (fixes "trCandles is not defined")
+      // --- Candlestick trace ---
       const trCandles = {
         type:'candlestick', x, open, high, low, close, name:ticker,
-        increasing:{ line:{ color:css('--c-up'), width:1.15 } },
-        decreasing:{ line:{ color:css('--c-down'), width:1.15 } },
-        whiskerwidth:0.4, opacity:0.95,
+        increasing:{ line:{ color:css('--c-up'), width:1.8 }, fillcolor:css('--c-up') },
+        decreasing:{ line:{ color:css('--c-down'), width:1.8 }, fillcolor:css('--c-down') },
+        whiskerwidth:0.35, opacity:1,
         hovertemplate:'O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>'
       };
 
-      // SMAs
-      let sma20, sma50, sma200;
-      if (freq === '1y') {
-        sma20  = SMA(close, 20);
-        sma50  = SMA(close, 50);
-        sma200 = SMA(close, 200);
-      } else {
-        const sma20All  = SMA(fullRows.map(r=>r.c), 20);
-        const sma50All  = SMA(fullRows.map(r=>r.c), 50);
-        const sma200All = SMA(fullRows.map(r=>r.c), 200);
-        sma20  = alignAndExtendSMA(sma20All,  visibleRows.length, startIdx);
-        sma50  = alignAndExtendSMA(sma50All,  visibleRows.length, startIdx);
-        sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
-      }
-      const trSMA20  = { type:'scatter', x, y:sma20,  yaxis:'y', name:'SMA 20',  line:{ width:1.2, color:css('--c-sma20') } };
-      const trSMA50  = { type:'scatter', x, y:sma50,  yaxis:'y', name:'SMA 50',  line:{ width:1.2, color:css('--c-sma50') } };
-      const trSMA200 = { type:'scatter', x, y:sma200, yaxis:'y', name:'SMA 200', line:{ width:1.2, color:css('--c-sma200') } };
+      // --- Chart layout with professional separation ---
+      const layout = {
+        margin:{ l:60, r:28, t:18, b:28 },
+        xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid'), rangeslider:{ visible:false }},
+        yaxis2:{ domain:[0.00,0.12], anchor:'x', title:'RSI',  range:[0,100], showgrid:true, gridcolor:css('--grid'), automargin:true },
+        yaxis3:{ domain:[0.14,0.28], anchor:'x', title:'Vol', showgrid:true, gridcolor:css('--grid'), automargin:true },
+        yaxis4:{ domain:[0.30,0.48], anchor:'x', title:'MACD', showgrid:true, gridcolor:css('--grid'), automargin:true },
+        yaxis:{  domain:[0.50,1.00], anchor:'x', title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), automargin:true },
+        paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
+        plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor
+      };
 
-      // RSI & MACD & Volume
+      // --- Studies: thicker lines and clearer MACD hist ---
       const rsiVals = RSI(close,14);
       const macd = MACD(close,12,26,9);
-      const trRSI   = { type:'scatter', x, y:rsiVals, yaxis:'y2', name:'RSI', line:{ width:1.1, color:css('--c-rsi') } };
-      const trRSI70 = { type:'scatter', x, y:Array(x.length).fill(70), yaxis:'y2', name:'70', line:{ width:.8, dash:'dot' } };
-      const trRSI30 = { type:'scatter', x, y:Array(x.length).fill(30), yaxis:'y2', name:'30', line:{ width:.8, dash:'dot' } };
-      const trMACD   = { type:'scatter', x, y:macd.macd,  yaxis:'y4', name:'MACD',   line:{ width:1, color:css('--c-macd') } };
-      const trSignal = { type:'scatter', x, y:macd.signal, yaxis:'y4', name:'Signal', line:{ width:1, color:'#f97316' } };
-      const trHist   = { type:'bar',     x, y:macd.hist,   yaxis:'y4', name:'MACD Hist', marker:{ color:macd.hist.map(v=>v>=0?css('--c-up'):css('--c-down')) }, opacity:0.7 };
-      const trVol    = { type:'bar',     x, y:vol,         yaxis:'y3', name:'Volume',    marker:{ color:vol.map(()=>css('--c-vol')) }, opacity:0.6 };
+      const trRSI = { type:'scatter', x, y:rsiVals, mode:'lines', name:'RSI', line:{ width:1.4, color:css('--c-rsi') }, yaxis:'y2' };
+      const trMACD = { type:'scatter', x, y:macd.macd, mode:'lines', name:'MACD', line:{ width:1.3, color:css('--c-macd') }, yaxis:'y4' };
+      const trSignal = { type:'scatter', x, y:macd.signal, mode:'lines', name:'Signal', line:{ width:1.1, color:'#f97316' }, yaxis:'y4' };
+      const trHist = { type:'bar', x, y:macd.hist, yaxis:'y4', name:'MACD Hist', marker:{ color:macd.hist.map(v=>v>=0?css('--c-up'):css('--c-down')) }, opacity:0.85 };
 
       // Ichimoku (professional)
       // --- Ichimoku ---
@@ -739,29 +730,18 @@
 
       // --- Chart layout with proper domains and gaps ---
       const layout = {
-        margin:{ l:56, r:28, t:18, b:26 },
-        xaxis: {
-          domain:[0,1],
-          showgrid:true,
-          gridcolor:css('--grid'),
-          rangeslider:{ visible:false }
-        },
-        // Main price panel (top), with a gap above the studies
-        yaxis:  { domain:[0.49, 1],  anchor:'x', title:'Price', side:'right',
-                  showgrid:true, gridcolor:css('--grid'), automargin:true },
-        // Bottom → top: RSI, (gap), Volume, (gap), MACD, (gap), Price
-        yaxis2: { domain:[0.00, 0.12], anchor:'x', title:'RSI',  range:[0,100],
-                  showgrid:true, gridcolor:css('--grid'), automargin:true },
-        yaxis3: { domain:[0.14, 0.28], anchor:'x', title:'Vol',
-                  showgrid:true, gridcolor:css('--grid'), automargin:true },
-        yaxis4: { domain:[0.30, 0.46], anchor:'x', title:'MACD',
-                  showgrid:true, gridcolor:css('--grid'), automargin:true },
-        legend:{ orientation:'h' },
+        margin:{ l:60, r:28, t:18, b:28 },
+        xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid'), rangeslider:{ visible:false }},
+        yaxis2:{ domain:[0.00,0.12], anchor:'x', title:'RSI',  range:[0,100], showgrid:true, gridcolor:css('--grid'), automargin:true },
+        yaxis3:{ domain:[0.14,0.28], anchor:'x', title:'Vol', showgrid:true, gridcolor:css('--grid'), automargin:true },
+        yaxis4:{ domain:[0.30,0.48], anchor:'x', title:'MACD', showgrid:true, gridcolor:css('--grid'), automargin:true },
+        yaxis:{  domain:[0.50,1.00], anchor:'x', title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), automargin:true },
         paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
         plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor
       };
 
       await Plotly.newPlot(els.chart, data, layout, {responsive:true, displaylogo:false});
+      Plotly.Plots.resize(els.chart);
       applyChartTheme();
 
       // Prev close & IV lines
