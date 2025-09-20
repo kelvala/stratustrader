@@ -699,6 +699,25 @@
         trMACD, trSignal, trHist,
         trTenkan, trKijun, trChikou
       ];
+      // Order in `data` (keep in sync if you reorder):
+      // 0: candles
+      // 1–2: green cloud   (bottom, top)
+      // 3–4: red cloud     (bottom, top)
+      // 5–7: SMAs          (20, 50, 200)
+      // 8:   Volume
+      // 9–11: RSI          (RSI, 70, 30)
+      // 12–14: MACD        (macd, signal, hist)
+      // 15–17: Ichimoku lines (Tenkan, Kijun, Chikou)
+      traceMap = {
+        SMA20: 5,
+        SMA50: 6,
+        SMA200: 7,
+        VOL: 8,
+        RSI: [9, 10, 11],
+        MACD: [12, 13, 14],
+        ICHI: [1, 2, 3, 4, 15, 16, 17]
+      };
+      applyVisibilityFromChips();
 
       const layout = {
         margin:{l:56,r:28,t:18,b:26},
@@ -714,22 +733,6 @@
 
       await Plotly.newPlot(els.chart, data, layout, {responsive:true, displaylogo:false});
       applyChartTheme();
-
-      // Map chip -> traces
-      traceMap = {
-        SMA20: data.indexOf(trSMA20),
-        SMA50: data.indexOf(trSMA50),
-        SMA200: data.indexOf(trSMA200),
-        RSI:   [data.indexOf(trRSI), data.indexOf(trRSI70), data.indexOf(trRSI30)],
-        MACD:  [data.indexOf(trMACD), data.indexOf(trSignal), data.indexOf(trHist)],
-        VOL:   data.indexOf(trVol),
-        ICHI:  [
-          data.indexOf(trCloudGreenBottom), data.indexOf(trCloudGreenTop),
-          data.indexOf(trCloudRedBottom),   data.indexOf(trCloudRedTop),
-          data.indexOf(trTenkan),           data.indexOf(trKijun),
-          data.indexOf(trChikou)
-        ]
-      };
 
       // Prev close & IV lines
       const last = close.at(-1);
