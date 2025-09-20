@@ -90,7 +90,7 @@
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);}
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);}
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
@@ -737,14 +737,26 @@
       };
       applyVisibilityFromChips();
 
+      // --- Chart layout with proper domains and gaps ---
       const layout = {
-        margin:{l:56,r:28,t:18,b:26},
-        xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid') },
-        yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid') },
-        yaxis2:{ domain:[0,0.18], anchor:'x', title:'RSI', range:[0,100] },
-        yaxis3:{ domain:[0.18,0.28], anchor:'x', title:'Vol' },
-        yaxis4:{ domain:[0.28,0.42], anchor:'x', title:'MACD' },
-        legend:{orientation:'h'},
+        margin:{ l:56, r:28, t:18, b:26 },
+        xaxis: {
+          domain:[0,1],
+          showgrid:true,
+          gridcolor:css('--grid'),
+          rangeslider:{ visible:false }
+        },
+        // Main price panel (top), with a gap above the studies
+        yaxis:  { domain:[0.49, 1],  anchor:'x', title:'Price', side:'right',
+                  showgrid:true, gridcolor:css('--grid'), automargin:true },
+        // Bottom → top: RSI, (gap), Volume, (gap), MACD, (gap), Price
+        yaxis2: { domain:[0.00, 0.12], anchor:'x', title:'RSI',  range:[0,100],
+                  showgrid:true, gridcolor:css('--grid'), automargin:true },
+        yaxis3: { domain:[0.14, 0.28], anchor:'x', title:'Vol',
+                  showgrid:true, gridcolor:css('--grid'), automargin:true },
+        yaxis4: { domain:[0.30, 0.46], anchor:'x', title:'MACD',
+                  showgrid:true, gridcolor:css('--grid'), automargin:true },
+        legend:{ orientation:'h' },
         paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
         plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor
       };
