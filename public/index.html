@@ -81,13 +81,17 @@
   .control select{width:100%;background:var(--field-bg);color:var(--field-text);border:1px solid var(--border);border-radius:10px;padding:10px}
   .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
+  /* Chip base colors (fixed typos) */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50;}
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;}
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;}
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
+
+  /* Active backgrounds (kept) */
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
   .chip.active[data-k="SMA50"]{background:rgba(96,165,250,.12)}
   .chip.active[data-k="SMA200"]{background:rgba(245,158,11,.12)}
@@ -96,8 +100,9 @@
   .chip.active[data-k="VOL"]{background:rgba(16,185,129,.12)}
   .chip.active[data-k="AUTOFIB"]{background:rgba(139,92,246,.12)}
   .chip.active[data-k="ICHI"]{background:rgba(96,165,250,.12)}
-  /* bright glow for active chips */
-  .toggle-row{overflow:visible}
+
+  /* Bright glow for active chips only (already present; keep it)
+     This guarantees inactive chips have NO glow. */
   .chip{position:relative}
   .chip.active{border-width:2px;box-shadow:0 0 0 1px currentColor,0 0 14px 3px currentColor}
   .chip.active::after{content:"";position:absolute;inset:-8px;border-radius:999px;background:currentColor;opacity:.28;filter:blur(10px);pointer-events:none}
@@ -997,20 +1002,53 @@
         yaxis: 'y4',
         opacity: 0.5
       };
-      const data = [
+      /* --- Ichimoku (Tenkan, Kijun, Chikou, Cloud) --- */
+      let ichi = calcIchimoku(visibleRows);
+      const loClip = Math.min(...low.filter(Number.isFinite));
+      const hiClip = Math.max(...high.filter(Number.isFinite));
+      const widened = exaggerateCloud(ichi.spanA, ichi.spanB, 1.0, loClip, hiClip);
+      const { gLow, gUp, rLow, rUp } = segmentCloud(widened.spanA, widened.spanB);
+      const cloudGreenLow = {
+        type:'scatter', x, y:gLow, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
+        hoverinfo:'skip', name:'Kumo+', yaxis:'y', visible:true, showlegend:false
+      };
+      const cloudGreenUp = {
+        type:'scatter', x, y:gUp, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
+        fill:'tonexty', fillcolor: css('--c-ichi-up') || 'rgba(34,197,94,.38)',
+        hoverinfo:'skip', name:'Kumo+', yaxis:'y', visible:true, showlegend:true
+      };
+      const cloudRedLow = {
+        type:'scatter', x, y:rLow, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
+        hoverinfo:'skip', name:'Kumo−', yaxis:'y', visible:true, showlegend:false
+      };
+      const cloudRedUp = {
+        type:'scatter', x, y:rUp, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
+        fill:'tonexty', fillcolor: css('--c-ichi-down') || 'rgba(239,68,68,.34)',
+        hoverinfo:'skip', name:'Kumo−', yaxis:'y', visible:true, showlegend:true
+      };
+      const trTenkan = { type:'scatter', x, y:ichi.tenkan, mode:'lines',
+        name:'Tenkan', line:{ width:1.8, dash:'solid', color: css('--c-ichi-tenkan') || '#f59e0b' }, yaxis:'y', visible:true };
+      const trKijun  = { type:'scatter', x, y:ichi.kijun,  mode:'lines',
+        name:'Kijun',  line:{ width:1.8, dash:'dot',   color: css('--c-ichi-kijun')  || '#60a5fa' }, yaxis:'y', visible:true };
+      const trChikou = { type:'scatter', x, y:ichi.chikou, mode:'lines',
+        name:'Chikou', line:{ width:1.2, dash:'dash',  color: css('--c-ichi-chikou') || '#93c5fd' }, yaxis:'y', visible:true };
+
+      // --- Build full traces array (price + indicators + ichimoku) ---
+      const traces = [
         trCandles,   // 0
         trSMA20,     // 1
         trSMA50,     // 2
         trSMA200,    // 3
-        trVol,       // 4 (y3)
-        trRSI,       // 5 (y2)
+        trVol,       // 4
+        trRSI,       // 5
         trRSI70,     // 6
         trRSI30,     // 7
-        trMACD,      // 8 (y4)
+        trMACD,      // 8
         trSignal,    // 9
-        trHist       // 10
+        trHist,      // 10
+        cloudGreenLow, cloudGreenUp, cloudRedLow, cloudRedUp, trTenkan, trKijun, trChikou // 11-17
       ];
-      await Plotly.newPlot(els.chart, data, layout, {
+      await Plotly.newPlot(els.chart, traces, layout, {
         responsive: true,
         scrollZoom: true,
         displaylogo: false
@@ -1019,13 +1057,16 @@
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
       els.chart.on?.('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
       if (fibActive()) addOrUpdateAutoFibTraces();
+      // --- Register trace indices for chip toggles ---
       traceMap = {
         SMA20: 1,
         SMA50: 2,
         SMA200: 3,
+        VOL: 4,
         RSI: [5,6,7],
         MACD: [8,9,10],
-        VOL: 4
+        ICHI: [11,12,13,14,15,16,17],
+        AUTOFIB: []
       };
       applyVisibilityFromChips();
       startPriceTicker();
@@ -1048,26 +1089,29 @@
   }
 
   /* ---------- Chips ---------- */
-  els.toggles.addEventListener('click', e => {
-    const chip = e.target.closest('.chip'); if(!chip) return;
-    const key  = chip.dataset.k;
-    if (key === 'AUTOFIB') {
-      const turningOn = !chip.classList.contains('active');
-      chip.classList.toggle('active', turningOn);
-      chip.setAttribute('aria-pressed', turningOn ? 'true' : 'false');
-      if (turningOn) {
-        try { FIB_LOCK = true; Plotly.relayout(els.chart, { shapes: [], annotations: [] }); } finally { FIB_LOCK = false; }
-        requestAnimationFrame(addOrUpdateAutoFibTraces);
+  /* --- Chip toggle: show/hide traces and glow only when active --- */
+  els.toggles.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    const k = chip.dataset.k;
+    const nowActive = !chip.classList.contains('active');
+    chip.classList.toggle('active', nowActive);
+    chip.setAttribute('aria-pressed', nowActive ? 'true' : 'false');
+
+    // Toggle Plotly trace visibility for the group behind this chip
+    const idxs = (traceMap[k] || []);
+    if (!els.chart || !idxs.length) return;
+    // true -> visible; false -> hidden
+    (Array.isArray(idxs) ? idxs : [idxs]).forEach(i => Plotly.restyle(els.chart, { visible: nowActive }, i));
+
+    // Special: Auto Fib overlays are shapes/annotations, not traces
+    if (k === 'AUTOFIB') {
+      if (nowActive) {
+        if (typeof addOrUpdateAutoFibTraces === 'function') addOrUpdateAutoFibTraces();
       } else {
-        clearAutoFib();
+        if (typeof clearAutoFib === 'function') clearAutoFib();
       }
-      return;
     }
-    chip.classList.toggle('active');
-    chip.setAttribute('aria-pressed', chip.classList.contains('active') ? 'true' : 'false');
-    const idx = traceMap[key]; if (idx == null) return;
-    const indices = Array.isArray(idx) ? idx : [idx];
-    try { Plotly.restyle(els.chart, { visible: chip.classList.contains('active') ? true : 'legendonly' }, indices); } catch {}
   });
 
   /* ---------- Controls ---------- */
