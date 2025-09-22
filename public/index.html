@@ -81,7 +81,7 @@
   .control select{width:100%;background:var(--field-bg);color:var(--field-text);border:1px solid var(--border);border-radius:10px;padding:10px}
   .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
-  /* Chip base colors (fixed typos) */
+  /* Chip base colors — FIX var() typos */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;}
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;}
@@ -831,269 +831,72 @@
 
       const startIdx = fullRows.length - visibleRows.length; /* <-- FIXED */
 
-      // Use Date objects for x, but ensure they are real Date objects
-      const x = visibleRows.map(r => (r.date instanceof Date ? r.date : new Date(r.date)));
-      const open  = visibleRows.map(r => r.o);
-      const high  = visibleRows.map(r => r.h);
-      const low   = visibleRows.map(r => r.l);
-      const close = visibleRows.map(r => r.c);
-      const vol   = visibleRows.map(r => r.v);
-
-      /* --- SMAs --- */
-      let sma20, sma50, sma200;
-      if (freq === '1y') {
-        sma20  = SMA(close, 20);
-        sma50  = SMA(close, 50);
-        sma200 = SMA(close, 200);
-      } else {
-        const sma20All  = SMA(fullRows.map(r=>r.c), 20);
-        const sma50All  = SMA(fullRows.map(r=>r.c), 50);
-        const sma200All = SMA(fullRows.map(r=>r.c), 200);
-        sma20  = alignAndExtendSMA(sma20All,  visibleRows.length, startIdx);
-        sma50  = alignAndExtendSMA(sma50All,  visibleRows.length, startIdx);
-        sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
+      /* ====== CANDLES-ONLY PLOT (reliable baseline) ====== */
+      // 1) Guard: if nothing visible, don’t render a ghost chart
+      if (!visibleRows.length) {
+        els.lastLine.textContent = 'No price data for the selected range/frequency.';
+        if (els.chart) Plotly.purge(els.chart);
+        return;
       }
-
-      /* --- Indicators --- */
-      const rsiVals = RSI(close,14);
-      const macd = MACD(close,12,26,9);
-
-      /* --- Last/Change lines & prev close --- */
-      const last = close.at(-1);
-      const prevClose = ['1m','5m','15m','60m'].includes(freq) ? prevDailyCloseFromIntraday(fullRows) : (close.length>=2 ? close.at(-2) : null);
-      CURRENT.prevClose = prevClose;
-      const ref = (prevClose!=null) ? prevClose : (close.length>=2 ? close.at(-2) : null);
-      const dayChg = (ref!=null) ? (last - ref) : null;
-      const dayPct = (ref!=null && ref!==0) ? (dayChg/ref)*100 : null;
-      const upClr=css('--c-up'), dnClr=css('--c-down');
-      const chgClr = dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
-      const signChg = dayChg>0?'+':dayChg<0?'-':'';
-      const signPct = dayPct>0?'+':dayPct<0?'-':'';
-      els.lastLine.innerHTML = `Last: <b>$${fmt(last)}</b> · ` + (dayChg==null? 'Change: —' :
-        `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
-      els.prevCloseLine.textContent = `Yesterday’s Close: ${prevClose==null ? '—' : '$'+fmt(prevClose)}`;
-
-      /* --- Intrinsic value (very rough) --- */
-      const f = FUNDAMENTALS[ticker] || {};
-      const ivs=[]; if(Number.isFinite(f.ivGraham)) ivs.push(f.ivGraham);
-      const s50=sma50.at(-1), s200=sma200.at(-1); if(Number.isFinite(s50)&&Number.isFinite(s200)) ivs.push((s50+s200)/2);
-      const iv = ivs.length ? (ivs.reduce((a,b)=>a+b,0)/ivs.length) : null;
-      els.ivLine.textContent = `Intrinsic Value: ${iv==null ? '—' : '$'+fmt(iv)}`;
-
-      // --- Chart layout with proper domains ---
+      // 2) Build arrays with true Date objects
+      const x    = visibleRows.map(r => (r.date instanceof Date ? r.date : new Date(r.date)));
+      const open = visibleRows.map(r => r.o);
+      const high = visibleRows.map(r => r.h);
+      const low  = visibleRows.map(r => r.l);
+      const close= visibleRows.map(r => r.c);
+      // 3) Layout — clean grid, right-side axis, no range slider
       const layout = {
-        margin:{l:56,r:28,t:18,b:26},
-        xaxis:{ type:'date', domain:[0,1], showgrid:true, gridcolor:css('--grid') },
-        yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), domain:[0.42, 1] },
-        yaxis2:{ domain:[0,0.18], anchor:'x', title:'RSI', range:[0,100] },
-        yaxis3:{ domain:[0.18,0.28], anchor:'x', title:'Vol' },
-        yaxis4:{ domain:[0.28,0.42], anchor:'x', title:'MACD' },
-        legend:{orientation:'h'},
+        margin:{ l:56, r:28, t:18, b:26 },
+        xaxis:{
+          type:'date',
+          showgrid:true,
+          gridcolor:css('--grid') || '#283044',
+          rangeslider:{ visible:false },
+          tickformatstops:[
+            { dtickrange:[null, 1000*60*60*24], value:'%b %d %H:%M' },
+            { dtickrange:[1000*60*60*24, 1000*60*60*24*366], value:'%b %d' },
+            { dtickrange:[1000*60*60*24*366, null], value:'%Y' }
+          ]
+        },
+        yaxis:{
+          title:'Price',
+          side:'right',
+          showgrid:true,
+          gridcolor:css('--grid') || '#283044',
+          domain:[0,1], rangemode:'normal', autorange:true
+        },
+        dragmode:'pan',
+        hovermode:'x unified',
+        hoverlabel:{ bgcolor: getComputedStyle(els.chartCard).backgroundColor },
+        showlegend:false,
         paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
         plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor
       };
-
-      // --- Actually plot the chart and wire up events ---
-      // Build Plotly traces from visibleRows and indicator arrays
+      // 4) Candlestick trace — crisp body/wick colors
       const trCandles = {
-        type: 'candlestick',
-        x: x,
-        open: open,
-        high: high,
-        low: low,
-        close: close,
+        type:'candlestick',
         name: ticker,
-        yaxis: 'y',
-        increasing: { line: { color: css('--c-up') || '#16a34a' }, fillcolor: css('--c-up') || '#16a34a' },
-        decreasing: { line: { color: css('--c-down') || '#dc2626' }, fillcolor: css('--c-down') || '#dc2626' },
+        x, open, high, low, close,
+        yaxis:'y',
+        increasing:{
+          line:{ color: css('--c-up')   || '#16a34a', width:1.6 },
+          fillcolor:       css('--c-up')   || '#16a34a'
+        },
+        decreasing:{
+          line:{ color: css('--c-down') || '#dc2626', width:1.6 },
+          fillcolor:       css('--c-down') || '#dc2626'
+        },
+        whiskerwidth: 0.4,   // slimmer wicks
         opacity: 1,
-        visible: true,
-        showlegend: false,
-        hovertemplate: 'Date: %{x}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>',
+        showlegend:false,
+        hovertemplate:
+          'O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra>%{x|%b %d, %Y}</extra>'
       };
-      const trSMA20 = {
-        type: 'scatter',
-        x: x,
-        y: sma20,
-        mode: 'lines',
-        name: 'SMA 20',
-        line: { color: css('--c-sma20') || '#22c55e', width: 2 },
-        yaxis: 'y'
-      };
-      const trSMA50 = {
-        type: 'scatter',
-        x: x,
-        y: sma50,
-        mode: 'lines',
-        name: 'SMA 50',
-        line: { color: css('--c-sma50') || '#60a5fa', width: 2 },
-        yaxis: 'y'
-      };
-      const trSMA200 = {
-        type: 'scatter',
-        x: x,
-        y: sma200,
-        mode: 'lines',
-        name: 'SMA 200',
-        line: { color: css('--c-sma200') || '#f59e0b', width: 2 },
-        yaxis: 'y'
-      };
-      const trVol = {
-        type: 'bar',
-        x: x,
-        y: vol,
-        name: 'Volume',
-        marker: { color: css('--c-vol') || '#10b981', opacity:  0.45 },
-        yaxis: 'y3',
-        opacity: 0.45
-      };
-      const trRSI = {
-        type: 'scatter',
-        x: x,
-        y: rsiVals,
-        mode: 'lines',
-        name: 'RSI',
-        line: { color: css('--c-rsi') || '#a78bfa', width: 2 },
-        yaxis: 'y2'
-      };
-      const trRSI70 = {
-        type: 'scatter',
-        x: x,
-        y: Array(x.length).fill(70),
-        mode: 'lines',
-        name: 'RSI 70',
-        line: { color: '#f59e0b', width: 1, dash: 'dot' },
-        yaxis: 'y2',
-        showlegend: false,
-        hoverinfo: 'skip'
-      };
-      const trRSI30 = {
-        type: 'scatter',
-        x: x,
-        y: Array(x.length).fill(30),
-        mode: 'lines',
-        name: 'RSI 30',
-        line: { color: '#60a5fa', width: 1, dash: 'dot' },
-        yaxis: 'y2',
-        showlegend: false,
-        hoverinfo: 'skip'
-      };
-      const trMACD = {
-        type: 'scatter',
-        x: x,
-        y: macd.macd,
-        mode: 'lines',
-        name: 'MACD',
-        line: { color: css('--c-macd') || '#38bdf8', width: 2 },
-        yaxis: 'y4'
-      };
-      const trSignal = {
-        type: 'scatter',
-        x: x,
-        y: macd.signal,
-        mode: 'lines',
-        name: 'Signal',
-        line: { color: '#f59e0b', width: 1.5, dash: 'dot' },
-        yaxis: 'y4'
-      };
-      const trHist = {
-        type: 'bar',
-        x: x,
-        y: macd.hist,
-        name: 'MACD Hist',
-        marker: { color: '#64748b', opacity: 0.5 },
-        yaxis: 'y4',
-        opacity: 0.5
-      };
-      /* --- Ichimoku (Tenkan, Kijun, Chikou, Cloud) --- */
-      let ichi = calcIchimoku(visibleRows);
-      const loClip = Math.min(...low.filter(Number.isFinite));
-      const hiClip = Math.max(...high.filter(Number.isFinite));
-      const widened = exaggerateCloud(ichi.spanA, ichi.spanB, 1.0, loClip, hiClip);
-      const { gLow, gUp, rLow, rUp } = segmentCloud(widened.spanA, widened.spanB);
-      const cloudGreenLow = {
-        type:'scatter', x, y:gLow, mode:'lines', line:{width:0, color: css('--c-ichi-chikou') || '#93c5fd'},
-        hoverinfo:'skip', name:'Kumo+', yaxis:'y', visible:true, showlegend:false
-      };
-      const cloudGreenUp = {
-        type:'scatter', x, y:gUp, mode:'lines', line:{width:0, color: css('--c-ichi-chikou') || '#93c5fd'},
-        fill:'tonexty', fillcolor: css('--c-ichi-up') || 'rgba(34,197,94,0.28)',
-        hoverinfo:'skip', name:'Kumo+', yaxis:'y', visible:true, showlegend:true
-      };
-      const cloudRedLow = {
-        type:'scatter', x, y:rLow, mode:'lines', line:{width:0, color: css('--c-ichi-chikou') || '#93c5fd'},
-        hoverinfo:'skip', name:'Kumo−', yaxis:'y', visible:true, showlegend:false
-      };
-      const cloudRedUp = {
-        type:'scatter', x, y:rUp, mode:'lines', line:{width:0, color: css('--c-ichi-chikou') || '#93c5fd'},
-        fill:'tonexty', fillcolor: css('--c-ichi-down') || 'rgba(239,68,68,0.26)',
-        hoverinfo:'skip', name:'Kumo−', yaxis:'y', visible:true, showlegend:true
-      };
-      const trTenkan = { type:'scatter', x, y:ichi.tenkan, mode:'lines',
-        name:'Tenkan', line:{ width:1.8, dash:'solid', color: css('--c-ichi-tenkan') || '#f59e0b' }, yaxis:'y', visible:true };
-      const trKijun  = { type:'scatter', x, y:ichi.kijun,  mode:'lines',
-        name:'Kijun',  line:{ width:1.8, dash:'dot',   color: css('--c-ichi-kijun')  || '#60a5fa' }, yaxis:'y', visible:true };
-      const trChikou = { type:'scatter', x, y:ichi.chikou, mode:'lines',
-        name:'Chikou', line:{ width:1.2, dash:'dash',  color: css('--c-ichi-chikou') || '#93c5fd' }, yaxis:'y', visible:true };
-
-      // --- Build full traces array (price + indicators + ichimoku) ---
-      // --- Ichimoku first ---
-      const traces = [];
-      traces.push(cloudGreenLow, cloudGreenUp, cloudRedLow, cloudRedUp, trTenkan, trKijun, trChikou);
-      traces.push(trSMA20, trSMA50, trSMA200);
-      traces.push(trRSI, trMACD, trSignal, trHist, trVol);
-      traces.push(trCandles); // candles LAST
-
-      // Update cloud style for visibility
-      cloudGreenUp.fillcolor = 'rgba(34,197,94,0.28)';
-      cloudRedUp.fillcolor   = 'rgba(239,68,68,0.26)';
-      cloudGreenLow.line.width = 0;
-      cloudGreenUp.line.width  = 0;
-      cloudRedLow.line.width   = 0;
-      cloudRedUp.line.width    = 0;
-
-      // Candles: fully opaque and styled
-      trCandles.opacity = 1;
-      trCandles.increasing = { line: { color: css('--c-up') || '#16a34a' }, fillcolor: css('--c-up') || '#16a34a' };
-      trCandles.decreasing = { line: { color: css('--c-down') || '#dc2626' }, fillcolor: css('--c-down') || '#dc2626' };
-      trCandles.visible = true;
-      trCandles.showlegend = false;
-      trCandles.hovertemplate = 'Date: %{x}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>';
-
-      // --- Update traceMap for new indices ---
-      traceMap = {
-        ICHI:   [0,1,2,3,4,5,6],
-        SMA20:  7,
-        SMA50:  8,
-        SMA200: 9,
-        RSI:    10,
-        MACD:  [11,12,13],
-        VOL:   14,
-        AUTOFIB: []
-      };
-      await Plotly.newPlot(els.chart, traces, layout, {
-        responsive: true,
-        scrollZoom: true,
-        displaylogo: false
-      });
-      applyChartTheme();
-      try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
-      els.chart.on?.('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
-      if (fibActive()) addOrUpdateAutoFibTraces();
-      // --- Register trace indices for chip toggles ---
-      traceMap = {
-        SMA20: 1,
-        SMA50: 2,
-        SMA200: 3,
-        VOL: 4,
-        RSI: [5,6,7],
-        MACD: [8,9,10],
-        ICHI: [11,12,13,14,15,16,17],
-        AUTOFIB: []
-      };
-      applyVisibilityFromChips();
-      startPriceTicker();
-      wireHoverDismiss();
+      // 5) Plot only the candles for now
+      await Plotly.newPlot(els.chart, [trCandles], layout, {displayModeBar:false});
+      // 6) Theme & axis fit
+      applyChartTheme?.();
+      await fitPriceAxisToCandlesStrict?.();
     }catch(e){
       console.error(e);
       els.headline.textContent='Chart error';
