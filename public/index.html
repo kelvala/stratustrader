@@ -462,8 +462,18 @@
   }
 
   /* ---------- Indicators ---------- */
-  function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
-    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;} if(i>=w){const old=vals[i-w]; if(Number.isFinite(old)){sum-=old;count--;}} if(i>=w-1) out[i]=sum/count; } return out; }
+  function SMA(vals,w){
+    // Always output an array the same length as vals, with nulls for the first w-1 points
+    const out=new Array(vals.length).fill(null); let sum=0,count=0;
+    for(let i=0;i<vals.length;i++){
+      const v=vals[i];
+      if(Number.isFinite(v)){sum+=v;count++;}
+      if(i>=w){const old=vals[i-w]; if(Number.isFinite(old)){sum-=old;count--;}}
+      if(i>=w-1) out[i]=sum/count;
+    }
+    // Ensure the SMA line always spans the entire chart (nulls for first w-1, then values)
+    return out;
+  }
   function EMA(vals,span){ const out=new Array(vals.length).fill(null),k=2/(span+1); let ema=null;
     for(let i=0;i<vals.length;i++){ const v=vals[i]; if(!Number.isFinite(v)){ out[i]=(i>0?out[i-1]:null); continue; } ema=(ema==null)?v:v*k+ema*(1-k); out[i]=ema; } return out; }
   function RSI(values, period=14){ const rsi=new Array(values.length).fill(null); if(values.length<=period) return rsi;
