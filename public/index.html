@@ -831,7 +831,8 @@
 
       const startIdx = fullRows.length - visibleRows.length; /* <-- FIXED */
 
-      const x     = visibleRows.map(r => formatEasternISO(r.date));
+      // Use Date objects for x
+      const x = visibleRows.map(r => r.date);
       const open  = visibleRows.map(r => r.o);
       const high  = visibleRows.map(r => r.h);
       const low   = visibleRows.map(r => r.l);
@@ -882,7 +883,7 @@
       // --- Chart layout with proper domains ---
       const layout = {
         margin:{l:56,r:28,t:18,b:26},
-        xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid') },
+        xaxis:{ type:'date', domain:[0,1], showgrid:true, gridcolor:css('--grid') },
         yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), domain:[0.42, 1] },
         yaxis2:{ domain:[0,0.18], anchor:'x', title:'RSI', range:[0,100] },
         yaxis3:{ domain:[0.18,0.28], anchor:'x', title:'Vol' },
@@ -1036,14 +1037,12 @@
         name:'Chikou', line:{ width:1.2, dash:'dash',  color: css('--c-ichi-chikou') || '#93c5fd' }, yaxis:'y', visible:true };
 
       // --- Build full traces array (price + indicators + ichimoku) ---
+      // --- Ichimoku first ---
       const traces = [];
       traces.push(cloudGreenLow, cloudGreenUp, cloudRedLow, cloudRedUp, trTenkan, trKijun, trChikou);
-      // --- SMAs next ---
       traces.push(trSMA20, trSMA50, trSMA200);
-      // --- Subpanes (RSI / MACD / Volume) ---
       traces.push(trRSI, trMACD, trSignal, trHist, trVol);
-      // --- Candles LAST so they render on top ---
-      traces.push(trCandles);
+      traces.push(trCandles); // candles LAST
 
       // Update cloud style for visibility
       cloudGreenUp.fillcolor = 'rgba(34,197,94,0.28)';
