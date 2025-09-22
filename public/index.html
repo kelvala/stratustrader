@@ -831,8 +831,8 @@
 
       const startIdx = fullRows.length - visibleRows.length; /* <-- FIXED */
 
-      // Use Date objects for x
-      const x = visibleRows.map(r => r.date);
+      // Use Date objects for x, but ensure they are real Date objects
+      const x = visibleRows.map(r => (r.date instanceof Date ? r.date : new Date(r.date)));
       const open  = visibleRows.map(r => r.o);
       const high  = visibleRows.map(r => r.h);
       const low   = visibleRows.map(r => r.l);
