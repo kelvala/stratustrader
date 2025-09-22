@@ -845,29 +845,79 @@
       await waitForPlotly();
 
       const time=els.timeSel.value, freq=els.freqSel.value;
-      const fullRows = await fetchFullHistory(ticker, time, freq);
-      if(!fullRows.length) throw new Error('No price data');
-
-      let visibleRows = getVisibleData(fullRows, time, freq);
-      if (freq === '1y') visibleRows = aggregateToYear(visibleRows);
-
-      const startIdx = fullRows.length - visibleRows.length; /* <-- FIXED */
-
-      /* ====== CANDLES-ONLY PLOT (reliable baseline) ====== */
-      // 1) Guard: if nothing visible, don’t render a ghost chart
-      if (!visibleRows.length) {
-        els.lastLine.textContent = 'No price data for the selected range/frequency.';
-        if (els.chart) Plotly.purge(els.chart);
-        return;
+      // Fetch full history and visible data
+      let fullRows = [];
+      try {
+        fullRows = await fetchFullHistory(ticker, els.timeSel.value, els.freqSel.value);
+      } catch { fullRows = []; }
+      if (!fullRows.length) return;
+      const visibleRows = getVisibleData(fullRows, els.timeSel.value, els.freqSel.value);
+      if (!visibleRows.length) return;
+      // Prepare arrays
+      const x = visibleRows.map(r=>r.date);
+      const close = visibleRows.map(r=>r.c);
+      // Calculate SMAs for the visible data
+      const sma20 = SMA(close, 20);
+      const sma50 = SMA(close, 50);
+      const sma200 = SMA(close, 200);
+      // Build traces
+      const traces = [];
+      // Candlestick trace (always)
+      traces.push({
+        x,
+        open: visibleRows.map(r=>r.o),
+        high: visibleRows.map(r=>r.h),
+        low: visibleRows.map(r=>r.l),
+        close,
+        type: 'candlestick',
+        name: 'Price',
+        yaxis: 'y',
+        increasing: {line: {color: css('--c-up')||'#16a34a'}},
+        decreasing: {line: {color: css('--c-down')||'#dc2626'}},
+        showlegend: false,
+        hoverinfo: 'x+y',
+      });
+      // SMA overlays (always present if chip is active)
+      if (els.toggles.querySelector('[data-k="SMA20"].active')) {
+        traces.push({
+          x,
+          y: sma20,
+          type: 'scatter',
+          mode: 'lines',
+          name: 'SMA 20',
+          line: {color: css('--c-sma20')||'#22c55e', width:2},
+          yaxis: 'y',
+          hoverinfo: 'x+y',
+        });
       }
-      // 2) Build arrays with true Date objects
-      const x    = visibleRows.map(r => (r.date instanceof Date ? r.date : new Date(r.date)));
-      const open = visibleRows.map(r => r.o);
-      const high = visibleRows.map(r => r.h);
-      const low  = visibleRows.map(r => r.l);
-      const close= visibleRows.map(r => r.c);
-      // 3) Layout — clean grid, right-side axis, no range slider
-      const layout = {
+      if (els.toggles.querySelector('[data-k="SMA50"].active')) {
+        traces.push({
+          x,
+          y: sma50,
+          type: 'scatter',
+          mode: 'lines',
+          name: 'SMA 50',
+          line: {color: css('--c-sma50')||'#60a5fa', width:2},
+          yaxis: 'y',
+          hoverinfo: 'x+y',
+        });
+      }
+      if (els.toggles.querySelector('[data-k="SMA200"].active')) {
+        traces.push({
+          x,
+          y: sma200,
+          type: 'scatter',
+          mode: 'lines',
+          name: 'SMA 200',
+          line: {color: css('--c-sma200')||'#f59e0b', width:2},
+          yaxis: 'y',
+          hoverinfo: 'x+y',
+        });
+      }
+      // ...existing code for other overlays...
+      // Plot chart
+      await waitForPlotly();
+      Plotly.newPlot(els.chart, traces, {
         margin:{ l:56, r:28, t:18, b:26 },
         xaxis:{
           type:'date',
@@ -893,31 +943,8 @@
         showlegend:false,
         paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
         plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor
-      };
-      // 4) Candlestick trace — crisp body/wick colors
-      const trCandles = {
-        type:'candlestick',
-        name: ticker,
-        x, open, high, low, close,
-        yaxis:'y',
-        increasing:{
-          line:{ color: css('--c-up')   || '#16a34a', width:1.6 },
-          fillcolor:       css('--c-up')   || '#16a34a'
-        },
-        decreasing:{
-          line:{ color: css('--c-down') || '#dc2626', width:1.6 },
-          fillcolor:       css('--c-down') || '#dc2626'
-        },
-        whiskerwidth: 0.4,   // slimmer wicks
-        opacity: 1,
-        showlegend:false,
-        hovertemplate:
-          'O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra>%{x|%b %d, %Y}</extra>'
-      };
-      // 5) Plot only the candles for now
-      await Plotly.newPlot(els.chart, [trCandles], layout, {displayModeBar:false});
-      // 6) Theme & axis fit
-      applyChartTheme?.();
+      }, {responsive:true, displayModeBar:false});
+      applyChartTheme();
       await fitPriceAxisToCandlesStrict?.();
 
     }catch(e){
