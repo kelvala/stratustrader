@@ -18,9 +18,7 @@
     --metric-bg:#1a1f2e;--metric-border:#2a2f3e;
     --field-bg:#0c0f16;--field-text:#e5e7eb;
     --c-up:#16a34a;--c-down:#dc2626;
-    --c-sma20:#22c55e;   /* green */
-    --c-sma50:#60a5fa;   /* blue  */
-    --c-sma200:#f59e0b;  /* amber */
+    --c-sma20:#22c55e;--c-sma50:#60a5fa;--c-sma200:#f59e0b;
     --c-rsi:#a78bfa;--c-macd:#38bdf8;--c-vol:#10b981;
     --grid:#283044;
     --lvl-beginner:#22c55e; --lvl-intermediate:#f59e0b; --lvl-advanced:#ef4444;
@@ -85,7 +83,7 @@
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   /* Chip base colors — FIX var() typos */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;}
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50;}
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;}
@@ -103,7 +101,8 @@
   .chip.active[data-k="AUTOFIB"]{background:rgba(139,92,246,.12)}
   .chip.active[data-k="ICHI"]{background:rgba(96,165,250,.12)}
 
-  /* Glow (so only active chips glow) */
+  /* Bright glow for active chips only (already present; keep it)
+     This guarantees inactive chips have NO glow. */
   .chip{position:relative}
   .chip.active{border-width:2px;box-shadow:0 0 0 1px currentColor,0 0 14px 3px currentColor}
   .chip.active::after{content:"";position:absolute;inset:-8px;border-radius:999px;background:currentColor;opacity:.28;filter:blur(10px);pointer-events:none}
@@ -246,9 +245,14 @@
       </div>
 
       <div class="toggle-row" id="toggles">
-        <button class="chip" data-k="SMA20">SMA 20</button>
-        <button class="chip" data-k="SMA50">SMA 50</button>
-        <button class="chip" data-k="SMA200">SMA 200</button>
+        <div class="chip active" data-k="SMA20">SMA 20</div>
+        <div class="chip active" data-k="SMA50">SMA 50</div>
+        <div class="chip active" data-k="SMA200">SMA 200</div>
+        <div class="chip active" data-k="RSI">RSI</div>
+        <div class="chip active" data-k="MACD">MACD</div>
+        <div class="chip active" data-k="VOL">Volume</div>
+        <div class="chip" id="autoFib" data-k="AUTOFIB">Auto Fib</div>
+        <div class="chip active" data-k="ICHI">Ichimoku</div>
       </div>
 
       <div id="chart"></div>
@@ -894,62 +898,6 @@
       applyChartTheme?.();
       await fitPriceAxisToCandlesStrict?.();
 
-      // --- Simple SMA helper ---
-      function sma(src, len){
-        const out = new Array(src.length).fill(null);
-        let sum = 0;
-        for (let i=0;i<src.length;i++){
-          sum += src[i];
-          if (i >= len) sum -= src[i-len];
-          if (i >= len-1) out[i] = sum/len;
-        }
-        return out;
-      }
-      // --- Compute SMAs from close ---
-      const sma20  = sma(close, 20);
-      const sma50  = sma(close, 50);
-      const sma200 = sma(close, 200);
-      // --- Line traces (same price axis as candles) ---
-      const trSMA20 = {
-        type:'scatter', mode:'lines', name:'SMA 20', x, y:sma20, yaxis:'y',
-        line:{ width:1.8, color: css('--c-sma20') || '#22c55e' }, hoverinfo:'skip', visible:false
-      };
-      const trSMA50 = {
-        type:'scatter', mode:'lines', name:'SMA 50', x, y:sma50, yaxis:'y',
-        line:{ width:1.8, color: css('--c-sma50') || '#60a5fa' }, hoverinfo:'skip', visible:false
-      };
-      const trSMA200 = {
-        type:'scatter', mode:'lines', name:'SMA 200', x, y:sma200, yaxis:'y',
-        line:{ width:1.8, color: css('--c-sma200') || '#f59e0b' }, hoverinfo:'skip', visible:false
-      };
-      // --- Build traces: SMAs first, candles last so candles stay dominant ---
-      const traces = [];
-      traces.push(trSMA20, trSMA50, trSMA200);
-      traces.push(trCandles);
-      await Plotly.newPlot(els.chart, traces, layout, {displayModeBar:false});
-      applyChartTheme?.();
-      await fitPriceAxisToCandlesStrict?.();
-      // --- Map chip keys → trace indices
-      const traceMap = {
-        SMA20:  [ traces.indexOf(trSMA20) ],
-        SMA50:  [ traces.indexOf(trSMA50) ],
-        SMA200: [ traces.indexOf(trSMA200) ]
-      };
-      // --- Apply initial chip states from DOM (so preload works) ---
-      document.querySelectorAll('.toggle-row .chip').forEach(chip=>{
-        const k = chip.dataset.k;
-        const on = chip.classList.contains('active');
-        (traceMap[k]||[]).forEach(i => Plotly.restyle(els.chart, { visible: on }, i));
-      });
-      // --- Click to toggle + glow ---
-      els.toggles.addEventListener('click', (e) => {
-        const chip = e.target.closest('.chip');
-        if (!chip) return;
-        const k = chip.dataset.k;
-        const nowOn = !chip.classList.contains('active');
-        chip.classList.toggle('active', nowOn);
-        (traceMap[k]||[]).forEach(i => Plotly.restyle(els.chart, { visible: nowOn }, i));
-      });
     }catch(e){
       console.error(e);
       els.headline.textContent='Chart error';
