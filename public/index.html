@@ -903,11 +903,12 @@
         close: close,
         name: ticker,
         yaxis: 'y',
-        increasing: { line: { color: css('--c-up') || '#16a34a' } },
-        decreasing: { line: { color: css('--c-down') || '#dc2626' } },
+        increasing: { line: { color: css('--c-up') || '#16a34a' }, fillcolor: css('--c-up') || '#16a34a' },
+        decreasing: { line: { color: css('--c-down') || '#dc2626' }, fillcolor: css('--c-down') || '#dc2626' },
+        opacity: 1,
+        visible: true,
         showlegend: false,
         hovertemplate: 'Date: %{x}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>',
-        visible: true // Always show candles
       };
       const trSMA20 = {
         type: 'scatter',
@@ -1010,21 +1011,21 @@
       const widened = exaggerateCloud(ichi.spanA, ichi.spanB, 1.0, loClip, hiClip);
       const { gLow, gUp, rLow, rUp } = segmentCloud(widened.spanA, widened.spanB);
       const cloudGreenLow = {
-        type:'scatter', x, y:gLow, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
+        type:'scatter', x, y:gLow, mode:'lines', line:{width:0, color: css('--c-ichi-chikou') || '#93c5fd'},
         hoverinfo:'skip', name:'Kumo+', yaxis:'y', visible:true, showlegend:false
       };
       const cloudGreenUp = {
-        type:'scatter', x, y:gUp, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
-        fill:'tonexty', fillcolor: css('--c-ichi-up') || 'rgba(34,197,94,.38)',
+        type:'scatter', x, y:gUp, mode:'lines', line:{width:0, color: css('--c-ichi-chikou') || '#93c5fd'},
+        fill:'tonexty', fillcolor: css('--c-ichi-up') || 'rgba(34,197,94,0.28)',
         hoverinfo:'skip', name:'Kumo+', yaxis:'y', visible:true, showlegend:true
       };
       const cloudRedLow = {
-        type:'scatter', x, y:rLow, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
+        type:'scatter', x, y:rLow, mode:'lines', line:{width:0, color: css('--c-ichi-chikou') || '#93c5fd'},
         hoverinfo:'skip', name:'Kumo−', yaxis:'y', visible:true, showlegend:false
       };
       const cloudRedUp = {
-        type:'scatter', x, y:rUp, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
-        fill:'tonexty', fillcolor: css('--c-ichi-down') || 'rgba(239,68,68,.34)',
+        type:'scatter', x, y:rUp, mode:'lines', line:{width:0, color: css('--c-ichi-chikou') || '#93c5fd'},
+        fill:'tonexty', fillcolor: css('--c-ichi-down') || 'rgba(239,68,68,0.26)',
         hoverinfo:'skip', name:'Kumo−', yaxis:'y', visible:true, showlegend:true
       };
       const trTenkan = { type:'scatter', x, y:ichi.tenkan, mode:'lines',
@@ -1035,20 +1036,42 @@
         name:'Chikou', line:{ width:1.2, dash:'dash',  color: css('--c-ichi-chikou') || '#93c5fd' }, yaxis:'y', visible:true };
 
       // --- Build full traces array (price + indicators + ichimoku) ---
-      const traces = [
-        trCandles,   // 0
-        trSMA20,     // 1
-        trSMA50,     // 2
-        trSMA200,    // 3
-        trVol,       // 4
-        trRSI,       // 5
-        trRSI70,     // 6
-        trRSI30,     // 7
-        trMACD,      // 8
-        trSignal,    // 9
-        trHist,      // 10
-        cloudGreenLow, cloudGreenUp, cloudRedLow, cloudRedUp, trTenkan, trKijun, trChikou // 11-17
-      ];
+      const traces = [];
+      traces.push(cloudGreenLow, cloudGreenUp, cloudRedLow, cloudRedUp, trTenkan, trKijun, trChikou);
+      // --- SMAs next ---
+      traces.push(trSMA20, trSMA50, trSMA200);
+      // --- Subpanes (RSI / MACD / Volume) ---
+      traces.push(trRSI, trMACD, trSignal, trHist, trVol);
+      // --- Candles LAST so they render on top ---
+      traces.push(trCandles);
+
+      // Update cloud style for visibility
+      cloudGreenUp.fillcolor = 'rgba(34,197,94,0.28)';
+      cloudRedUp.fillcolor   = 'rgba(239,68,68,0.26)';
+      cloudGreenLow.line.width = 0;
+      cloudGreenUp.line.width  = 0;
+      cloudRedLow.line.width   = 0;
+      cloudRedUp.line.width    = 0;
+
+      // Candles: fully opaque and styled
+      trCandles.opacity = 1;
+      trCandles.increasing = { line: { color: css('--c-up') || '#16a34a' }, fillcolor: css('--c-up') || '#16a34a' };
+      trCandles.decreasing = { line: { color: css('--c-down') || '#dc2626' }, fillcolor: css('--c-down') || '#dc2626' };
+      trCandles.visible = true;
+      trCandles.showlegend = false;
+      trCandles.hovertemplate = 'Date: %{x}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>';
+
+      // --- Update traceMap for new indices ---
+      traceMap = {
+        ICHI:   [0,1,2,3,4,5,6],
+        SMA20:  7,
+        SMA50:  8,
+        SMA200: 9,
+        RSI:    10,
+        MACD:  [11,12,13],
+        VOL:   14,
+        AUTOFIB: []
+      };
       await Plotly.newPlot(els.chart, traces, layout, {
         responsive: true,
         scrollZoom: true,
