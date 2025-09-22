@@ -84,23 +84,11 @@
   /* Chip base colors — FIX var() typos */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;}
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;}
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;}
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
-  .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
-  .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
-
+  .chip[data-k="SMA100"]{border-color:var(--c-sma200);color:var,--c-sma200;}
   /* Active backgrounds (kept) */
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
   .chip.active[data-k="SMA50"]{background:rgba(96,165,250,.12)}
-  .chip.active[data-k="SMA200"]{background:rgba(245,158,11,.12)}
-  .chip.active[data-k="RSI"]{background:rgba(167,139,250,.12)}
-  .chip.active[data-k="MACD"]{background:rgba(56,189,248,.12)}
-  .chip.active[data-k="VOL"]{background:rgba(16,185,129,.12)}
-  .chip.active[data-k="AUTOFIB"]{background:rgba(139,92,246,.12)}
-  .chip.active[data-k="ICHI"]{background:rgba(96,165,250,.12)}
-
+  .chip.active[data-k="SMA100"]{background:rgba(245,158,11,.12)}
   /* Bright glow for active chips only (already present; keep it)
      This guarantees inactive chips have NO glow. */
   .chip{position:relative}
@@ -245,14 +233,14 @@
       </div>
 
       <div class="toggle-row" id="toggles">
-        <div class="chip active" data-k="SMA20">SMA 20</div>
-        <div class="chip active" data-k="SMA50">SMA 50</div>
-        <div class="chip active" data-k="SMA200">SMA 200</div>
-        <div class="chip active" data-k="RSI">RSI</div>
-        <div class="chip active" data-k="MACD">MACD</div>
-        <div class="chip active" data-k="VOL">Volume</div>
-        <div class="chip" id="autoFib" data-k="AUTOFIB">Auto Fib</div>
-        <div class="chip active" data-k="ICHI">Ichimoku</div>
+        <button class="chip active" data-k="SMA20" type="button">SMA 20</button>
+        <button class="chip active" data-k="SMA50" type="button">SMA 50</button>
+        <button class="chip active" data-k="SMA200" type="button">SMA 200</button>
+        <button class="chip active" data-k="RSI" type="button">RSI</button>
+        <button class="chip active" data-k="MACD" type="button">MACD</button>
+        <button class="chip active" data-k="VOL" type="button">Volume</button>
+        <button class="chip" id="autoFib" data-k="AUTOFIB" type="button">Auto Fib</button>
+        <button class="chip active" data-k="ICHI" type="button">Ichimoku</button>
       </div>
 
       <div id="chart"></div>
@@ -940,6 +928,23 @@
       }
     }
   });
+
+  // --- SMA chip toggle logic ---
+  const smaChips = Array.from(document.querySelectorAll('.chip[data-k^="SMA"]'));
+  const smaKeys = ['SMA20','SMA50','SMA100'];
+  let smaActive = {SMA20:true, SMA50:true, SMA100:true};
+  smaChips.forEach(chip => {
+    chip.addEventListener('click',()=>{
+      const k = chip.getAttribute('data-k');
+      smaActive[k] = !smaActive[k];
+      chip.classList.toggle('active', smaActive[k]);
+      updateChartOverlays();
+    });
+  });
+  function updateChartOverlays(){
+    // This function should update the chart overlays based on smaActive
+    // ...implement chart update logic here...
+  }
 
   /* ---------- Controls ---------- */
   [els.timeSel, els.freqSel].forEach(sel=> sel.addEventListener('change', ()=>{ if(CURRENT.ticker) go(CURRENT.ticker, CURRENT.company); }));
