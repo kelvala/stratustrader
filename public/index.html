@@ -906,7 +906,8 @@
         increasing: { line: { color: css('--c-up') || '#16a34a' } },
         decreasing: { line: { color: css('--c-down') || '#dc2626' } },
         showlegend: false,
-        hovertemplate: 'Date: %{x}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>'
+        hovertemplate: 'Date: %{x}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>',
+        visible: true // Always show candles
       };
       const trSMA20 = {
         type: 'scatter',
@@ -940,7 +941,7 @@
         x: x,
         y: vol,
         name: 'Volume',
-        marker: { color: css('--c-vol') || '#10b981', opacity: 0.45 },
+        marker: { color: css('--c-vol') || '#10b981', opacity:  0.45 },
         yaxis: 'y3',
         opacity: 0.45
       };
