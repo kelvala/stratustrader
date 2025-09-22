@@ -463,21 +463,17 @@
 
   /* ---------- Indicators ---------- */
   function SMA(vals, w) {
-    // Expanding window: for first w-1 points, use average of all available so far
+    // Restore classic SMA: null for first w-1 points, then rolling average
     const out = new Array(vals.length).fill(null);
     let sum = 0, count = 0;
     for (let i = 0; i < vals.length; i++) {
       const v = vals[i];
       if (Number.isFinite(v)) { sum += v; count++; }
-      if (i < w - 1) {
-        out[i] = count > 0 ? sum / count : null; // expanding window
-      } else {
-        if (i >= w) {
-          const old = vals[i - w];
-          if (Number.isFinite(old)) { sum -= old; count--; }
-        }
-        out[i] = count > 0 ? sum / count : null;
+      if (i >= w) {
+        const old = vals[i - w];
+        if (Number.isFinite(old)) { sum -= old; count--; }
       }
+      if (i >= w - 1) out[i] = sum / w;
     }
     return out;
   }
