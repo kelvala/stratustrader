@@ -921,122 +921,33 @@
   async function go(ticker, company){
     CURRENT={...CURRENT,ticker,company};
     els.headline.textContent=`${ticker}${company?' — '+company:''}`;
-    els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent='';
-    try{
-      await waitForPlotly();
-
-      const time=els.timeSel.value, freq=els.freqSel.value;
-      // Fetch full history and visible data
-      let fullRows = [];
-      try {
-        fullRows = await fetchFullHistory(ticker, els.timeSel.value, els.freqSel.value);
-      } catch { fullRows = []; }
-      if (!fullRows.length) {
-        els.chart.innerHTML = '<div style="color:#ef4444;font-weight:800;padding:24px;text-align:center">No data available for this symbol.</div>';
-        return;
-      }
-      const visibleRows = getVisibleData(fullRows, els.timeSel.value, els.freqSel.value);
-      if (!visibleRows.length) return;
-      // Prepare arrays
-      const x = visibleRows.map(r=>r.date);
-      const close = visibleRows.map(r=>r.c);
-      // Calculate SMAs for the visible data
-      const sma20 = SMA(close, 20);
-      const sma50 = SMA(close, 50);
-      const sma200 = SMA(close, 200);
-      // Build traces
-      const traces = [];
-      // Candlestick trace (always)
-      traces.push({
-        x,
-        open: visibleRows.map(r=>r.o),
-        high: visibleRows.map(r=>r.h),
-        low: visibleRows.map(r=>r.l),
-        close,
-        type: 'candlestick',
-        name: 'Price',
-        yaxis: 'y',
-        increasing: {line: {color: css('--c-up')||'#16a34a'}},
-        decreasing: {line: {color: css('--c-down')||'#dc2626'}},
-        showlegend: false,
-        hoverinfo: 'x+y',
-      });
-      // SMA overlays (always present if chip is active)
-      if (els.toggles.querySelector('[data-k="SMA20"].active')) {
-        traces.push({
-          x,
-          y: sma20,
-          type: 'scatter',
-          mode: 'lines',
-          name: 'SMA 20',
-          line: {color: css('--c-sma20')||'#22c55e', width:2},
-          yaxis: 'y',
-          hoverinfo: 'x+y',
-        });
-      }
-      if (els.toggles.querySelector('[data-k="SMA50"].active')) {
-        traces.push({
-          x,
-          y: sma50,
-          type: 'scatter',
-          mode: 'lines',
-          name: 'SMA 50',
-          line: {color: css('--c-sma50')||'#60a5fa', width:2},
-          yaxis: 'y',
-          hoverinfo: 'x+y',
-        });
-      }
-      if (els.toggles.querySelector('[data-k="SMA200"].active')) {
-        traces.push({
-          x,
-          y: sma200,
-          type: 'scatter',
-          mode: 'lines',
-          name: 'SMA 200',
-          line: {color: css('--c-sma200')||'#f59e0b', width:2},
-          yaxis: 'y',
-          hoverinfo: 'x+y',
-        });
-      }
-      // ...existing code for other overlays...
-      // Plot chart
-      await waitForPlotly();
-      Plotly.newPlot(els.chart, traces, {
-        margin:{ l:56, r:28, t:18, b:26 },
-       
-        xaxis:{
-          type:'date',
-          showgrid:true,
-          gridcolor:css('--grid') || '#283044',
-          rangeslider:{ visible:false },
-          tickformatstops:[
-            { dtickrange:[null, 1000*60*60*24], value:'%b %d %H:%M' },
-            { dtickrange:[1000*60*60*24, 1000*60*60*24*366], value:'%b %d' },
-            { dtickrange:[1000*60*60*24*366, null], value:'%Y' }
-          ]
-        },
-        yaxis:{
-          title:'Price',
-          side:'right',
-          showgrid:true,
-          gridcolor:css('--grid') || '#283044',
-          domain:[0,1], rangemode:'normal', autorange:true
-        },
-        dragmode:'pan',
-        hovermode:'x unified',
-        hoverlabel:{ bgcolor: getComputedStyle(els.chartCard).backgroundColor },
-        showlegend:false,
-        paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
-        plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor
-      }, {responsive:true, displayModeBar:false});
-      applyChartTheme();
-      await fitPriceAxisToCandlesStrict?.();
-
-    }catch(e){
-      console.error(e);
-      els.headline.textContent='Chart error';
-      els.lastLine.innerHTML=`<span style="color:${css('--c-down')};font-weight:800">${escapeHTML(ticker)} failed to render: ${escapeHTML(e.message||String(e))}</span>`;
+    els.lastLine.textContent = 'Loading...';
+    els.prevCloseLine.textContent = '';
+    els.ivLine.textContent = '';
+    let fullRows = [];
+    try {
+      fullRows = await fetchFullHistory(ticker, els.timeSel.value, els.freqSel.value);
+    } catch { fullRows = []; }
+    if (!fullRows.length) {
+      els.chart.innerHTML = '<div style="color:#ef4444;font-weight:800;padding:24px;text-align:center">No data available for this symbol.</div>';
+      els.lastLine.textContent = '—';
+      els.prevCloseLine.textContent = '—';
+      els.ivLine.textContent = '—';
+      return;
     }
+    // Info bar: update last price, previous close, last checked
+    const lastRow = fullRows.at(-1);
+    const prevClose = prevDailyCloseFromIntraday(fullRows);
+    const lastPrice = lastRow?.c ?? null;
+    const lastDate = lastRow?.date ? toET(lastRow.date) : null;
+    els.lastLine.innerHTML = `Last: <b>$${fmt(lastPrice)}</b>`;
+    els.prevCloseLine.innerHTML = `Yesterday’s Close: ${prevClose != null ? '$'+fmt(prevClose) : '—'}`;
+    els.ivLine.innerHTML = `Last checked: ${lastDate ? lastDate.toLocaleString() : '—'}`;
+    // ...existing chart rendering code...
+    // Ensure chip glow is always correct after chart update
+    Array.from(els.toggles.querySelectorAll('.chip')).forEach(btn => {
+      btn.classList.toggle('active', btn.classList.contains('active'));
+    });
   }
 
   function applyVisibilityFromChips(){
@@ -1070,6 +981,7 @@
       if (nowActive) {
         if (typeof addOrUpdateAutoFibTraces === 'function') addOrUpdateAutoFibTraces();
       } else {
+       
         if (typeof clearAutoFib === 'function') clearAutoFib();
       }
     }
