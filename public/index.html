@@ -82,44 +82,20 @@
   .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   /* Chip base colors — all overlays get strong color and glow */
-  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);}
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;}
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;}
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
-  .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
-  .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
-
-  /* Active backgrounds for overlays */
-  .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
-  .chip.active[data-k="SMA50"]{background:rgba(96,165,250,.12)}
-  .chip.active[data-k="SMA200"]{background:rgba(245,158,11,.12)}
-  .chip.active[data-k="RSI"]{background:rgba(167,139,250,.12)}
-  .chip.active[data-k="MACD"]{background:rgba(56,189,248,.12)}
-  .chip.active[data-k="VOL"]{background:rgba(16,185,129,.12)}
-  .chip.active[data-k="AUTOFIB"]{background:rgba(139,92,246,.12)}
-  .chip.active[data-k="ICHI"]{background:rgba(96,165,250,.12)}
-
-  /* Strong glow for active chips, color-matched */
-  .chip.active[data-k="SMA20"]{box-shadow:0 0 0 1px var(--c-sma20),0 0 14px 3px var(--c-sma20);}
-  .chip.active[data-k="SMA50"]{box-shadow:0 0 0 1px var(--c-sma50),0 0 14px 3px var(--c-sma50);}
-  .chip.active[data-k="SMA200"]{box-shadow:0 0 0 1px var(--c-sma200),0 0 14px 3px var(--c-sma200);}
-  .chip.active[data-k="RSI"]{box-shadow:0 0 0 1px var(--c-rsi),0 0 14px 3px var(--c-rsi);}
-  .chip.active[data-k="MACD"]{box-shadow:0 0 0 1px var(--c-macd),0 0 14px 3px var(--c-macd);}
-  .chip.active[data-k="VOL"]{box-shadow:0 0 0 1px var(--c-vol),0 0 14px 3px var(--c-vol);}
-  .chip.active[data-k="AUTOFIB"]{box-shadow:0 0 0 1px #8b5cf6,0 0 14px 3px #8b5cf6;}
-  .chip.active[data-k="ICHI"]{box-shadow:0 0 0 1px #60a5fa,0 0 14px 3px #60a5fa;}
-
-  /* Glow halo for active chips, color-matched */
-  .chip.active[data-k="SMA20"]::after{background:var(--c-sma20);}
-  .chip.active[data-k="SMA50"]::after{background:var(--c-sma50);}
-  .chip.active[data-k="SMA200"]::after{background:var(--c-sma200);}
-  .chip.active[data-k="RSI"]::after{background:var(--c-rsi);}
-  .chip.active[data-k="MACD"]::after{background:var(--c-macd);}
-  .chip.active[data-k="VOL"]::after{background:var(--c-vol);}
-  .chip.active[data-k="AUTOFIB"]::after{background:#8b5cf6;}
-  .chip.active[data-k="ICHI"]::after{background:#60a5fa;}
+  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);background:transparent;}
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);background:transparent;}
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);background:transparent;}
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);background:transparent;}
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);background:transparent;}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);background:transparent;}
+  .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6;background:transparent;}
+  .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa;background:transparent;}
+  .chip{background:transparent;color:var(--text);}
+  .chip.active{color:#fff;background:rgba(255,255,255,0.08);}
+  /* Info bar image fix */
+  .info-logo{filter:none;mix-blend-mode:normal;}
+  /* Chart overlay text color fix */
+  .plotly .legendtext, .plotly .ytick text, .plotly .xtick text { fill: var(--text) !important; }
   .section-sep{margin:20px -16px 16px;padding:0 16px}
   .section-sep .rule{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.9}
   .sheet{position:fixed;left:0;right:0;bottom:0;top:auto;background:transparent;display:flex;justify-content:center;z-index:2000}
@@ -979,7 +955,21 @@
     if (els.toggles.querySelector('[data-k="SMA200"].active')) {
       traces.push({x, y: sma200, type: 'scatter', mode: 'lines', name: 'SMA 200', line: {color: css('--c-sma200')||'#f59e0b', width:2}, yaxis: 'y', hoverinfo: 'x+y'});
     }
-    // ...add other overlays as needed...
+    // Auto Fib overlay
+    if (els.toggles.querySelector('[data-k="AUTOFIB"].active')) {
+      addOrUpdateAutoFibTraces();
+    } else {
+      clearAutoFib();
+    }
+    // Ichimoku overlay
+    if (els.toggles.querySelector('[data-k="ICHI"].active')) {
+      const ichi = calcIchimoku(visibleRows);
+      traces.push({x, y: ichi.tenkan, type: 'scatter', mode: 'lines', name: 'Tenkan', line: {color: css('--c-ichi-tenkan')||'#f59e0b', width:1.5, dash:'dot'}, yaxis: 'y', hoverinfo: 'x+y'});
+      traces.push({x, y: ichi.kijun, type: 'scatter', mode: 'lines', name: 'Kijun', line: {color: css('--c-ichi-kijun')||'#60a5fa', width:1.5, dash:'dot'}, yaxis: 'y', hoverinfo: 'x+y'});
+      traces.push({x, y: ichi.chikou, type: 'scatter', mode: 'lines', name: 'Chikou', line: {color: css('--c-ichi-chikou')||'#93c5fd', width:1.5, dash:'dot'}, yaxis: 'y', hoverinfo: 'x+y'});
+      traces.push({x, y: ichi.spanA, type: 'scatter', mode: 'lines', name: 'Span A', line: {color: css('--c-ichi-up')||'rgba(34,197,94,.38)', width:0.5}, yaxis: 'y', hoverinfo: 'x+y', fill:'tonexty', fillcolor:css('--c-ichi-up')||'rgba(34,197,94,.38)'});
+      traces.push({x, y: ichi.spanB, type: 'scatter', mode: 'lines', name: 'Span B', line: {color: css('--c-ichi-down')||'rgba(239,68,68,.34)', width:0.5}, yaxis: 'y', hoverinfo: 'x+y', fill:'tonexty', fillcolor:css('--c-ichi-down')||'rgba(239,68,68,.34)'});
+    }
     await waitForPlotly();
     Plotly.newPlot(els.chart, traces, {margin:{t:40,l:60,r:30,b:60}, paper_bgcolor:css('--panel'), plot_bgcolor:css('--panel'), xaxis:{type:'date',gridcolor:css('--grid')}, yaxis:{gridcolor:css('--grid')}}, {responsive:true, displayModeBar:false});
     applyChartTheme();
