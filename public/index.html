@@ -928,6 +928,10 @@
     els.ivLine.innerHTML = `Last checked: ${lastDate ? lastDate.toLocaleString() : '—'}`;
     // Chart rendering
     const visibleRows = getVisibleData(fullRows, els.timeSel.value, els.freqSel.value);
+    if (!visibleRows.length) {
+      els.chart.innerHTML = '<div style="color:#ef4444;font-weight:800;padding:24px;text-align:center">No visible data for this range.</div>';
+      return;
+    }
     const x = visibleRows.map(r=>r.date);
     const close = visibleRows.map(r=>r.c);
     const open = visibleRows.map(r=>r.o);
@@ -955,12 +959,6 @@
     if (els.toggles.querySelector('[data-k="SMA200"].active')) {
       traces.push({x, y: sma200, type: 'scatter', mode: 'lines', name: 'SMA 200', line: {color: css('--c-sma200')||'#f59e0b', width:2}, yaxis: 'y', hoverinfo: 'x+y'});
     }
-    // Auto Fib overlay
-    if (els.toggles.querySelector('[data-k="AUTOFIB"].active')) {
-      addOrUpdateAutoFibTraces();
-    } else {
-      clearAutoFib();
-    }
     // Ichimoku overlay
     if (els.toggles.querySelector('[data-k="ICHI"].active')) {
       const ichi = calcIchimoku(visibleRows);
@@ -973,6 +971,12 @@
     await waitForPlotly();
     Plotly.newPlot(els.chart, traces, {margin:{t:40,l:60,r:30,b:60}, paper_bgcolor:css('--panel'), plot_bgcolor:css('--panel'), xaxis:{type:'date',gridcolor:css('--grid')}, yaxis:{gridcolor:css('--grid')}}, {responsive:true, displayModeBar:false});
     applyChartTheme();
+    // Auto Fib overlay
+    if (els.toggles.querySelector('[data-k="AUTOFIB"].active')) {
+      addOrUpdateAutoFibTraces();
+    } else {
+      clearAutoFib();
+    }
     // --- Chip/button toggle logic ---
     Array.from(els.toggles.querySelectorAll('.chip')).forEach(btn => {
       btn.onclick = () => {
