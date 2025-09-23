@@ -87,7 +87,7 @@
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol;}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
 
@@ -844,8 +844,7 @@
     const chgClr=dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
     const signChg=dayChg>0?'+':dayChg<0?'-':'';
     const signPct=dayPct>0?'+':dayPct<0?'-':'';
-    els.lastLine.innerHTML = `Last: <b>$${fmt(last)}</b> · ` + (dayChg==null? 'Change: —' :
-      `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
+    els.lastLine.innerHTML = `Last: <b>$${fmt(last)}</b> · <span style="color:${chgClr};font-weight:800">Change: ${dayChg==null? '—' : `${signChg}$${fmt(Math.abs(dayChg))} <span style='opacity:.85'>(${signPct}${fmt(Math.abs(dayPct))}%)</span>`}</span>`;
   }
   function startPriceTicker(){
     stopPriceTicker();
@@ -935,12 +934,20 @@
       els.ivLine.textContent = '—';
       return;
     }
-    // Info bar: update last price, previous close, last checked
+    // Info bar: update last price, previous close, last checked, and colorize change
     const lastRow = fullRows.at(-1);
     const prevClose = prevDailyCloseFromIntraday(fullRows);
     const lastPrice = lastRow?.c ?? null;
     const lastDate = lastRow?.date ? toET(lastRow.date) : null;
-    els.lastLine.innerHTML = `Last: <b>$${fmt(lastPrice)}</b>`;
+    let dayChg = null, dayPct = null, chgClr = '#cbd5e1', signChg = '', signPct = '';
+    if (prevClose != null && lastPrice != null) {
+      dayChg = lastPrice - prevClose;
+      dayPct = prevClose !== 0 ? (dayChg / prevClose) * 100 : null;
+      chgClr = dayChg > 0 ? css('--c-up')||'#16a34a' : dayChg < 0 ? css('--c-down')||'#dc2626' : '#cbd5e1';
+      signChg = dayChg > 0 ? '+' : dayChg < 0 ? '-' : '';
+      signPct = dayPct > 0 ? '+' : dayPct < 0 ? '-' : '';
+    }
+    els.lastLine.innerHTML = `Last: <b>$${fmt(lastPrice)}</b> · <span style="color:${chgClr};font-weight:800">Change: ${dayChg==null? '—' : `${signChg}$${fmt(Math.abs(dayChg))} <span style='opacity:.85'>(${signPct}${fmt(Math.abs(dayPct))}%)</span>`}</span>`;
     els.prevCloseLine.innerHTML = `Yesterday’s Close: ${prevClose != null ? '$'+fmt(prevClose) : '—'}`;
     els.ivLine.innerHTML = `Last checked: ${lastDate ? lastDate.toLocaleString() : '—'}`;
     // ...existing chart rendering code...
