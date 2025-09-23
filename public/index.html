@@ -86,8 +86,8 @@
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);}
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);}
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);}
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd;}
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol;}
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
 
@@ -463,17 +463,21 @@
 
   /* ---------- Indicators ---------- */
   function SMA(vals, w) {
-    // Restore classic SMA: null for first w-1 points, then rolling average
+    // Expanding window: for first w-1 points, use average of all available so far
     const out = new Array(vals.length).fill(null);
     let sum = 0, count = 0;
     for (let i = 0; i < vals.length; i++) {
       const v = vals[i];
       if (Number.isFinite(v)) { sum += v; count++; }
-      if (i >= w) {
-        const old = vals[i - w];
-        if (Number.isFinite(old)) { sum -= old; count--; }
+      if (i < w - 1) {
+        out[i] = count > 0 ? sum / count : null; // expanding window
+      } else {
+        if (i >= w) {
+          const old = vals[i - w];
+          if (Number.isFinite(old)) { sum -= old; count--; }
+        }
+        out[i] = count > 0 ? sum / w : null;
       }
-      if (i >= w - 1) out[i] = sum / w;
     }
     return out;
   }
@@ -629,6 +633,8 @@
         {symbol:'AMZN',name:'Amazon.com Inc'}
       ];
     }
+    // Sort for fast lookup
+    LOCAL_SYMBOLS.sort((a,b)=>a.symbol.localeCompare(b.symbol));
     return LOCAL_SYMBOLS;
   }
   function searchLocalSymbols(q) {
@@ -925,7 +931,10 @@
       try {
         fullRows = await fetchFullHistory(ticker, els.timeSel.value, els.freqSel.value);
       } catch { fullRows = []; }
-      if (!fullRows.length) return;
+      if (!fullRows.length) {
+        els.chart.innerHTML = '<div style="color:#ef4444;font-weight:800;padding:24px;text-align:center">No data available for this symbol.</div>';
+        return;
+      }
       const visibleRows = getVisibleData(fullRows, els.timeSel.value, els.freqSel.value);
       if (!visibleRows.length) return;
       // Prepare arrays
@@ -994,6 +1003,7 @@
       await waitForPlotly();
       Plotly.newPlot(els.chart, traces, {
         margin:{ l:56, r:28, t:18, b:26 },
+       
         xaxis:{
           type:'date',
           showgrid:true,
