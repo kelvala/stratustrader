@@ -977,13 +977,6 @@
     } else {
       clearAutoFib();
     }
-    // --- Chip/button toggle logic ---
-    Array.from(els.toggles.querySelectorAll('.chip')).forEach(btn => {
-      btn.onclick = () => {
-        btn.classList.toggle('active');
-        go(CURRENT.ticker, CURRENT.company);
-      };
-    });
   }
 
   function applyVisibilityFromChips(){
