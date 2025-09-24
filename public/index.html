@@ -92,19 +92,67 @@
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa;background:transparent;}
   .chip{background:transparent;color:var(--text);}
   .chip.active{color:#fff;background:rgba(255,255,255,0.08);}
-  /* Strong halo glow for ACTIVE chips only */
-  .chip.active {
-    border-width: 2px;
+  /* Strong halo glow for ACTIVE chips only, using overlay color */
+  .chip.active[data-k="SMA20"] {
+    --chip-glow: var(--c-sma20, #22c55e);
     box-shadow:
-      0 0 0 1px currentColor,
-      0 0 14px 3px currentColor,
-      0 0 36px 10px color-mix(in sRGB, currentColor 40%, transparent);
-    position: relative;
+      0 0 0 2px var(--chip-glow),
+      0 0 14px 3px var(--chip-glow),
+      0 0 36px 10px color-mix(in sRGB, var(--chip-glow) 40%, transparent);
+  }
+  .chip.active[data-k="SMA50"] {
+    --chip-glow: var(--c-sma50, #60a5fa);
+    box-shadow:
+      0 0 0 2px var(--chip-glow),
+      0 0 14px 3px var(--chip-glow),
+      0 0 36px 10px color-mix(in sRGB, var(--chip-glow) 40%, transparent);
+  }
+  .chip.active[data-k="SMA200"] {
+    --chip-glow: var(--c-sma200, #f59e0b);
+    box-shadow:
+      0 0 0 2px var(--chip-glow),
+      0 0 14px 3px var(--chip-glow),
+      0 0 36px 10px color-mix(in sRGB, var(--chip-glow) 40%, transparent);
+  }
+  .chip.active[data-k="RSI"] {
+    --chip-glow: var(--c-rsi, #a78bfa);
+    box-shadow:
+      0 0 0 2px var(--chip-glow),
+      0 0 14px 3px var(--chip-glow),
+      0 0 36px 10px color-mix(in sRGB, var(--chip-glow) 40%, transparent);
+  }
+  .chip.active[data-k="MACD"] {
+    --chip-glow: var(--c-macd, #38bdf8);
+    box-shadow:
+      0 0 0 2px var(--chip-glow),
+      0 0 14px 3px var(--chip-glow),
+      0 0 36px 10px color-mix(in sRGB, var(--chip-glow) 40%, transparent);
+  }
+  .chip.active[data-k="VOL"] {
+    --chip-glow: var(--c-vol, #10b981);
+    box-shadow:
+      0 0 0 2px var(--chip-glow),
+      0 0 14px 3px var(--chip-glow),
+      0 0 36px 10px color-mix(in sRGB, var(--chip-glow) 40%, transparent);
+  }
+  .chip.active[data-k="AUTOFIB"] {
+    --chip-glow: #8b5cf6;
+    box-shadow:
+      0 0 0 2px var(--chip-glow),
+      0 0 14px 3px var(--chip-glow),
+      0 0 36px 10px color-mix(in sRGB, var(--chip-glow) 40%, transparent);
+  }
+  .chip.active[data-k="ICHI"] {
+    --chip-glow: #60a5fa;
+    box-shadow:
+      0 0 0 2px var(--chip-glow),
+      0 0 14px 3px var(--chip-glow),
+      0 0 36px 10px color-mix(in sRGB, var(--chip-glow) 40%, transparent);
   }
   .chip.active::after{
     content:"";
     position:absolute; inset:-10px; border-radius:999px;
-    background: radial-gradient(60% 60% at 50% 50%, currentColor 0%, transparent 75%);
+    background: radial-gradient(60% 60% at 50% 50%, var(--chip-glow) 0%, transparent 75%);
     filter: blur(12px);
     opacity:.45; pointer-events:none;
   }
@@ -131,7 +179,7 @@
   .scr-item{
     position:relative; display:flex; gap:12px; align-items:flex-start;
     padding:12px 14px; border:1px solid var(--border); border-radius:12px;
-    background:color-mix(in hsl, var(--panel), var(--bg) 35%);
+    background:color-mix(in hsl, var(--panel), var (--bg) 35%);
     text-decoration:none; color:inherit; cursor:pointer;
     transition:background .15s,border-color .15s,transform .06s;
   }
@@ -1035,7 +1083,7 @@
     const rsi = RSI(close, 14);
     const { macd, signal, hist } = MACD(close, 12, 26, 9);
     const traces = [];
-    if (els.toggles.querySelector('[data-k="SMA20"].active'))
+    if (els.toggles.querySelector('[data-k="SMA20"].active))
       traces.push({ x, y: sma20,  type:'scatter', mode:'lines', name:'SMA 20',  line:{ width:1.8, color:css('--c-sma20')||'#22c55e' }, yaxis:'y', hoverinfo:'skip' });
     if (els.toggles.querySelector('[data-k="SMA50"].active))
       traces.push({ x, y: sma50,  type:'scatter', mode:'lines', name:'SMA 50',  line:{ width:1.8, color:css('--c-sma50')||'#60a5fa' }, yaxis:'y', hoverinfo:'skip' });
