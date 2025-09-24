@@ -149,12 +149,20 @@
       0 0 14px 3px var(--chip-glow),
       0 0 36px 10px color-mix(in sRGB, var(--chip-glow) 40%, transparent);
   }
-  .chip.active::after{
-    content:"";
-    position:absolute; inset:-10px; border-radius:999px;
-    background: radial-gradient(60% 60% at 50% 50%, var(--chip-glow) 0%, transparent 75%);
+  .chip.active {
+    position: relative;
+    z-index: 2;
+  }
+  .chip.active::after {
+    content: "";
+    position: absolute;
+    inset: -10px;
+    border-radius: 999px;
+    background: radial-gradient(60% 60% at 50% 50%, var(--chip-glow, #fff) 0%, transparent 75%);
     filter: blur(12px);
-    opacity:.45; pointer-events:none;
+    opacity: .45;
+    pointer-events: none;
+    z-index: 1;
   }
   /* Info bar image fix */
   .info-logo{filter:none;mix-blend-mode:normal;}
