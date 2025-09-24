@@ -631,13 +631,11 @@
   }, 30);
   const clearAutoFib = () => { if(!els.chart) return; try{ FIB_LOCK=true; relayoutPreserve({shapes:[],annotations:[]}); } finally { FIB_LOCK=false; } };
 
-  // ===== FIXED: Symbols + Autocomplete + Search =====
-  // --- Aliases already declared earlier; we reuse normalizeTicker/isCrypto ---
-  // Local symbol store and AC state
+  // --- Restore autocomplete and search logic ---
   let LOCAL_SYMBOLS = [];
   let suggestions = [];
   let activeIndex = -1;
-  // Load symbols from /assets/us_symbols.csv (ticker,name)
+
   async function loadSymbolsFromCSV() {
     if (LOCAL_SYMBOLS.length) return LOCAL_SYMBOLS;
     try {
@@ -645,18 +643,7 @@
       if (!r.ok) throw new Error('symbols ' + r.status);
       const text = await r.text();
       const lines = text.split(/\r?\n/).filter(Boolean);
-      if (!lines.length) throw new Error('CSV empty');
-      // Pick the most likely delimiter
-      const cand = ['|','\t',';',' ',','];
-      let delim = ',', best = -1;
-      for (const d of cand) {
-        const score = lines.slice(0, Math.min(10, lines.length))
-          .map(L => L.split(d).length - 1)
-          .filter(k => k > 0)
-          .reduce((a,b) => a + b, 0);
-        if (score > best) { best = score; delim = d; }
-      }
-      // Skip header if present
+      const delim = ',';
       let start = 0;
       const first = lines[0].split(delim).map(s => s.trim().toLowerCase());
       if (first[0] && /(symbol|ticker)/.test(first[0])) start = 1;
@@ -669,10 +656,8 @@
         const name = line.slice(cut + 1).trim();
         if (/^[A-Z0-9.^$\-]{1,12}$/.test(sym)) out.push({ symbol: sym, name });
       }
-      if (!out.length) throw new Error('No symbols parsed');
       LOCAL_SYMBOLS = out;
     } catch {
-      // Safe fallback set
       LOCAL_SYMBOLS = [
         {symbol:'AAPL',name:'Apple Inc'},
         {symbol:'MSFT',name:'Microsoft Corp'},
@@ -681,7 +666,6 @@
         {symbol:'AMZN',name:'Amazon.com Inc'}
       ];
     }
-    // Sort for fast lookup
     LOCAL_SYMBOLS.sort((a,b)=>a.symbol.localeCompare(b.symbol));
     return LOCAL_SYMBOLS;
   }
@@ -689,11 +673,9 @@
     if (!q) return [];
     const out = [];
     const qLower = q.toLowerCase();
-    // starts-with by ticker
     for (const r of LOCAL_SYMBOLS) {
       if (r.symbol.startsWith(q)) { out.push(r); if (out.length >= 12) break; }
     }
-    // contains by ticker or name
     if (out.length < 12) {
       const seen = new Set(out.map(r => r.symbol));
       for (const r of LOCAL_SYMBOLS) {
@@ -704,11 +686,6 @@
         }
       }
     }
-    // alias nudge (e.g., BTC -> BTC-USD)
-    const alias = SYMBOL_ALIASES[q];
-    if (alias && !out.some(r => r.symbol === alias)) {
-      out.unshift({ symbol: alias, name: `${q} (Crypto vs USD)` });
-    }
     return out;
   }
   function renderAC() {
@@ -718,7 +695,7 @@
       const div = document.createElement('div');
       div.className = 'ac-item' + (i === activeIndex ? ' active' : '');
       div.dataset.i = i;
-      div.innerHTML = `\n      <div class="ticker">${it.symbol}</div>\n      <div class="company">${escapeHTML(it.name || '')}</div>`;
+      div.innerHTML = `<div class="ticker">${it.symbol}</div><div class="company">${escapeHTML(it.name || '')}</div>`;
       div.addEventListener('mousedown', e => { e.preventDefault(); pick(i); });
       els.list.appendChild(div);
     });
@@ -733,24 +710,16 @@
     hideAC();
     onSearch(sym, it.name || '');
   }
-  function niceTickerError(t) {
-    els.headline.textContent = 'Symbol not found';
-    els.lastLine.innerHTML = `<span style="color:${css('--c-down')};font-weight:800">“${t}” isn’t a valid ticker. Please check the spelling and try again.</span>`;
-    els.prevCloseLine.textContent=''; els.ivLine.textContent='';
-  }
   function doSearchFromInput() {
     let t = normalizeTicker(els.input.value.trim().toUpperCase());
     hideAC();
-    if (!/^[A-Z0-9.^$-]{1,12}$/.test(t)) { niceTickerError(t); return; }
-    const found = LOCAL_SYMBOLS.find(r => r.symbol === t) ||
-                  LOCAL_SYMBOLS.find(r => (r.name||'').toUpperCase() === t);
+    if (!/^[A-Z0-9.^$\-]{1,12}$/.test(t)) { return; }
+    const found = LOCAL_SYMBOLS.find(r => r.symbol === t) || LOCAL_SYMBOLS.find(r => (r.name||'').toUpperCase() === t);
     const comp = found?.name || '';
     onSearch(t, comp);
   }
-  // Wire up input
   els.input.addEventListener('input', debounce(async () => {
     if (!LOCAL_SYMBOLS.length) await loadSymbolsFromCSV();
-    // force uppercase ticker typing
     const val = els.input.value;
     if (val !== val.toUpperCase()) {
       const st = els.input.selectionStart, en = els.input.selectionEnd;
@@ -775,9 +744,7 @@
   document.addEventListener('click', e => { if (!e.target.closest('.ticker-wrap')) hideAC(); });
   els.input.addEventListener('blur', () => setTimeout(hideAC, 100));
   window.addEventListener('scroll', hideAC, { passive: true });
-  // Search button
   els.searchBtn.addEventListener('click', () => { hideAC(); doSearchFromInput(); });
-  // Preload a small list so first keystroke feels instant
   loadSymbolsFromCSV().catch(()=>{});
   /* ---------- Fetch & shape ---------- */
   function normalizePair(time,freq){
@@ -1126,33 +1093,18 @@
       traces.push({ x, y:ichi.kijun,  type:'scatter', mode:'lines', name:'Kijun',  line:{ width:1.6, dash:'dot', color:css('--c-ichi-kijun')||'#60a5fa' }, yaxis:'y' });
       traces.push({ x, y:ichi.chikou, type:'scatter', mode:'lines', name:'Chikou', line:{ width:1.2, dash:'dash',color:css('--c-ichi-chikou')||'#93c5fd' }, yaxis:'y' });
     }
-    traces.push({
-      x, open, high, low, close, type:'candlestick', name:'Price', yaxis:'y',
-      increasing:{ line:{ color: css('--c-up')||'#16a34a', width:1.6 }},
-      decreasing:{ line:{ color: css('--c-down')||'#dc2626', width:1.6 }},
-      showlegend:false,
-      hovertemplate:'O %{open:.2f}<br>H %{high:.2f}<br>L %{low:.2f}<br>C %{close:.2f}<extra>%{x|%b %d, %Y}</extra>'
-    });
-    const layout = {
-      margin:{ l:56, r:28, t:18, b:26 },
-      xaxis:{ type:'date', showgrid:true, gridcolor:css('--grid'), rangeslider:{ visible:false }},
-      yaxis:  { title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), domain:[0.42, 1] },
-      yaxis4: { title:'MACD',  showgrid:true, gridcolor:css('--grid'), domain:[0.28, 0.42] },
-      yaxis3: { title:'Volume',showgrid:true, gridcolor:css('--grid'), domain:[0.18, 0.28] },
-      yaxis2: { title:'RSI',   showgrid:true, gridcolor:css('--grid'), domain:[0.00, 0.18], range:[0,100] },
-      hovermode:'x unified',
-      paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
-      plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
-      showlegend:false
-    };
-    Plotly.newPlot(els.chart, traces, layout, { displayModeBar:false });
+    await Plotly.newPlot(els.chart, traces, { margin:{ t:40,l:60,r:30,b:60}, paper_bgcolor:css('--panel'), plot_bgcolor:css('--panel'), xaxis:{type:'date',gridcolor:css('--grid')}, yaxis:{gridcolor:css('--grid')}}, {responsive:true, displayModeBar:false});
     applyChartTheme();
     fitPriceAxisToCandlesStrict?.();
-    els.chart.on?.('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
-    els.chart.on?.('plotly_doubleclick', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
-  };
+    // Auto Fib overlay
+    if (els.toggles.querySelector('[data-k="AUTOFIB"].active')) {
+      addOrUpdateAutoFibTraces();
+    } else {
+      clearAutoFib();
+    }
+  }
 
-  // --- Chip toggles using Plotly.restyle for overlays ---
+  // Chip toggles using Plotly.restyle for overlays
   let traceKeyMap = {};
 
   function updateTraceKeyMap() {
