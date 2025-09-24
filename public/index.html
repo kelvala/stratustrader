@@ -92,6 +92,22 @@
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa;background:transparent;}
   .chip{background:transparent;color:var(--text);}
   .chip.active{color:#fff;background:rgba(255,255,255,0.08);}
+  /* Strong halo glow for ACTIVE chips only */
+  .chip.active {
+    border-width: 2px;
+    box-shadow:
+      0 0 0 1px currentColor,
+      0 0 14px 3px currentColor,
+      0 0 36px 10px color-mix(in sRGB, currentColor 40%, transparent);
+    position: relative;
+  }
+  .chip.active::after{
+    content:"";
+    position:absolute; inset:-10px; border-radius:999px;
+    background: radial-gradient(60% 60% at 50% 50%, currentColor 0%, transparent 75%);
+    filter: blur(12px);
+    opacity:.45; pointer-events:none;
+  }
   /* Info bar image fix */
   .info-logo{filter:none;mix-blend-mode:normal;}
   /* Chart overlay text color fix */
@@ -1021,16 +1037,16 @@
     const traces = [];
     if (els.toggles.querySelector('[data-k="SMA20"].active'))
       traces.push({ x, y: sma20,  type:'scatter', mode:'lines', name:'SMA 20',  line:{ width:1.8, color:css('--c-sma20')||'#22c55e' }, yaxis:'y', hoverinfo:'skip' });
-    if (els.toggles.querySelector('[data-k="SMA50"].active'))
+    if (els.toggles.querySelector('[data-k="SMA50"].active))
       traces.push({ x, y: sma50,  type:'scatter', mode:'lines', name:'SMA 50',  line:{ width:1.8, color:css('--c-sma50')||'#60a5fa' }, yaxis:'y', hoverinfo:'skip' });
-    if (els.toggles.querySelector('[data-k="SMA200"].active'))
+    if (els.toggles.querySelector('[data-k="SMA200"].active))
       traces.push({ x, y: sma200, type:'scatter', mode:'lines', name:'SMA 200', line:{ width:1.8, color:css('--c-sma200')||'#f59e0b' }, yaxis:'y', hoverinfo:'skip' });
-    if (els.toggles.querySelector('[data-k="RSI"].active')) {
+    if (els.toggles.querySelector('[data-k="RSI"].active)) {
       traces.push({ x, y:rsi, type:'scatter', mode:'lines', name:'RSI', line:{ width:1.6, color:css('--c-rsi')||'#a78bfa' }, yaxis:'y2' });
       traces.push({ x:[x[0], x.at(-1)], y:[30,30], type:'scatter', mode:'lines', line:{ width:1, dash:'dot', color:'#64748b' }, yaxis:'y2', hoverinfo:'skip', showlegend:false });
       traces.push({ x:[x[0], x.at(-1)], y:[70,70], type:'scatter', mode:'lines', line:{ width:1, dash:'dot', color:'#64748b' }, yaxis:'y2', hoverinfo:'skip', showlegend:false });
     }
-    if (els.toggles.querySelector('[data-k="VOL"].active')) {
+    if (els.toggles.querySelector('[data-k="VOL"].active)) {
       const vol = visibleRows.map(r=>r.v||0);
       traces.push({
         x, y: vol, type:'bar', name:'Volume', yaxis:'y3',
@@ -1038,12 +1054,12 @@
         hovertemplate:'Vol: %{y:,}<extra></extra>'
       });
     }
-    if (els.toggles.querySelector('[data-k="MACD"].active')) {
+    if (els.toggles.querySelector('[data-k="MACD"].active)) {
       traces.push({ x, y: hist,   type:'bar',     name:'Hist',   yaxis:'y4', marker:{ color: css('--c-macd')||'#38bdf8', opacity:.7 }, hovertemplate:'%{y:.2f}<extra></extra>' });
       traces.push({ x, y: macd,   type:'scatter', mode:'lines',  name:'MACD', yaxis:'y4', line:{ width:1.6, color: css('--c-macd')||'#38bdf8' }});
       traces.push({ x, y: signal, type:'scatter', mode:'lines',  name:'Signal', yaxis:'y4', line:{ width:1.6, color:'#f97316' }});
     }
-    if (els.toggles.querySelector('[data-k="ICHI"].active')) {
+    if (els.toggles.querySelector('[data-k="ICHI"].active)) {
       const ichi = calcIchimoku(visibleRows);
       const { gLow, gUp, rLow, rUp } = segmentCloud(ichi.spanA, ichi.spanB);
       traces.push({ x, y:gLow, type:'scatter', mode:'lines', line:{width:0}, yaxis:'y', hoverinfo:'skip', showlegend:false });
