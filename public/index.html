@@ -1074,86 +1074,57 @@
       showlegend:false
     };
     Plotly.newPlot(els.chart, traces, layout, { displayModeBar:false });
-    applyChartTheme?.();
+    applyChartTheme();
     fitPriceAxisToCandlesStrict?.();
     els.chart.on?.('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
     els.chart.on?.('plotly_doubleclick', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
   };
 
-  /* ---------- Controls ---------- */
-  [els.timeSel, els.freqSel].forEach(sel=> sel.addEventListener('change', ()=>{ if(CURRENT.ticker) go(CURRENT.ticker, CURRENT.company); }));
-  els.refreshBtn.addEventListener('click', ()=>{ if(CURRENT.ticker) go(CURRENT.ticker, CURRENT.company); });
-  els.wideBtn.addEventListener('click', ()=>{
-    document.querySelector('.container').classList.toggle('wide');
-    els.wideBtn.querySelector('.tool-txt').textContent = document.querySelector('.container').classList.contains('wide') ? 'Normal' : 'Wide';
-    if(els.chart && els.chart.data) Plotly.Plots.resize(els.chart);
-  });
-  function setMaxState(on){
-    els.chartCard.classList.toggle('max', on);
-    if(!q('#exitMax')){
-      const b=document.createElement('button'); b.id='exitMax'; b.type='button'; b.textContent='⤢ Exit';
-      Object.assign(b.style,{position:'absolute',top:'12px',right:'12px',zIndex:'10000'}); b.addEventListener('click',()=>setMaxState(false));
-      els.chartCard.appendChild(b);
-    }
-    const btnTxt=els.maxBtn.querySelector('.tool-txt'); if(btnTxt) btnTxt.textContent=on?'Min':'Max';
-    if(els.chart && els.chart.data) Plotly.Plots.resize(els.chart);
-  }
-  els.maxBtn.addEventListener('click', ()=> setMaxState(!els.chartCard.classList.contains('max')));
-  window.addEventListener('keydown', e=>{ if(e.key==='Escape' && els.chartCard.classList.contains('max')) setMaxState(false); });
+  // --- Chip toggles using Plotly.restyle for overlays ---
+  let traceKeyMap = {};
 
-  /* ---------- Screeners, sheets, nav ---------- */
-  const FINVIZ_PRESETS = [
-    { title:'Oversold large caps (RSI < 30, Mcap > $10B, AvgVol > 1M)', lvl:'Beginner', url:'https://finviz.com/screener.ashx?v=111&f=cap_largeover,sh_avgvol_o1000,ta_rsi_os' },
-    { title:'New 52-week highs (liquid)', lvl:'Beginner', url:'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o1000,ta_highlow52w_nh' },
-    { title:'Price above 50 & 200 SMA (trend strength)', lvl:'Intermediate', url:'https://finviz.com/screener.ashx?v=111&f=ta_sma50_pa,ta_sma200_pa,sh_avgvol_o1000' },
-    { title:'High dividend yield ≥ 5% (liquid)', lvl:'Beginner', url:'https://finviz.com/screener.ashx?v=111&f=fa_div_o5,sh_avgvol_o500' },
-    { title:'Value: P/E < 15, P/B < 3, Debt/Equity < 1', lvl:'Intermediate', url:'https://finviz.com/screener.ashx?v=111&f=fa_pe_u15,fa_pb_u3,fa_debteq_u1,sh_avgvol_o500' },
-    { title:'Insider buying (recent)', lvl:'Advanced', url:'https://finviz.com/screener.ashx?v=111&f=sh_insiderbuy' },
-  ];
-  function renderScreeners(){
-    const list=q('#scrList'); if(!list) return; list.innerHTML='';
-    FINVIZ_PRESETS.forEach(p=>{
-      const a=document.createElement('a'); a.href=p.url; a.target='_blank'; a.rel='noopener'; a.className='scr-item'; a.dataset.lvl=p.lvl;
-      a.innerHTML=`<div style="flex:1;min-width:0"><div class="title">${p.title}</div><div class="desc">Finviz • Opens with filters applied</div></div><div style="display:flex;align-items:center;gap:8px"><span class="badge">${p.lvl}</span></div>`;
-      list.appendChild(a);
+  function updateTraceKeyMap() {
+    // Map chip keys to trace indices after each newPlot
+    traceKeyMap = {};
+    if (!els.chart || !els.chart.data) return;
+    els.chart.data.forEach((trace, i) => {
+      if (trace.name === 'SMA 20') traceKeyMap['SMA20'] = i;
+      if (trace.name === 'SMA 50') traceKeyMap['SMA50'] = i;
+      if (trace.name === 'SMA 200') traceKeyMap['SMA200'] = i;
+      if (trace.name === 'RSI') traceKeyMap['RSI'] = i;
+      if (trace.name === 'MACD') traceKeyMap['MACD'] = i;
+      if (trace.name === 'Signal') traceKeyMap['MACD_SIGNAL'] = i;
+      if (trace.name === 'Volume') traceKeyMap['VOL'] = i;
+      if (trace.name === 'Tenkan') traceKeyMap['ICHI_TENKAN'] = i;
+      if (trace.name === 'Kijun') traceKeyMap['ICHI_KIJUN'] = i;
+      if (trace.name === 'Chikou') traceKeyMap['ICHI_CHIKOU'] = i;
+      if (trace.name === 'Kumo+') traceKeyMap['ICHI_KUMO_UP'] = i;
+      if (trace.name === 'Kumo−') traceKeyMap['ICHI_KUMO_DOWN'] = i;
     });
   }
 
-  const sh=id=>q('#'+id);
-  q('#toolGPTs')?.addEventListener('click', ()=> sh('sheetGPTs').hidden=false);
-  q('#toolScreeners')?.addEventListener('click', ()=>{ renderScreeners(); sh('sheetScreeners').hidden=false; });
-  document.querySelectorAll('.sheet-close').forEach(btn=> btn.addEventListener('click', ()=>{ const id=btn.getAttribute('data-close'); sh(id).hidden=true; }));
-  const nav=q('#btmNav'); if(nav){
-    nav.addEventListener('click', (e)=>{
-      const tabBtn=e.target.closest('.tab'); if(!tabBtn) return;
-      nav.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-      tabBtn.classList.add('active');
-      const tab=tabBtn.dataset.tab;
-      if(tab==='home'){ ['sheetScreeners','sheetGPTs'].forEach(s=>sh(s)?.setAttribute('hidden','')); window.scrollTo({top:0,behavior:'smooth'}); }
-      else if(tab==='screeners'){ renderScreeners(); sh('sheetGPTs')?.setAttribute('hidden',''); sh('sheetScreeners')?.removeAttribute('hidden'); }
-      else if(tab==='gpts'){ sh('sheetScreeners')?.setAttribute('hidden',''); sh('sheetGPTs')?.removeAttribute('hidden'); }
-      else if(tab==='settings'){ els.themeToggle?.click(); }
-    });
-  }
+  // Call updateTraceKeyMap after each newPlot
+  // ...existing code in go() and updateChartOverlays...
+await Plotly.newPlot(els.chart, traces, layout, { displayModeBar:false });
+updateTraceKeyMap();
 
-  /* ---------- Hover tooltip dismiss ---------- */
-  function dismissHover(){ if(!els.chart) return; try{ Plotly.Fx.unhover(els.chart); }catch(_){} }
-  function wireHoverDismiss(){
-    if(els.chart?._hoverDismissWired) return;
-    document.addEventListener('pointerdown', (e)=>{ const tappedHoverBox=e.target.closest?.('.hoverlayer'); const insideChart=els.chart.contains(e.target); if(!insideChart||tappedHoverBox) dismissHover(); }, {capture:true});
-    window.addEventListener('keydown', e=>{ if(e.key==='Escape') dismissHover(); });
-    window.addEventListener('scroll', dismissHover, { passive:true });
-    els.chart._hoverDismissWired=true;
+// Chip toggles only restyle overlays
+els.toggles.addEventListener('click', (e) => {
+  const chip = e.target.closest('.chip');
+  if (!chip) return;
+  const k = chip.dataset.k;
+  const nowOn = !chip.classList.contains('active');
+  chip.classList.toggle('active', nowOn);
+  if (k === 'AUTOFIB') {
+    if (nowOn) addOrUpdateAutoFibTraces();
+    else clearAutoFib();
+    return;
   }
-
-  /* ---------- Boot ---------- */
-  renderScreeners();
-  const bootTicker = localStorage.getItem('lastTicker') || 'AAPL';
-  els.input.value = bootTicker;
-  const _origOnSearch = onSearch;
-  onSearch = async (t,c)=>{ localStorage.setItem('lastTicker',t); return _origOnSearch(t,c); };
-  onSearch(bootTicker,'');
-})();
+  // Only restyle overlays, do not redraw chart
+  if (traceKeyMap[k] !== undefined) {
+    Plotly.restyle(els.chart, { visible: nowOn }, traceKeyMap[k]);
+  }
+});
   </script>
 
   <script>
