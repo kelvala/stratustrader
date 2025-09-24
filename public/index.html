@@ -979,18 +979,7 @@
     }
   }
 
-  function applyVisibilityFromChips(){
-    if(!els.chart||!window.Plotly) return;
-    Object.entries(traceMap).forEach(([key, idx])=>{
-      const chip=els.toggles.querySelector(`.chip[data-k="${key}"]`); if(!chip) return;
-      const visible = chip.classList.contains('active') ? true : 'legendonly';
-      const indices = Array.isArray(idx) ? idx : [idx];
-           try{ Plotly.restyle(els.chart,{ visible }, indices); } catch {}
-    });
-  }
-
-  /* ---------- Chips ---------- */
-  /* --- Chip toggle: show/hide traces and glow only when active --- */
+  // Toggle chips -> re-render overlays (and keep candles)
   els.toggles.addEventListener('click', (e) => {
     const chip = e.target.closest('.chip');
     if (!chip) return;
@@ -998,33 +987,33 @@
     const nowOn = !chip.classList.contains('active');
     chip.classList.toggle('active', nowOn);
 
-    // Auto Fib is shapes/annotations, handled live; others replot via go()
+    // Auto Fib is shapes/annotations, handled live; others replot via updateChartOverlays()
     if (k === 'AUTOFIB') {
       if (nowOn) addOrUpdateAutoFibTraces();
       else clearAutoFib();
       return;
     }
-    // Rebuild traces based on current chip state (SMA, RSI, MACD, VOL, ICHI)
+    // Only update overlays, do NOT refresh price/info bar
     if (["SMA20","SMA50","SMA200","RSI","MACD","VOL","ICHI"].includes(k)) {
-      if (CURRENT.ticker) go(CURRENT.ticker, CURRENT.company);
+      updateChartOverlays();
     }
   });
 
-  // --- SMA chip toggle logic ---
-  const smaChips = Array.from(document.querySelectorAll('.chip[data-k^="SMA"]'));
-  const smaKeys = ['SMA20','SMA50','SMA100'];
-  let smaActive = {SMA20:true, SMA50:true, SMA100:true};
-  smaChips.forEach(chip => {
-    chip.addEventListener('click',()=>{
-      const k = chip.getAttribute('data-k');
-      smaActive[k] = !smaActive[k];
-      chip.classList.toggle('active', smaActive[k]);
-      updateChartOverlays();
-    });
-  });
-  function updateChartOverlays(){
-    // This function should update the chart overlays based on smaActive
-    // ...implement chart update logic here...
+  // --- Overlay-only chart update (no info bar refresh) ---
+  function updateChartOverlays() {
+    // Rebuild traces based on current chip state, but do NOT update info bar
+    if (!CURRENT.ticker) return;
+    // --- indicators ---
+    const visibleRows = getVisibleData(/* use last loaded fullRows, not refetch */ fullRows, els.timeSel.value, els.freqSel.value);
+    const x = visibleRows.map(r=>r.date);
+    const open = visibleRows.map(r=>r.o);
+    const high = visibleRows.map(r=>r.h);
+    const low = visibleRows.map(r=>r.l);
+    const close = visibleRows.map(r=>r.c);
+    // ...build traces and layout as in go(), then...
+    // ...call Plotly.newPlot(els.chart, traces, layout, { displayModeBar:false });
+    // ...applyChartTheme and fitPriceAxisToCandlesStrict...
+    // ...attach Auto Fib listeners...
   }
 
   /* ---------- Controls ---------- */
