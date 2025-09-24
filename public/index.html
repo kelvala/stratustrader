@@ -92,6 +92,22 @@
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa;background:transparent;}
   .chip{background:transparent;color:var(--text);}
   .chip.active{color:#fff;background:rgba(255,255,255,0.08);}
+  /* Strong halo glow for ACTIVE chips only */
+  .chip.active {
+    border-width: 2px;
+    box-shadow:
+      0 0 0 1px currentColor,
+      0 0 14px 3px currentColor,
+      0 0 36px 10px color-mix(in sRGB, currentColor 40%, transparent);
+    position: relative;
+  }
+  .chip.active::after{
+    content:"";
+    position:absolute; inset:-10px; border-radius:999px;
+    background: radial-gradient(60% 60% at 50% 50%, currentColor 0%, transparent 75%);
+    filter: blur(12px);
+    opacity:.45; pointer-events:none;
+  }
   /* Info bar image fix */
   .info-logo{filter:none;mix-blend-mode:normal;}
   /* Chart overlay text color fix */
@@ -937,46 +953,83 @@
     const open = visibleRows.map(r=>r.o);
     const high = visibleRows.map(r=>r.h);
     const low = visibleRows.map(r=>r.l);
-    // Calculate overlays
-    const sma20 = SMA(close, 20);
-    const sma50 = SMA(close, 50);
+    // --- indicators ---
+    const sma20  = SMA(close, 20);
+    const sma50  = SMA(close, 50);
     const sma200 = SMA(close, 200);
-    // Build traces
+    // RSI (14)
+    const rsi = RSI(close, 14);
+    // MACD (12,26,9)
+    const { macd, signal, hist } = MACD(close, 12, 26, 9);
+    // --- build traces ---
     const traces = [];
-    traces.push({
-      x, open, high, low, close,
-      type: 'candlestick', name: 'Price', yaxis: 'y',
-      increasing: {line: {color: css('--c-up')||'#16a34a'}},
-      decreasing: {line: {color: css('--c-down')||'#dc2626'}},
-      showlegend: false, hoverinfo: 'x+y',
-    });
-    if (els.toggles.querySelector('[data-k="SMA20"].active')) {
-      traces.push({x, y: sma20, type: 'scatter', mode: 'lines', name: 'SMA 20', line: {color: css('--c-sma20')||'#22c55e', width:2}, yaxis: 'y', hoverinfo: 'x+y'});
+    // price overlays first (lines)
+    if (els.toggles.querySelector('[data-k="SMA20"].active'))
+      traces.push({ x, y: sma20,  type:'scatter', mode:'lines', name:'SMA 20',  line:{ width:1.8, color:css('--c-sma20')||'#22c55e' }, yaxis:'y', hoverinfo:'skip' });
+    if (els.toggles.querySelector('[data-k="SMA50"].active'))
+      traces.push({ x, y: sma50,  type:'scatter', mode:'lines', name:'SMA 50',  line:{ width:1.8, color:css('--c-sma50')||'#60a5fa' }, yaxis:'y', hoverinfo:'skip' });
+    if (els.toggles.querySelector('[data-k="SMA200"].active'))
+      traces.push({ x, y: sma200, type:'scatter', mode:'lines', name:'SMA 200', line:{ width:1.8, color:css('--c-sma200')||'#f59e0b' }, yaxis:'y', hoverinfo:'skip' });
+    // RSI pane
+    if (els.toggles.querySelector('[data-k="RSI"].active')) {
+      traces.push({ x, y:rsi, type:'scatter', mode:'lines', name:'RSI', line:{ width:1.6, color:css('--c-rsi')||'#a78bfa' }, yaxis:'y2' });
+      traces.push({ x:[x[0], x.at(-1)], y:[30,30], type:'scatter', mode:'lines', line:{ width:1, dash:'dot', color:'#64748b' }, yaxis:'y2', hoverinfo:'skip', showlegend:false });
+      traces.push({ x:[x[0], x.at(-1)], y:[70,70], type:'scatter', mode:'lines', line:{ width:1, dash:'dot', color:'#64748b' }, yaxis:'y2', hoverinfo:'skip', showlegend:false });
     }
-    if (els.toggles.querySelector('[data-k="SMA50"].active')) {
-      traces.push({x, y: sma50, type: 'scatter', mode: 'lines', name: 'SMA 50', line: {color: css('--c-sma50')||'#60a5fa', width:2}, yaxis: 'y', hoverinfo: 'x+y'});
+    // Volume pane
+    if (els.toggles.querySelector('[data-k="VOL"].active')) {
+      const vol = visibleRows.map(r=>r.v||0);
+      traces.push({
+        x, y: vol, type:'bar', name:'Volume', yaxis:'y3',
+        marker:{ color: css('--c-vol')||'#10b981', opacity:.8 },
+        hovertemplate:'Vol: %{y:,}<extra></extra>'
+      });
     }
-    if (els.toggles.querySelector('[data-k="SMA200"].active')) {
-      traces.push({x, y: sma200, type: 'scatter', mode: 'lines', name: 'SMA 200', line: {color: css('--c-sma200')||'#f59e0b', width:2}, yaxis: 'y', hoverinfo: 'x+y'});
+    // MACD pane (hist + lines)
+    if (els.toggles.querySelector('[data-k="MACD"].active')) {
+      traces.push({ x, y: hist,   type:'bar',     name:'Hist',   yaxis:'y4', marker:{ color: css('--c-macd')||'#38bdf8', opacity:.7 }, hovertemplate:'%{y:.2f}<extra></extra>' });
+      traces.push({ x, y: macd,   type:'scatter', mode:'lines',  name:'MACD', yaxis:'y4', line:{ width:1.6, color: css('--c-macd')||'#38bdf8' }});
+      traces.push({ x, y: signal, type:'scatter', mode:'lines',  name:'Signal', yaxis:'y4', line:{ width:1.6, color:'#f97316' }});
     }
-    // Ichimoku overlay
+    // Ichimoku (price pane)
     if (els.toggles.querySelector('[data-k="ICHI"].active')) {
       const ichi = calcIchimoku(visibleRows);
-      traces.push({x, y: ichi.tenkan, type: 'scatter', mode: 'lines', name: 'Tenkan', line: {color: css('--c-ichi-tenkan')||'#f59e0b', width:1.5, dash:'dot'}, yaxis: 'y', hoverinfo: 'x+y'});
-      traces.push({x, y: ichi.kijun, type: 'scatter', mode: 'lines', name: 'Kijun', line: {color: css('--c-ichi-kijun')||'#60a5fa', width:1.5, dash:'dot'}, yaxis: 'y', hoverinfo: 'x+y'});
-      traces.push({x, y: ichi.chikou, type: 'scatter', mode: 'lines', name: 'Chikou', line: {color: css('--c-ichi-chikou')||'#93c5fd', width:1.5, dash:'dot'}, yaxis: 'y', hoverinfo: 'x+y'});
-      traces.push({x, y: ichi.spanA, type: 'scatter', mode: 'lines', name: 'Span A', line: {color: css('--c-ichi-up')||'rgba(34,197,94,.38)', width:0.5}, yaxis: 'y', hoverinfo: 'x+y', fill:'tonexty', fillcolor:css('--c-ichi-up')||'rgba(34,197,94,.38)'});
-      traces.push({x, y: ichi.spanB, type: 'scatter', mode: 'lines', name: 'Span B', line: {color: css('--c-ichi-down')||'rgba(239,68,68,.34)', width:0.5}, yaxis: 'y', hoverinfo: 'x+y', fill:'tonexty', fillcolor:css('--c-ichi-down')||'rgba(239,68,68,.34)'});
+      const { gLow, gUp, rLow, rUp } = segmentCloud(ichi.spanA, ichi.spanB);
+      traces.push({ x, y:gLow, type:'scatter', mode:'lines', line:{width:0}, yaxis:'y', hoverinfo:'skip', showlegend:false });
+      traces.push({ x, y:gUp,  type:'scatter', mode:'lines', fill:'tonexty', fillcolor:css('--c-ichi-up')||'rgba(34,197,94,.38)',  line:{width:0}, yaxis:'y', name:'Kumo+' });
+      traces.push({ x, y:rLow, type:'scatter', mode:'lines', line:{width:0}, yaxis:'y', hoverinfo:'skip', showlegend:false });
+      traces.push({ x, y:rUp,  type:'scatter', mode:'lines', fill:'tonexty', fillcolor:css('--c-ichi-down')||'rgba(239,68,68,.34)', line:{width:0}, yaxis:'y', name:'Kumo−' });
+      traces.push({ x, y:ichi.tenkan, type:'scatter', mode:'lines', name:'Tenkan', line:{ width:1.6, dash:'dot', color:css('--c-ichi-tenkan')||'#f59e0b' }, yaxis:'y' });
+      traces.push({ x, y:ichi.kijun,  type:'scatter', mode:'lines', name:'Kijun',  line:{ width:1.6, dash:'dot', color:css('--c-ichi-kijun')||'#60a5fa' }, yaxis:'y' });
+      traces.push({ x, y:ichi.chikou, type:'scatter', mode:'lines', name:'Chikou', line:{ width:1.2, dash:'dash',color:css('--c-ichi-chikou')||'#93c5fd' }, yaxis:'y' });
     }
-    await waitForPlotly();
-    Plotly.newPlot(els.chart, traces, {margin:{t:40,l:60,r:30,b:60}, paper_bgcolor:css('--panel'), plot_bgcolor:css('--panel'), xaxis:{type:'date',gridcolor:css('--grid')}, yaxis:{gridcolor:css('--grid')}}, {responsive:true, displayModeBar:false});
-    applyChartTheme();
-    // Auto Fib overlay
-    if (els.toggles.querySelector('[data-k="AUTOFIB"].active')) {
-      addOrUpdateAutoFibTraces();
-    } else {
-      clearAutoFib();
-    }
+    // Candles LAST so they sit on top
+    traces.push({
+      x, open, high, low, close, type:'candlestick', name:'Price', yaxis:'y',
+      increasing:{ line:{ color: css('--c-up')||'#16a34a', width:1.6 }},
+      decreasing:{ line:{ color: css('--c-down')||'#dc2626', width:1.6 }},
+      showlegend:false,
+      hovertemplate:'O %{open:.2f}<br>H %{high:.2f}<br>L %{low:.2f}<br>C %{close:.2f}<extra>%{x|%b %d, %Y}</extra>'
+    });
+    // Layout with separate boxes for RSI, MACD, Volume
+    const layout = {
+      margin:{ l:56, r:28, t:18, b:26 },
+      xaxis:{ type:'date', showgrid:true, gridcolor:css('--grid'), rangeslider:{ visible:false }},
+      yaxis:  { title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), domain:[0.42, 1] },
+      yaxis4: { title:'MACD',  showgrid:true, gridcolor:css('--grid'), domain:[0.28, 0.42] },
+      yaxis3: { title:'Volume',showgrid:true, gridcolor:css('--grid'), domain:[0.18, 0.28] },
+      yaxis2: { title:'RSI',   showgrid:true, gridcolor:css('--grid'), domain:[0.00, 0.18], range:[0,100] },
+      hovermode:'x unified',
+      paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
+      plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
+      showlegend:false
+    };
+    await Plotly.newPlot(els.chart, traces, layout, { displayModeBar:false });
+    applyChartTheme?.();
+    await fitPriceAxisToCandlesStrict?.();
+    // Keep Auto Fib in sync with viewport
+    els.chart.on?.('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
+    els.chart.on?.('plotly_doubleclick', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
   }
 
   function applyVisibilityFromChips(){
@@ -995,24 +1048,17 @@
     const chip = e.target.closest('.chip');
     if (!chip) return;
     const k = chip.dataset.k;
-    const nowActive = !chip.classList.contains('active');
-    chip.classList.toggle('active', nowActive);
-    chip.setAttribute('aria-pressed', nowActive ? 'true' : 'false');
+    const nowOn = !chip.classList.contains('active');
+    chip.classList.toggle('active', nowOn);
 
-    // Toggle Plotly trace visibility for the group behind this chip
-    const idxs = (traceMap[k] || []);
-    if (!els.chart || !idxs.length) return;
-    // true -> visible; false -> hidden
-    (Array.isArray(idxs) ? idxs : [idxs]).forEach(i => Plotly.restyle(els.chart, { visible: nowActive }, i));
-
-    // Special: Auto Fib overlays are shapes/annotations, not traces
+    // Auto Fib is shapes/annotations, handled live; others replot via go()
     if (k === 'AUTOFIB') {
-      if (nowActive) {
-        if (typeof addOrUpdateAutoFibTraces === 'function') addOrUpdateAutoFibTraces();
-      } else {
-        if (typeof clearAutoFib === 'function') clearAutoFib();
-      }
+      if (nowOn) addOrUpdateAutoFibTraces();
+      else clearAutoFib();
+      return;
     }
+    // Rebuild traces based on current chip state
+    if (CURRENT.ticker) go(CURRENT.ticker, CURRENT.company);
   });
 
   // --- SMA chip toggle logic ---
