@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.036</title>
+<title>Stock Analyzer v.037</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -82,7 +82,7 @@
   .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   /* Chip base colors (fixed typos) */
-  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
+  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20;}
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;}
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;}
@@ -561,7 +561,7 @@
   let LOCAL_SYMBOLS=[], suggestions=[], activeIndex=-1;
   async function loadSymbolsFromCSV(){
     try{
-      const r = await fetch('/stock_data.csv',{cache:'no-store'}); if(!r.ok) throw new Error('CSV not found');
+      const r = await fetch('/assets/us_symbols.csv',{cache:'no-store'}); if(!r.ok) throw new Error('CSV not found');
       let text = await r.text(); if (text.charCodeAt(0)===0xFEFF) text=text.slice(1);
       const lines=text.split(/\r?\n/).filter(Boolean); if(!lines.length) throw new Error('CSV empty');
       const cand=['|','\t','; ',',']; let delim=cand[0],best=-1;
