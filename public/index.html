@@ -568,9 +568,11 @@
         const sym=line.slice(0,cut).trim().toUpperCase(); const name=line.slice(cut+1).trim();
         if(/^[A-Z0-9.^$\-]{1,12}$/.test(sym)) out.push({symbol:sym,name});
       }
-      if(!out.length) throw new Error('No symbols parsed'); LOCAL_SYMBOLS=out;
+      // --- Always add OKLO if not present ---
+      if(!out.some(r=>r.symbol==='OKLO')) out.unshift({symbol:'OKLO',name:'Oklo Inc'});
+      LOCAL_SYMBOLS=out;
     }catch{
-      LOCAL_SYMBOLS=[{symbol:'AAPL',name:'Apple Inc'},{symbol:'MSFT',name:'Microsoft Corp'},{symbol:'TSLA',name:'Tesla Inc'},{symbol:'NVDA',name:'NVIDIA Corp'},{symbol:'AMZN',name:'Amazon.com Inc'}];
+      LOCAL_SYMBOLS=[{symbol:'OKLO',name:'Oklo Inc'},{symbol:'AAPL',name:'Apple Inc'},{symbol:'MSFT',name:'Microsoft Corp'},{symbol:'TSLA',name:'Tesla Inc'},{symbol:'NVDA',name:'NVIDIA Corp'},{symbol:'AMZN',name:'Amazon.com Inc'}];
     }
   }
   function searchLocalSymbols(q){
@@ -1099,7 +1101,11 @@
       const chip=els.toggles.querySelector(`.chip[data-k="${key}"]`); if(!chip) return;
       const visible = chip.classList.contains('active') ? true : 'legendonly';
       const indices = Array.isArray(idx) ? idx : [idx];
-           try{ Plotly.restyle(els.chart,{ visible }, indices); } catch {}
+      try{ Plotly.restyle(els.chart,{ visible }, indices); } catch {}
+      // --- For Auto Fib, always update overlays if active ---
+      if(key==='AUTOFIB' && chip.classList.contains('active')){
+        if(typeof addOrUpdateAutoFibTraces==='function') addOrUpdateAutoFibTraces();
+      }
     });
   }
 
