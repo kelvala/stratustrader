@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.038</title>
+<title>Stock Analyzer v.037</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -418,15 +418,24 @@
 <script>
 // ===== FIXED: Symbols + Autocomplete + Search (single source of truth) =====
 (function(){
-  // Do not duplicate these anywhere else in the file
+  // Safe debounce polyfill if global debounce isn't ready yet
+  const _debounce = (typeof debounce === 'function') ? debounce : (fn, ms=120) => {
+    let h; return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); };
+  };
+  // Wait until els + input/list/button exist before wiring
+  function whenElsReady(cb){
+    const t0 = Date.now(), max = 6000;
+    const tick = () => {
+      if (window.els && els.input && els.list && els.searchBtn) { cb(); return; }
+      if (Date.now() - t0 > max) { console.warn('autocomplete init: els not ready'); return; }
+      requestAnimationFrame(tick);
+    };
+    tick();
+  }
+
   let LOCAL_SYMBOLS = [];
   let suggestions = [];
   let activeIndex = -1;
-
-  // Expect these elements to already exist in the page:
-  // els.input (ticker input), els.list (dropdown), els.searchBtn (button)
-  // and functions: onSearch(ticker, company?), normalizeTicker(s), SYMBOL_ALIASES, debounce, escapeHTML, css, els.tickerWrap
-  // We don't change visuals or other UI.
 
   async function loadSymbolsFromCSV() {
     if (LOCAL_SYMBOLS.length) return LOCAL_SYMBOLS;
@@ -461,7 +470,6 @@
       if (!out.length) throw new Error('No symbols parsed');
       LOCAL_SYMBOLS = out.sort((a,b)=>a.symbol.localeCompare(b.symbol));
     } catch (e) {
-      // Minimal fallback so AC still works if CSV fails
       LOCAL_SYMBOLS = [
         {symbol:'AAPL',name:'Apple Inc'},
         {symbol:'MSFT',name:'Microsoft Corp'},
@@ -477,11 +485,9 @@
     if (!q) return [];
     const out = [];
     const qLower = q.toLowerCase();
-    // Starts-with by ticker (fast path)
     for (const r of LOCAL_SYMBOLS) {
       if (r.symbol.startsWith(q)) { out.push(r); if (out.length >= 12) break; }
     }
-    // Contains by ticker or name
     if (out.length < 12) {
       const seen = new Set(out.map(r => r.symbol));
       for (const r of LOCAL_SYMBOLS) {
@@ -492,7 +498,6 @@
         }
       }
     }
-    // Alias nudge (e.g., BTC -> BTC-USD)
     if (typeof SYMBOL_ALIASES === 'object' && SYMBOL_ALIASES) {
       const alias = SYMBOL_ALIASES[q];
       if (alias && !out.some(r => r.symbol === alias)) {
@@ -503,7 +508,6 @@
   }
 
   function renderAC() {
-    if (!els || !els.list) return;
     els.list.innerHTML = '';
     if (!suggestions.length) { els.list.classList.remove('show'); return; }
     suggestions.forEach((it, i) => {
@@ -517,19 +521,18 @@
     });
     els.list.classList.add('show');
   }
-  const hideAC = () => { if (els?.list) { els.list.classList.remove('show'); } activeIndex = -1; };
+  const hideAC = () => { els.list.classList.remove('show'); activeIndex = -1; };
 
   function pick(i) {
     const it = suggestions[i];
     if (!it) return;
     const sym = (typeof normalizeTicker === 'function') ? normalizeTicker(it.symbol) : it.symbol;
-    if (els?.input) els.input.value = sym;
+    els.input.value = sym;
     hideAC();
     if (typeof onSearch === 'function') onSearch(sym, it.name || '');
   }
 
   function doSearchFromInput() {
-    if (!els?.input) return;
     let t = els.input.value.trim().toUpperCase();
     if (typeof normalizeTicker === 'function') t = normalizeTicker(t);
     hideAC();
@@ -541,9 +544,9 @@
     if (typeof onSearch === 'function') onSearch(t, comp);
   }
 
-  // Wire input events (keep casing upper without touching styles)
-  if (els?.input) {
-    els.input.addEventListener('input', debounce(async () => {
+  function wire(){
+    // Input events
+    els.input.addEventListener('input', _debounce(async () => {
       if (!LOCAL_SYMBOLS.length) await loadSymbolsFromCSV();
       const val = els.input.value;
       if (val !== val.toUpperCase()) {
@@ -559,7 +562,7 @@
     }, 120));
 
     els.input.addEventListener('keydown', e => {
-      if (els.list?.classList.contains('show')) {
+      if (els.list.classList.contains('show')) {
         if (e.key === 'ArrowDown') { e.preventDefault(); activeIndex = (activeIndex + 1) % suggestions.length; renderAC(); return; }
         if (e.key === 'ArrowUp')   { e.preventDefault(); activeIndex = (activeIndex - 1 + suggestions.length) % suggestions.length; renderAC(); return; }
         if (e.key === 'Enter' || e.key === 'Tab') { if (activeIndex >= 0) { e.preventDefault(); pick(activeIndex); return; } }
@@ -567,15 +570,17 @@
       }
       if (e.key === 'Enter') { e.preventDefault(); hideAC(); doSearchFromInput(); }
     });
+
+    document.addEventListener('click', e => { if (!e.target.closest('.ticker-wrap')) hideAC(); });
+    els.input.addEventListener('blur', () => setTimeout(hideAC, 100));
+    window.addEventListener('scroll', hideAC, { passive: true });
+    els.searchBtn.addEventListener('click', () => { hideAC(); doSearchFromInput(); });
+
+    // Warm cache
+    loadSymbolsFromCSV().catch(()=>{});
   }
 
-  document.addEventListener('click', e => { if (!e.target.closest('.ticker-wrap')) hideAC(); });
-  els?.input?.addEventListener('blur', () => setTimeout(hideAC, 100));
-  window.addEventListener('scroll', hideAC, { passive: true });
-  els?.searchBtn?.addEventListener('click', () => { hideAC(); doSearchFromInput(); });
-
-  // Warm cache to make first keystroke instant
-  loadSymbolsFromCSV().catch(()=>{});
+  whenElsReady(wire);
 })();
 </script>
 </body>
