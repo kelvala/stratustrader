@@ -631,7 +631,8 @@
   }, 30);
   const clearAutoFib = () => { if(!els.chart) return; try{ FIB_LOCK=true; relayoutPreserve({shapes:[],annotations:[]}); } finally { FIB_LOCK=false; } };
 
-  // --- Autocomplete + Search (robust, delimiter-agnostic) ---
+  // ===== FIXED: Symbols + Autocomplete + Search =====
+  // (All duplicate blocks removed; only one robust, delimiter-agnostic block remains)
 
   let LOCAL_SYMBOLS = [];
   let suggestions = [];
