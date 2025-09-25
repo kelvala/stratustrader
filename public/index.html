@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.036</title>
+<title>Stock Analyzer v.037</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -1212,16 +1212,20 @@
   </script>
 
 <script>
-// ===== Autocomplete/Search shim (non-invasive) =====
+// === Non-invasive Autocomplete/Search shim (no UI changes) ===
 (function(){
   const input = document.getElementById('q');
   const list  = document.getElementById('ac');
   const btn   = document.getElementById('searchBtn');
-  if (!input || !list || !btn) { console.warn('AC shim: elements not found (#q, #ac, #searchBtn)'); return; }
+  if (!input || !list || !btn) { console.warn('AC shim: #q, #ac, or #searchBtn not found'); return; }
 
-  const debounce = (fn, ms=120)=>{ let h; return (...a)=>{ clearTimeout(h); h=setTimeout(()=>fn(...a), ms); }; };
+  // tiny debounce (local, won’t affect your global)
+  const d = (fn, ms=120)=>{ let h; return (...a)=>{ clearTimeout(h); h=setTimeout(()=>fn(...a), ms); }; };
   const norm = (t)=> (typeof window.normalizeTicker==='function') ? window.normalizeTicker(t) : t;
-  const callSearch = (t, c)=> { if (typeof window.onSearch==='function') window.onSearch(t, c||''); };
+  const callSearch = (t, c)=>{
+    if (typeof window.onSearch === 'function') { window.onSearch(t, c||''); }
+    else { console.warn('onSearch(...) is not defined yet.'); }
+  };
 
   let SYMBOLS = [];
   let suggestions = [];
@@ -1233,8 +1237,8 @@
       const r = await fetch('/assets/us_symbols.csv', { cache:'no-store' });
       if (!r.ok) throw new Error('symbols '+r.status);
       const text = await r.text();
-      const lines = text.split(/\\r?\\n/).filter(Boolean);
-      const cand = [',','|',';','\\t',' '];
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      const cand = [',','|',';','\t',' '];
       let delim = ',', best=-1;
       for (const d of cand){
         const score = lines.slice(0, Math.min(20,lines.length))
@@ -1249,10 +1253,11 @@
         const line=lines[i]; const cut=line.indexOf(delim); if (cut===-1) continue;
         const sym=line.slice(0,cut).trim().toUpperCase();
         const name=line.slice(cut+1).trim();
-        if (/^[A-Z0-9.^$\\-]{1,12}$/.test(sym)) out.push({symbol:sym,name});
+        if (/^[A-Z0-9.^$\-]{1,12}$/.test(sym)) out.push({symbol:sym,name});
       }
       SYMBOLS = out.sort((a,b)=>a.symbol.localeCompare(b.symbol));
     }catch(e){
+      // fallback so AC still works if CSV fails
       SYMBOLS = [
         {symbol:'AAPL',name:'Apple Inc'},
         {symbol:'MSFT',name:'Microsoft Corp'},
@@ -1260,6 +1265,7 @@
         {symbol:'NVDA',name:'NVIDIA Corp'},
         {symbol:'AMZN',name:'Amazon.com Inc'}
       ];
+      console.warn('AC shim: using fallback symbols (check /assets/us_symbols.csv path).');
     }
     return SYMBOLS;
   }
@@ -1289,24 +1295,27 @@
       const div=document.createElement('div');
       div.className='ac-item'+(i===active?' active':'');
       div.dataset.i=i;
-      div.innerHTML='<div class=\"ticker\">'+it.symbol+'</div><div class=\"company\">'+(it.name||'')+'</div>';
+      div.innerHTML='<div class="ticker">'+it.symbol+'</div><div class="company">'+(it.name||'')+'</div>';
       div.addEventListener('mousedown',e=>{ e.preventDefault(); pick(i); });
       list.appendChild(div);
     });
     list.classList.add('show');
   }
+
   function pick(i){
     const it=suggestions[i]; if (!it) return;
     const sym=norm(it.symbol); input.value=sym; hide(); callSearch(sym, it.name||'');
   }
+
   function doSearch(){
     let t=norm(input.value.trim().toUpperCase()); hide();
-    if (!/^[A-Z0-9.^$\\-]{1,12}$/.test(t)) return;
+    if (!/^[A-Z0-9.^$\-]{1,12}$/.test(t)) return;
     const f = SYMBOLS.find(r=>r.symbol===t) || SYMBOLS.find(r=>(r.name||'').toUpperCase()===t);
     callSearch(t, f?.name||'');
   }
 
-  input.addEventListener('input', debounce(async()=>{
+  // events
+  input.addEventListener('input', d(async ()=>{
     if (!SYMBOLS.length) await loadSymbols();
     const val=input.value;
     if (val!==val.toUpperCase()){
@@ -1332,7 +1341,7 @@
   window.addEventListener('scroll', hide, {passive:true});
   btn.addEventListener('click', ()=>doSearch());
 
-  // Preload
+  // warm cache
   loadSymbols().catch(()=>{});
 })();
 </script>
