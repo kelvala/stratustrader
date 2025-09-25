@@ -13,7 +13,7 @@
 
 <style>
   :root{
-    --bg:#0f1115;--panel:#151923;--text:#e5e7eb;--muted:#9ca3af;
+    --bg:#0f1115;--panel:#151923;--text:#e5e7eb;--muted:#9ca3af
     --accent:#22c55e;--focus:#3b82f6;--border:#23283a;--hover:#161a25;
     --metric-bg:#1a1f2e;--metric-border:#2a2f3e;
     --field-bg:#0c0f16;--field-text:#e5e7eb;
@@ -631,7 +631,8 @@
   }, 30);
   const clearAutoFib = () => { if(!els.chart) return; try{ FIB_LOCK=true; relayoutPreserve({shapes:[],annotations:[]}); } finally { FIB_LOCK=false; } };
 
-  // --- Restore autocomplete and search logic ---
+  // --- Autocomplete + Search (robust, delimiter-agnostic) ---
+
   let LOCAL_SYMBOLS = [];
   let suggestions = [];
   let activeIndex = -1;
@@ -643,10 +644,24 @@
       if (!r.ok) throw new Error('symbols ' + r.status);
       const text = await r.text();
       const lines = text.split(/\r?\n/).filter(Boolean);
-      const delim = ',';
+      if (!lines.length) throw new Error('CSV empty');
+
+      // Detect the delimiter (handles ',', '|', ';', tab, space)
+      const candidates = [',', '|', ';', '\t', ' '];
+      let delim = ',', best = -1;
+      for (const d of candidates) {
+        const score = lines.slice(0, Math.min(20, lines.length))
+          .map(L => L.split(d).length - 1)
+          .filter(n => n > 0)
+          .reduce((a,b) => a + b, 0);
+        if (score > best) { best = score; delim = d; }
+      }
+
+      // Skip header row if it looks like one
       let start = 0;
       const first = lines[0].split(delim).map(s => s.trim().toLowerCase());
       if (first[0] && /(symbol|ticker)/.test(first[0])) start = 1;
+
       const out = [];
       for (let i = start; i < lines.length; i++) {
         const line = lines[i];
@@ -656,8 +671,10 @@
         const name = line.slice(cut + 1).trim();
         if (/^[A-Z0-9.^$\-]{1,12}$/.test(sym)) out.push({ symbol: sym, name });
       }
-      LOCAL_SYMBOLS = out;
+      if (!out.length) throw new Error('No symbols parsed');
+      LOCAL_SYMBOLS = out.sort((a,b)=>a.symbol.localeCompare(b.symbol));
     } catch {
+      // Small, safe fallback so AC works even if CSV fails
       LOCAL_SYMBOLS = [
         {symbol:'AAPL',name:'Apple Inc'},
         {symbol:'MSFT',name:'Microsoft Corp'},
@@ -666,16 +683,19 @@
         {symbol:'AMZN',name:'Amazon.com Inc'}
       ];
     }
-    LOCAL_SYMBOLS.sort((a,b)=>a.symbol.localeCompare(b.symbol));
     return LOCAL_SYMBOLS;
   }
+
   function searchLocalSymbols(q) {
     if (!q) return [];
     const out = [];
     const qLower = q.toLowerCase();
+
+    // Ticker starts-with first
     for (const r of LOCAL_SYMBOLS) {
       if (r.symbol.startsWith(q)) { out.push(r); if (out.length >= 12) break; }
     }
+    // Then contains (ticker or company)
     if (out.length < 12) {
       const seen = new Set(out.map(r => r.symbol));
       for (const r of LOCAL_SYMBOLS) {
@@ -686,8 +706,14 @@
         }
       }
     }
+    // Alias nudge (BTC → BTC-USD, etc.)
+    const alias = SYMBOL_ALIASES[q];
+    if (alias && !out.some(r => r.symbol === alias)) {
+      out.unshift({ symbol: alias, name: `${q} (USD pair)` });
+    }
     return out;
   }
+
   function renderAC() {
     els.list.innerHTML = '';
     if (!suggestions.length) { els.list.classList.remove('show'); return; }
@@ -695,13 +721,16 @@
       const div = document.createElement('div');
       div.className = 'ac-item' + (i === activeIndex ? ' active' : '');
       div.dataset.i = i;
-      div.innerHTML = `<div class="ticker">${it.symbol}</div><div class="company">${escapeHTML(it.name || '')}</div>`;
+      div.innerHTML = `
+        <div class="ticker">${it.symbol}</div>
+        <div class="company">${escapeHTML(it.name || '')}</div>`;
       div.addEventListener('mousedown', e => { e.preventDefault(); pick(i); });
       els.list.appendChild(div);
     });
     els.list.classList.add('show');
   }
   const hideAC = () => { els.list.classList.remove('show'); activeIndex = -1; };
+
   function pick(i) {
     const it = suggestions[i];
     if (!it) return;
@@ -710,14 +739,18 @@
     hideAC();
     onSearch(sym, it.name || '');
   }
+
   function doSearchFromInput() {
     let t = normalizeTicker(els.input.value.trim().toUpperCase());
     hideAC();
-    if (!/^[A-Z0-9.^$\-]{1,12}$/.test(t)) { return; }
-    const found = LOCAL_SYMBOLS.find(r => r.symbol === t) || LOCAL_SYMBOLS.find(r => (r.name||'').toUpperCase() === t);
+    if (!/^[A-Z0-9.^$\-]{1,12}$/.test(t)) return;
+    const found = LOCAL_SYMBOLS.find(r => r.symbol === t) ||
+                  LOCAL_SYMBOLS.find(r => (r.name||'').toUpperCase() === t);
     const comp = found?.name || '';
     onSearch(t, comp);
   }
+
+  // Input events
   els.input.addEventListener('input', debounce(async () => {
     if (!LOCAL_SYMBOLS.length) await loadSymbolsFromCSV();
     const val = els.input.value;
@@ -732,6 +765,7 @@
     activeIndex = -1;
     renderAC();
   }, 120));
+
   els.input.addEventListener('keydown', e => {
     if (els.list.classList.contains('show')) {
       if (e.key === 'ArrowDown') { e.preventDefault(); activeIndex = (activeIndex + 1) % suggestions.length; renderAC(); return; }
@@ -745,6 +779,8 @@
   els.input.addEventListener('blur', () => setTimeout(hideAC, 100));
   window.addEventListener('scroll', hideAC, { passive: true });
   els.searchBtn.addEventListener('click', () => { hideAC(); doSearchFromInput(); });
+
+  // Warm cache so first keystroke shows results instantly
   loadSymbolsFromCSV().catch(()=>{});
   /* ---------- Fetch & shape ---------- */
   function normalizePair(time,freq){
@@ -990,20 +1026,19 @@
       decreasing: {line: {color: css('--c-down')||'#dc2626'}},
       showlegend: false, hoverinfo: 'x+y',
     });
-    if (els.toggles.querySelector('[data-k="SMA20"].active')) {
-      traces.push({x, y: sma20, type: 'scatter', mode: 'lines', name: 'SMA 20', line: {color: css('--c-sma20')||'#22c55e', width:2}, yaxis: 'y', hoverinfo: 'x+y'});
+    if (els.toggles.querySelector("[data-k='SMA20'].active")) {
+      traces.push({ x, y: sma20, type: 'scatter', mode: 'lines', name: 'SMA 20', line: {color: css('--c-sma20')||'#22c55e', width:2}, yaxis: 'y', hoverinfo: 'x+y' });
     }
-    if (els.toggles.querySelector('[data-k="SMA50"].active')) {
-      traces.push({x, y: sma50, type: 'scatter', mode: 'lines', name: 'SMA 50', line: {color: css('--c-sma50')||'#60a5fa', width:2}, yaxis: 'y', hoverinfo: 'x+y'});
+    if (els.toggles.querySelector("[data-k='SMA50'].active")) {
+      traces.push({ x, y: sma50, type: 'scatter', mode: 'lines', name: 'SMA 50', line: {color: css('--c-sma50')||'#60a5fa', width:2}, yaxis: 'y', hoverinfo: 'x+y' });
     }
-    if (els.toggles.querySelector('[data-k="SMA200"].active')) {
-      traces.push({x, y: sma200, type: 'scatter', mode: 'lines', name: 'SMA 200', line: {color: css('--c-sma200')||'#f59e0b', width:2}, yaxis: 'y', hoverinfo: 'x+y'});
+    if (els.toggles.querySelector("[data-k='SMA200'].active")) {
+      traces.push({ x, y: sma200, type: 'scatter', mode: 'lines', name: 'SMA 200', line: {color: css('--c-sma200')||'#f59e0b', width:2}, yaxis: 'y', hoverinfo: 'x+y' });
     }
     // Ichimoku overlay
-    if (els.toggles.querySelector('[data-k="ICHI"].active')) {
+    if (els.toggles.querySelector("[data-k='ICHI'].active")) {
       const ichi = calcIchimoku(visibleRows);
-      traces.push({x, y: ichi.tenkan, type: 'scatter', mode: 'lines', name: 'Tenkan', line: {color: css('--c-ichi-tenkan')||'#f59e0b', width:1.5, dash:'dot'}, yaxis: 'y', hoverinfo: 'x+y'});
-      traces.push({x, y: ichi.kijun, type: 'scatter', mode: 'lines', name: 'Kijun', line: {color: css('--c-ichi-kijun')||'#60a5fa', width:1.5, dash:'dot'}, yaxis: 'y', hoverinfo: 'x+y'});
+      traces.push({x: ichi.tenkan, y: ichi.kijun, type: 'scatter', mode: 'lines', name: 'Tenkan-Kijun', line: {color: css('--c-ichi-tenkan')||'#f59e0b', width:1.5, dash:'dot'}, yaxis: 'y', hoverinfo: 'x+y'});
       traces.push({x, y: ichi.chikou, type: 'scatter', mode: 'lines', name: 'Chikou', line: {color: css('--c-ichi-chikou')||'#93c5fd', width:1.5, dash:'dot'}, yaxis: 'y', hoverinfo: 'x+y'});
       traces.push({x, y: ichi.spanA, type: 'scatter', mode: 'lines', name: 'Span A', line: {color: css('--c-ichi-up')||'rgba(34,197,94,.38)', width:0.5}, yaxis: 'y', hoverinfo: 'x+y', fill:'tonexty', fillcolor:css('--c-ichi-up')||'rgba(34,197,94,.38)'});
       traces.push({x, y: ichi.spanB, type: 'scatter', mode: 'lines', name: 'Span B', line: {color: css('--c-ichi-down')||'rgba(239,68,68,.34)', width:0.5}, yaxis: 'y', hoverinfo: 'x+y', fill:'tonexty', fillcolor:css('--c-ichi-down')||'rgba(239,68,68,.34)'});
@@ -1064,34 +1099,20 @@
       traces.push({ x, y: sma50,  type:'scatter', mode:'lines', name:'SMA 50',  line:{ width:1.8, color:css('--c-sma50')||'#60a5fa' }, yaxis:'y', hoverinfo:'skip' });
     if (els.toggles.querySelector('[data-k="SMA200"].active))
       traces.push({ x, y: sma200, type:'scatter', mode:'lines', name:'SMA 200', line:{ width:1.8, color:css('--c-sma200')||'#f59e0b' }, yaxis:'y', hoverinfo:'skip' });
-    if (els.toggles.querySelector('[data-k="RSI"].active)) {
+    if (els.toggles.querySelector("[data-k='RSI'].active")) {
       traces.push({ x, y:rsi, type:'scatter', mode:'lines', name:'RSI', line:{ width:1.6, color:css('--c-rsi')||'#a78bfa' }, yaxis:'y2' });
-      traces.push({ x:[x[0], x.at(-1)], y:[30,30], type:'scatter', mode:'lines', line:{ width:1, dash:'dot', color:'#64748b' }, yaxis:'y2', hoverinfo:'skip', showlegend:false });
-      traces.push({ x:[x[0], x.at(-1)], y:[70,70], type:'scatter', mode:'lines', line:{ width:1, dash:'dot', color:'#64748b' }, yaxis:'y2', hoverinfo:'skip', showlegend:false });
     }
-    if (els.toggles.querySelector('[data-k="VOL"].active)) {
+    if (els.toggles.querySelector("[data-k='VOL'].active)) {
       const vol = visibleRows.map(r=>r.v||0);
-      traces.push({
-        x, y: vol, type:'bar', name:'Volume', yaxis:'y3',
-        marker:{ color: css('--c-vol')||'#10b981', opacity:.8 },
-        hovertemplate:'Vol: %{y:,}<extra></extra>'
-      });
+      traces.push({ x, y:vol, type:'bar', name:'Volume', marker:{ color:css('--c-vol')||'#f87171', opacity:.3 }, yaxis:'y3', hoverinfo:'skip' });
     }
-    if (els.toggles.querySelector('[data-k="MACD"].active)) {
+    if (els.toggles.querySelector("[data-k='MACD'].active)) {
       traces.push({ x, y: hist,   type:'bar',     name:'Hist',   yaxis:'y4', marker:{ color: css('--c-macd')||'#38bdf8', opacity:.7 }, hovertemplate:'%{y:.2f}<extra></extra>' });
-      traces.push({ x, y: macd,   type:'scatter', mode:'lines',  name:'MACD', yaxis:'y4', line:{ width:1.6, color: css('--c-macd')||'#38bdf8' }});
-      traces.push({ x, y: signal, type:'scatter', mode:'lines',  name:'Signal', yaxis:'y4', line:{ width:1.6, color:'#f97316' }});
+      traces.push({ x, y: macd,   type:'scatter', mode:'lines', name:'MACD',   yaxis:'y4', line:{ width:1.5, color:css('--c-macd')||'#38bdf8' } });
+      traces.push({ x, y: signal, type:'scatter', mode:'lines', name:'Signal', yaxis:'y4', line:{ width:1.2, color:css('--c-macd-sig')||'#f472b6', dash:'dot' } });
     }
-    if (els.toggles.querySelector('[data-k="ICHI"].active)) {
-      const ichi = calcIchimoku(visibleRows);
-      const { gLow, gUp, rLow, rUp } = segmentCloud(ichi.spanA, ichi.spanB);
-      traces.push({ x, y:gLow, type:'scatter', mode:'lines', line:{width:0}, yaxis:'y', hoverinfo:'skip', showlegend:false });
-      traces.push({ x, y:gUp,  type:'scatter', mode:'lines', fill:'tonexty', fillcolor:css('--c-ichi-up')||'rgba(34,197,94,.38)',  line:{width:0}, yaxis:'y', name:'Kumo+' });
-      traces.push({ x, y:rLow, type:'scatter', mode:'lines', line:{width:0}, yaxis:'y', hoverinfo:'skip', showlegend:false });
-      traces.push({ x, y:rUp,  type:'scatter', mode:'lines', fill:'tonexty', fillcolor:css('--c-ichi-down')||'rgba(239,68,68,.34)', line:{width:0}, yaxis:'y', name:'Kumo−' });
-      traces.push({ x, y:ichi.tenkan, type:'scatter', mode:'lines', name:'Tenkan', line:{ width:1.6, dash:'dot', color:css('--c-ichi-tenkan')||'#f59e0b' }, yaxis:'y' });
-      traces.push({ x, y:ichi.kijun,  type:'scatter', mode:'lines', name:'Kijun',  line:{ width:1.6, dash:'dot', color:css('--c-ichi-kijun')||'#60a5fa' }, yaxis:'y' });
-      traces.push({ x, y:ichi.chikou, type:'scatter', mode:'lines', name:'Chikou', line:{ width:1.2, dash:'dash',color:css('--c-ichi-chikou')||'#93c5fd' }, yaxis:'y' });
+    if (els.toggles.querySelector("[data-k='ICHI'].active")) {
+      traces.push(...ichimokuTraces);
     }
     await Plotly.newPlot(els.chart, traces, { margin:{ t:40,l:60,r:30,b:60}, paper_bgcolor:css('--panel'), plot_bgcolor:css('--panel'), xaxis:{type:'date',gridcolor:css('--grid')}, yaxis:{gridcolor:css('--grid')}}, {responsive:true, displayModeBar:false});
     applyChartTheme();
