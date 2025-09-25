@@ -619,6 +619,7 @@
     els.headline.textContent='Symbol not found';
     els.lastLine.innerHTML=`<span style="color:${css('--c-down')};font-weight:800">“${t}” isn’t a valid ticker. Please check the spelling and try again.</span>`;
     els.prevCloseLine.textContent=''; els.ivLine.textContent='';
+    console.warn('[StockAnalyzer] Ticker not found:', t, { input: els.input.value, suggestions, LOCAL_SYMBOLS });
   }
   function doSearchFromInput(){
     let t = normalizeTicker(els.input.value.trim().toUpperCase());
@@ -824,7 +825,10 @@
 
       const time=els.timeSel.value, freq=els.freqSel.value;
       const fullRows = await fetchFullHistory(ticker, time, freq);
-      if(!fullRows.length) throw new Error('No price data');
+      if(!fullRows.length) {
+        console.error('[StockAnalyzer] No price data for', ticker, { ticker, time, freq });
+        throw new Error('No price data');
+      }
 
       let visibleRows = getVisibleData(fullRows, time, freq);
       if (freq === '1y') visibleRows = aggregateToYear(visibleRows);
@@ -851,6 +855,16 @@
         sma20  = alignAndExtendSMA(sma20All,  visibleRows.length, startIdx);
         sma50  = alignAndExtendSMA(sma50All,  visibleRows.length, startIdx);
         sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
+      }
+      // Diagnostics for SMA overlays
+      if (!sma20 || sma20.length !== visibleRows.length) {
+        console.warn('[StockAnalyzer] SMA20 misaligned', { sma20, visibleRowsLen: visibleRows.length, startIdx });
+      }
+      if (!sma50 || sma50.length !== visibleRows.length) {
+        console.warn('[StockAnalyzer] SMA50 misaligned', { sma50, visibleRowsLen: visibleRows.length, startIdx });
+      }
+      if (!sma200 || sma200.length !== visibleRows.length) {
+        console.warn('[StockAnalyzer] SMA200 misaligned', { sma200, visibleRowsLen: visibleRows.length, startIdx });
       }
 
       /* --- Indicators --- */
@@ -1073,7 +1087,7 @@
       startPriceTicker();
       wireHoverDismiss();
     }catch(e){
-      console.error(e);
+      console.error('[StockAnalyzer] Chart error:', e, { ticker, company });
       els.headline.textContent='Chart error';
       els.lastLine.innerHTML=`<span style="color:${css('--c-down')};font-weight:800">${escapeHTML(ticker)} failed to render: ${escapeHTML(e.message||String(e))}</span>`;
     }
@@ -1212,7 +1226,7 @@
   </script>
 
 <script>
-// === Non-invasive Autocomplete/Search shim (no UI changes) ===
+// === Non-invasive Autocomplete/Search shim (robust, uppercase, logs errors) ===
 (function(){
   const input = document.getElementById('q');
   const list  = document.getElementById('ac');
@@ -1221,7 +1235,7 @@
 
   // tiny debounce (local, won’t affect your global)
   const d = (fn, ms=120)=>{ let h; return (...a)=>{ clearTimeout(h); h=setTimeout(()=>fn(...a), ms); }; };
-  const norm = (t)=> (typeof window.normalizeTicker==='function') ? window.normalizeTicker(t) : t;
+  const norm = (t)=> (typeof window.normalizeTicker==='function') ? window.normalizeTicker(t) : t.toUpperCase();
   const callSearch = (t, c)=>{
     if (typeof window.onSearch === 'function') { window.onSearch(t, c||''); }
     else { console.warn('onSearch(...) is not defined yet.'); }
@@ -1257,7 +1271,6 @@
       }
       SYMBOLS = out.sort((a,b)=>a.symbol.localeCompare(b.symbol));
     }catch(e){
-      // fallback so AC still works if CSV fails
       SYMBOLS = [
         {symbol:'AAPL',name:'Apple Inc'},
         {symbol:'MSFT',name:'Microsoft Corp'},
@@ -1272,6 +1285,7 @@
 
   function search(q){
     if (!q) return [];
+    q = q.toUpperCase();
     const out=[]; const ql=q.toLowerCase();
     for (const r of SYMBOLS){ if (r.symbol.startsWith(q)) { out.push(r); if (out.length>=12) break; } }
     if (out.length<12){
@@ -1311,6 +1325,7 @@
     let t=norm(input.value.trim().toUpperCase()); hide();
     if (!/^[A-Z0-9.^$\-]{1,12}$/.test(t)) return;
     const f = SYMBOLS.find(r=>r.symbol===t) || SYMBOLS.find(r=>(r.name||'').toUpperCase()===t);
+    if (!f) console.warn('AC shim: symbol not found in list:', t);
     callSearch(t, f?.name||'');
   }
 
