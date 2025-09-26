@@ -666,17 +666,41 @@
   async function fetchChart(ticker,time,freq){
     const widen={'1m':['1d','2d','5d'],'5m':['5d','10d','1mo','2mo'],'15m':['10d','1mo','2mo'],'60m':['1mo','2mo','3mo']};
     const tryRanges=['1m','5m','15m','60m'].includes(freq)?[...new Set([time, ...(widen[freq]||[])])]:[time];
+    const fetchOpts={ referrerPolicy:'no-referrer' };
     let lastErr; for(const candidate of tryRanges){
       try{
         const {range,interval}=normalizePair(candidate,freq);
+        const common = `range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits&formatted=false&lang=en-US&region=US&corsDomain=finance.yahoo.com`;
         const urls = [
-          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits`,
-          `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits`
+          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?${common}`,
+          `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?${common}`
         ];
         for (const url of urls) {
-          const r = await fetch(url);
-          if (r.ok) {
-            const j = await r.json();
+          try{
+            const r = await fetch(url, fetchOpts);
+            if (r.ok) {
+              const j = await r.json();
+              const res=j?.chart?.result?.[0]; if(!res) throw new Error('No result');
+              const q=res.indicators?.quote?.[0]||{}; const ts=res.timestamp||[];
+              const rows=[];
+              for(let i=0;i<ts.length;i++){
+                const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i];
+                const adj=res.indicators?.adjclose?.[0]?.adjclose;
+                const cRaw=(adj && adj[i]!=null) ? adj[i] : q.close?.[i];
+                const c=Number.isFinite(+cRaw)?+cRaw:null;
+                const v=Number.isFinite(q.volume?.[i])?+q.volume[i]:0;
+                if([o,h,l,c].every(Number.isFinite)) rows.push({date:new Date(ts[i]*1000),o:+o,h:+h,l:+l,c:+c,v});
+              }
+              return rows;
+            }
+          }catch(e){ lastErr=e; }
+        }
+        // Fallback via local proxy to bypass CORS (only if direct fetch failed)
+        try{
+          const proxy = `/api/chart?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`;
+          const pr = await fetch(proxy, { cache:'no-store' });
+          if(pr.ok){
+            const j = await pr.json();
             const res=j?.chart?.result?.[0]; if(!res) throw new Error('No result');
             const q=res.indicators?.quote?.[0]||{}; const ts=res.timestamp||[];
             const rows=[];
@@ -690,8 +714,8 @@
             }
             return rows;
           }
-        }
-        throw new Error('All fetches failed');
+        }catch(e){ lastErr=e; }
+        throw lastErr||new Error('All fetches failed');
       }catch(e){ lastErr=e; }
     }
     throw lastErr||new Error('Fetch failed');
@@ -726,7 +750,7 @@
   /* ---------- Price ticker ---------- */
   async function fetchLastPriceLight(ticker){
     try{
-      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=price`);
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=price&corsDomain=finance.yahoo.com`, { referrerPolicy:'no-referrer' });
       if (r.ok) {
         const j=await r.json();
         const p=j?.price ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice;
@@ -734,7 +758,7 @@
       }
     }catch{}
     try{
-      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1m`);
+      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1m&formatted=false&lang=en-US&region=US&corsDomain=finance.yahoo.com`, { referrerPolicy:'no-referrer' });
       if(!r.ok) throw 0;
       const j=await r.json();
       const res=j?.chart?.result?.[0];
@@ -742,7 +766,17 @@
       const adj=res?.indicators?.adjclose?.[0]?.adjclose;
       const close=(adj && adj.at(-1)!=null) ? adj.at(-1) : q?.close?.at(-1);
       return Number.isFinite(+close) ? +close : null;
-    }catch{ return null; }
+    }catch{}
+    // Fallback to local proxy
+    try{
+      const pr = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { cache:'no-store' });
+      if(pr.ok){
+        const j = await pr.json();
+        const p=j?.price?.regularMarketPrice?.raw ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice;
+        if(Number.isFinite(+p)) return +p;
+      }
+    }catch{}
+    return null;
   }
   async function tickPriceOnce(){
     if(!CURRENT?.ticker) return;
