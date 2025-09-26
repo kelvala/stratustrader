@@ -105,8 +105,8 @@
      This guarantees inactive chips have NO glow. */
   .chip{position:relative}
   .chip.active{border-width:2px;box-shadow:0 0 0 1px currentColor,0 0 14px 3px currentColor}
-  .chip.active::after{content:"";position:absolute;inset:-8px;border-radius:999px;background:currentColor;opacity:.28;filter:blur(10px);pointer-events:none}
-  .light .chip.active::after{opacity:.36;filter:blur(12px)}
+  .chip.active::after{content:"";position:absolute;inset:-8px;border-radius:999px;background:currentColor;opacity:.4;filter:blur(10px);pointer-events:none}
+  .light .chip.active::after{opacity:.5;filter:blur(12px)}
   .chip:focus-visible{outline:2px solid currentColor;outline-offset:3px}
   .section-sep{margin:20px -16px 16px;padding:0 16px}
   .section-sep .rule{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.9}
@@ -173,7 +173,7 @@
     filter: blur(12px);
     z-index: -1;
     pointer-events: none;
-    opacity: 0.55;
+    opacity: 0.7;
   }
 
 </style>
@@ -434,7 +434,7 @@
   async function getFundamentals(ticker){
     if(isCrypto(ticker)) return {};
     try{
-      const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=defaultKeyStatistics,financialData,earningsTrend`, { cache:'no-store' });
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=defaultKeyStatistics,financialData,earningsTrend`, { headers: { 'user-agent': 'Mozilla/5.0' } });
       if(!r.ok) throw new Error('summary '+r.status);
       const j = await r.json();
       const res = j?.quoteSummary?.result?.[0] || {};
@@ -669,19 +669,29 @@
     let lastErr; for(const candidate of tryRanges){
       try{
         const {range,interval}=normalizePair(candidate,freq);
-        const r=await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=${range}&interval=${interval}`,{cache:'no-store'}); if(!r.ok) throw new Error(`Proxy ${r.status}`);
-        const j=await r.json(); const res=j?.chart?.result?.[0]; if(!res) throw new Error('No result');
-        const q=res.indicators?.quote?.[0]||{}; const ts=res.timestamp||[];
-        const rows=[];
-        for(let i=0;i<ts.length;i++){
-          const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i];
-          const adj=res.indicators?.adjclose?.[0]?.adjclose;
-          const cRaw=(adj && adj[i]!=null) ? adj[i] : q.close?.[i];
-          const c=Number.isFinite(+cRaw)?+cRaw:null;
-          const v=Number.isFinite(q.volume?.[i])?+q.volume[i]:0;
-          if([o,h,l,c].every(Number.isFinite)) rows.push({date:new Date(ts[i]*1000),o:+o,h:+h,l:+l,c:+c,v});
+        const urls = [
+          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits`,
+          `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits`
+        ];
+        for (const url of urls) {
+          const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' } });
+          if (r.ok) {
+            const j = await r.json();
+            const res=j?.chart?.result?.[0]; if(!res) throw new Error('No result');
+            const q=res.indicators?.quote?.[0]||{}; const ts=res.timestamp||[];
+            const rows=[];
+            for(let i=0;i<ts.length;i++){
+              const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i];
+              const adj=res.indicators?.adjclose?.[0]?.adjclose;
+              const cRaw=(adj && adj[i]!=null) ? adj[i] : q.close?.[i];
+              const c=Number.isFinite(+cRaw)?+cRaw:null;
+              const v=Number.isFinite(q.volume?.[i])?+q.volume[i]:0;
+              if([o,h,l,c].every(Number.isFinite)) rows.push({date:new Date(ts[i]*1000),o:+o,h:+h,l:+l,c:+c,v});
+            }
+            return rows;
+          }
         }
-        return rows;
+        throw new Error('All fetches failed');
       }catch(e){ lastErr=e; }
     }
     throw lastErr||new Error('Fetch failed');
@@ -716,7 +726,7 @@
   /* ---------- Price ticker ---------- */
   async function fetchLastPriceLight(ticker){
     try{
-      const r = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { cache:'no-store' });
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=price`, { headers: { 'user-agent': 'Mozilla/5.0' } });
       if (r.ok) {
         const j=await r.json();
         const p=j?.price ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice;
@@ -724,7 +734,7 @@
       }
     }catch{}
     try{
-      const r = await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=1d&interval=1m`, { cache:'no-store' });
+      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1m`, { headers: { 'user-agent': 'Mozilla/5.0' } });
       if(!r.ok) throw 0;
       const j=await r.json();
       const res=j?.chart?.result?.[0];
