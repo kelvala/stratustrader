@@ -882,7 +882,7 @@
 
       const startIdx = fullRows.length - visibleRows.length; /* <-- FIXED */
 
-      const x     = visibleRows.map(r => formatEasternISO(r.date));
+      const x     = visibleRows.map(r => r.date); // use Date objects for Plotly time axis
       const open  = visibleRows.map(r => r.o);
       const high  = visibleRows.map(r => r.h);
       const low   = visibleRows.map(r => r.l);
@@ -956,7 +956,7 @@
       // --- Chart layout with proper domains ---
       const layout = {
         margin:{l:56,r:28,t:18,b:26},
-        xaxis:{ domain:[0,1], showgrid:true, gridcolor:css('--grid') },
+        xaxis:{ type:'date', domain:[0,1], showgrid:true, gridcolor:css('--grid') },
         yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), domain:[0.42, 1] },
         yaxis2:{ domain:[0,0.18], anchor:'x', title:'RSI', range:[0,100] },
         yaxis3:{ domain:[0.18,0.28], anchor:'x', title:'Vol' },
@@ -984,7 +984,7 @@
         increasing: { line: { color: css('--c-up') || '#16a34a' } },
         decreasing: { line: { color: css('--c-down') || '#dc2626' } },
         showlegend: false,
-        hovertemplate: 'Date: %{x}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>',
+        hovertemplate: 'Date: %{x|%Y-%m-%d %H:%M}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>',
         visible: true // Always show candles
       };
       const trSMA20 = {
@@ -1137,6 +1137,8 @@
         scrollZoom: true,
         displaylogo: false
       });
+      // Fit y axis to visible candles once after initial render
+      try{ await fitPriceAxisToCandlesStrict(); }catch{}
       applyChartTheme();
       try { els.chart.removeAllListeners?.('plotly_relayout'); } catch {}
       els.chart.on?.('plotly_relayout', () => { if (fibActive()) addOrUpdateAutoFibTraces(); });
