@@ -82,7 +82,7 @@
   .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   /* Chip base colors (fixed typos) */
-  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);}
+  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20;}
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;}
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;}
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;}
@@ -451,15 +451,16 @@
 
   /* ---------- Indicators ---------- */
   function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
-    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;} if(i>=w){const old=vals[i-w]; if(Number.isFinite(old)){sum-=old;count--;}} if(i>=w-1) out[i]=sum/count; } return out; }
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;} out[i]= count > 0 ? sum / count : null; if(count > w){ const old = vals[i - w]; if(Number.isFinite(old)){sum -= old; count--;}} }
+    return out; }
   function EMA(vals,span){ const out=new Array(vals.length).fill(null),k=2/(span+1); let ema=null;
     for(let i=0;i<vals.length;i++){ const v=vals[i]; if(!Number.isFinite(v)){ out[i]=(i>0?out[i-1]:null); continue; } ema=(ema==null)?v:v*k+ema*(1-k); out[i]=ema; } return out; }
-  function RSI(values, period=14){ const rsi=new Array(values.length).fill(null); if(values.length<=period) return rsi;
-    let gain=0,loss=0; for(let i=1;i<=period;i++){ const d=values[i]-values[i-1]; if(d>0) gain+=d; else loss-=d; }
-    gain/=period; loss/=period; rsi[period]=100-100/(1+(gain/(loss||1e-10)));
-    for(let i=period+1;i<values.length;i++){ const d=values[i]-values[i-1];
-      if(d>0){ gain=(gain*(period-1)+d)/period; loss=(loss*(period-1))/period; }
-      else { gain=(gain*(period-1))/period; loss=(loss*(period-1)-d)/period; }
+  function RSI(values, period=14){ const rsi=new Array(values.length).fill(null); const p = Math.min(period, values.length - 1); if(values.length <= p) return rsi;
+    let gain=0,loss=0; for(let i=1;i<=p;i++){ const d=values[i]-values[i-1]; if(d>0) gain+=d; else loss-=d; }
+    gain/=p; loss/=p; rsi[p]=100-100/(1+(gain/(loss||1e-10)));
+    for(let i=p+1;i<values.length;i++){ const d=values[i]-values[i-1];
+      if(d>0){ gain=(gain*(p-1)+d)/p; loss=(loss*(p-1))/p; }
+      else { gain=(gain*(p-1))/p; loss=(loss*(p-1)-d)/p; }
       rsi[i]=100-100/(1+(gain/(loss||1e-10)));
     } return rsi;
   }
@@ -923,6 +924,8 @@
 
       // --- Actually plot the chart and wire up events ---
       // Build Plotly traces from visibleRows and indicator arrays
+     
+
       const trCandles = {
         type: 'candlestick',
               
@@ -1142,8 +1145,8 @@
     // Toggle Plotly trace visibility for the group behind this chip
     const idxs = (traceMap[k] || []);
     if (!els.chart || !idxs.length) return;
-    // true -> visible; false -> hidden
-    (Array.isArray(idxs) ? idxs : [idxs]).forEach(i => Plotly.restyle(els.chart, { visible: nowActive }, i));
+    const visible = nowActive ? true : 'legendonly';
+    (Array.isArray(idxs) ? idxs : [idxs]).forEach(i => Plotly.restyle(els.chart, { visible }, i));
 
     // Special: Auto Fib overlays are shapes/annotations, not traces
     if (k === 'AUTOFIB') {
