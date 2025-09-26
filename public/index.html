@@ -558,7 +558,7 @@
   let LOCAL_SYMBOLS=[], suggestions=[], activeIndex=-1;
   async function loadSymbolsFromCSV(){
     try{
-      const r = await fetch('/assets/us_symbols.csv',{cache:'no-store'}); if(!r.ok) throw new Error('CSV not found');
+      const r = await fetch('/stock_data.csv',{cache:'no-store'}); if(!r.ok) throw new Error('CSV not found');
       let text = await r.text(); if (text.charCodeAt(0)===0xFEFF) text=text.slice(1);
       const lines=text.split(/\r?\n/).filter(Boolean); if(!lines.length) throw new Error('CSV empty');
       const cand=['|','\t','; ',',']; let delim=cand[0],best=-1;
@@ -851,12 +851,25 @@
         sma50  = SMA(close, 50);
         sma200 = SMA(close, 200);
       } else {
-        const sma20All  = SMA(fullRows.map(r=>r.c), 20);
-        const sma50All  = SMA(fullRows.map(r=>r.c), 50);
-        const sma200All = SMA(fullRows.map(r=>r.c), 200);
-        sma20  = alignAndExtendSMA(sma20All,  visibleRows.length, startIdx);
-        sma50  = alignAndExtendSMA(sma50All,  visibleRows.length, startIdx);
-        sma200 = alignAndExtendSMA(sma200All, visibleRows.length, startIdx);
+        // Patch: Always compute SMAs on fullRows, then extend/align to visibleRows
+        const closesFull = fullRows.map(r=>r.c);
+        const sma20All  = SMA(closesFull, 20);
+        const sma50All  = SMA(closesFull, 50);
+        const sma200All = SMA(closesFull, 200);
+        // Always fill left and right edges for full coverage
+        function fillSMA(arr, len, startIdx) {
+          let out = arr.slice(Math.max(0,startIdx), Math.max(0,startIdx)+len);
+          while (out.length < len) out.unshift(null);
+          // Fill left edge
+          const firstIdx = out.findIndex(v => Number.isFinite(v));
+          if (firstIdx > 0) { const v = out[firstIdx]; for (let i=0;i<firstIdx;i++) out[i]=v; }
+          // Fill right edge
+          for (let i=1;i<out.length;i++) if (out[i]==null && Number.isFinite(out[i-1])) out[i]=out[i-1];
+          return out;
+        }
+        sma20  = fillSMA(sma20All,  visibleRows.length, startIdx);
+        sma50  = fillSMA(sma50All,  visibleRows.length, startIdx);
+        sma200 = fillSMA(sma200All, visibleRows.length, startIdx);
       }
       // Diagnostics for SMA overlays
       if (!sma20 || sma20.length !== visibleRows.length) {
@@ -912,7 +925,7 @@
       // Build Plotly traces from visibleRows and indicator arrays
       const trCandles = {
         type: 'candlestick',
-        x: x,
+               x: x,
         open: open,
         high: high,
         low: low,
@@ -1021,34 +1034,39 @@
       };
       /* --- Ichimoku (Tenkan, Kijun, Chikou, Cloud) --- */
       let ichi = calcIchimoku(visibleRows);
+      // Patch: Only use Ichimoku overlays for display, do NOT affect y-axis range
       const loClip = Math.min(...low.filter(Number.isFinite));
       const hiClip = Math.max(...high.filter(Number.isFinite));
       const widened = exaggerateCloud(ichi.spanA, ichi.spanB, 1.0, loClip, hiClip);
       const { gLow, gUp, rLow, rUp } = segmentCloud(widened.spanA, widened.spanB);
       const cloudGreenLow = {
         type:'scatter', x, y:gLow, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
-        hoverinfo:'skip', name:'Kumo+', yaxis:'y', visible:true, showlegend:false
+        hoverinfo:'skip', name:'Kumo+', yaxis:'y', visible:true, showlegend:false,
+        opacity:0.18
       };
       const cloudGreenUp = {
         type:'scatter', x, y:gUp, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
-        fill:'tonexty', fillcolor: css('--c-ichi-up') || 'rgba(34,197,94,.38)',
-        hoverinfo:'skip', name:'Kumo+', yaxis:'y', visible:true, showlegend:true
+        fill:'tonexty', fillcolor: css('--c-ichi-up') || 'rgba(34,197,94,.18)',
+        hoverinfo:'skip', name:'Kumo+', yaxis:'y', visible:true, showlegend:true,
+        opacity:0.18
       };
       const cloudRedLow = {
         type:'scatter', x, y:rLow, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
-        hoverinfo:'skip', name:'Kumo−', yaxis:'y', visible:true, showlegend:false
+        hoverinfo:'skip', name:'Kumo−', yaxis:'y', visible:true, showlegend:false,
+        opacity:0.18
       };
       const cloudRedUp = {
         type:'scatter', x, y:rUp, mode:'lines', line:{width:0.5, color: css('--c-ichi-chikou') || '#93c5fd'},
-        fill:'tonexty', fillcolor: css('--c-ichi-down') || 'rgba(239,68,68,.34)',
-        hoverinfo:'skip', name:'Kumo−', yaxis:'y', visible:true, showlegend:true
+        fill:'tonexty', fillcolor: css('--c-ichi-down') || 'rgba(239,68,68,.18)',
+        hoverinfo:'skip', name:'Kumo−', yaxis:'y', visible:true, showlegend:true,
+        opacity:0.18
       };
       const trTenkan = { type:'scatter', x, y:ichi.tenkan, mode:'lines',
-        name:'Tenkan', line:{ width:1.8, dash:'solid', color: css('--c-ichi-tenkan') || '#f59e0b' }, yaxis:'y', visible:true };
+        name:'Tenkan', line:{ width:1.2, dash:'solid', color: css('--c-ichi-tenkan') || '#f59e0b', opacity:0.7 }, yaxis:'y', visible:true };
       const trKijun  = { type:'scatter', x, y:ichi.kijun,  mode:'lines',
-        name:'Kijun',  line:{ width:1.8, dash:'dot',   color: css('--c-ichi-kijun')  || '#60a5fa' }, yaxis:'y', visible:true };
+        name:'Kijun',  line:{ width:1.2, dash:'dot',   color: css('--c-ichi-kijun')  || '#60a5fa', opacity:0.7 }, yaxis:'y', visible:true };
       const trChikou = { type:'scatter', x, y:ichi.chikou, mode:'lines',
-        name:'Chikou', line:{ width:1.2, dash:'dash',  color: css('--c-ichi-chikou') || '#93c5fd' }, yaxis:'y', visible:true };
+        name:'Chikou', line:{ width:1, dash:'dash',  color: css('--c-ichi-chikou') || '#93c5fd', opacity:0.7 }, yaxis:'y', visible:true };
 
       // --- Build full traces array (price + indicators + ichimoku) ---
       const traces = [
@@ -1242,9 +1260,15 @@
   // tiny debounce (local, won’t affect your global)
   const d = (fn, ms=120)=>{ let h; return (...a)=>{ clearTimeout(h); h=setTimeout(()=>fn(...a), ms); }; };
   const norm = (t)=> (typeof window.normalizeTicker==='function') ? window.normalizeTicker(t) : t.toUpperCase();
-  const callSearch = (t, c)=>{
-    if (typeof window.onSearch === 'function') { window.onSearch(t, c||''); }
-    else { console.warn('onSearch(...) is not defined yet.'); }
+  const callSearch = (t, c) => {
+    const goNow = () => window.onSearch(t, c || '');
+    if (typeof window.onSearch === 'function') { goNow(); return; }
+    // Wait briefly for onSearch to be defined (script order-safe)
+    let tries = 0;
+    const iv = setInterval(() => {
+      if (typeof window.onSearch === 'function') { clearInterval(iv); goNow(); }
+      else if (++tries > 60) { clearInterval(iv); console.warn('onSearch never appeared; check script order.'); }
+    }, 50);
   };
 
   let SYMBOLS = [];
