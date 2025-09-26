@@ -82,12 +82,12 @@
   .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   /* Chip base colors (fixed typos) */
-  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20;}
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;}
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;}
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;}
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;}
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;}
+  .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);} 
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);} 
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);} 
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
 
@@ -245,14 +245,14 @@
       </div>
 
       <div class="toggle-row" id="toggles">
-        <div class="chip active" data-k="SMA20">SMA 20</div>
-        <div class="chip active" data-k="SMA50">SMA 50</div>
-        <div class="chip active" data-k="SMA200">SMA 200</div>
-        <div class="chip active" data-k="RSI">RSI</div>
-        <div class="chip active" data-k="MACD">MACD</div>
-        <div class="chip active" data-k="VOL">Volume</div>
-        <div class="chip" id="autoFib" data-k="AUTOFIB">Auto Fib</div>
-        <div class="chip active" data-k="ICHI">Ichimoku</div>
+        <button class="chip active" data-k="SMA20" type="button" aria-pressed="true">SMA 20</button>
+        <button class="chip active" data-k="SMA50" type="button" aria-pressed="true">SMA 50</button>
+        <button class="chip active" data-k="SMA200" type="button" aria-pressed="true">SMA 200</button>
+        <button class="chip active" data-k="RSI" type="button" aria-pressed="true">RSI</button>
+        <button class="chip active" data-k="MACD" type="button" aria-pressed="true">MACD</button>
+        <button class="chip active" data-k="VOL" type="button" aria-pressed="true">Volume</button>
+        <button class="chip" id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
+        <button class="chip active" data-k="ICHI" type="button" aria-pressed="true">Ichimoku</button>
       </div>
 
       <div id="chart"></div>
@@ -434,7 +434,7 @@
   async function getFundamentals(ticker){
     if(isCrypto(ticker)) return {};
     try{
-      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=defaultKeyStatistics,financialData,earningsTrend`, { headers: { 'user-agent': 'Mozilla/5.0' } });
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=defaultKeyStatistics,financialData,earningsTrend`);
       if(!r.ok) throw new Error('summary '+r.status);
       const j = await r.json();
       const res = j?.quoteSummary?.result?.[0] || {};
@@ -674,7 +674,7 @@
           `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits`
         ];
         for (const url of urls) {
-          const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' } });
+          const r = await fetch(url);
           if (r.ok) {
             const j = await r.json();
             const res=j?.chart?.result?.[0]; if(!res) throw new Error('No result');
@@ -726,7 +726,7 @@
   /* ---------- Price ticker ---------- */
   async function fetchLastPriceLight(ticker){
     try{
-      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=price`, { headers: { 'user-agent': 'Mozilla/5.0' } });
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=price`);
       if (r.ok) {
         const j=await r.json();
         const p=j?.price ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice;
@@ -734,7 +734,7 @@
       }
     }catch{}
     try{
-      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1m`, { headers: { 'user-agent': 'Mozilla/5.0' } });
+      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1m`);
       if(!r.ok) throw 0;
       const j=await r.json();
       const res=j?.chart?.result?.[0];
@@ -1152,12 +1152,6 @@
     chip.classList.toggle('active', nowActive);
     chip.setAttribute('aria-pressed', nowActive ? 'true' : 'false');
 
-    // Toggle Plotly trace visibility for the group behind this chip
-    const idxs = (traceMap[k] || []);
-    if (!els.chart || !idxs.length) return;
-    const visible = nowActive ? true : 'legendonly';
-    (Array.isArray(idxs) ? idxs : [idxs]).forEach(i => Plotly.restyle(els.chart, { visible }, i));
-
     // Special: Auto Fib overlays are shapes/annotations, not traces
     if (k === 'AUTOFIB') {
       if (nowActive) {
@@ -1165,6 +1159,14 @@
       } else {
         if (typeof clearAutoFib === 'function') clearAutoFib();
       }
+    }
+
+    // Toggle Plotly trace visibility for the group behind this chip
+    const idxs = (traceMap[k] || []);
+    if (!els.chart) return;
+    if (Array.isArray(idxs) && idxs.length > 0) {
+      const visible = nowActive ? true : 'legendonly';
+      try { Plotly.restyle(els.chart, { visible }, idxs); } catch {}
     }
   });
 
