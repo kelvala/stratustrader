@@ -968,24 +968,34 @@
 
       // --- Actually plot the chart and wire up events ---
       // Build Plotly traces from visibleRows and indicator arrays
-     
-
+      
+      
       const trCandles = {
         type: 'candlestick',
-              
-              
-               x: x,
+        x: x,
         open: open,
         high: high,
         low: low,
         close: close,
         name: ticker,
         yaxis: 'y',
-        increasing: { line: { color: css('--c-up') || '#16a34a' } },
-        decreasing: { line: { color: css('--c-down') || '#dc2626' } },
+        increasing: { line: { color: css('--c-up') || '#16a34a', width: 1.25 }, fillcolor: (css('--c-up') || '#16a34a') },
+        decreasing: { line: { color: css('--c-down') || '#dc2626', width: 1.25 }, fillcolor: (css('--c-down') || '#dc2626') },
+        whiskerwidth: 0.6,
         showlegend: false,
         hovertemplate: 'Date: %{x|%Y-%m-%d %H:%M}<br>O: %{open}<br>H: %{high}<br>L: %{low}<br>C: %{close}<extra></extra>',
         visible: true // Always show candles
+      };
+      // Always add a thin close-price line so there is a visible series even if candlesticks don’t render on some setups
+      const trCloseLine = {
+        type: 'scatter',
+        x: x,
+        y: close,
+        mode: 'lines',
+        name: 'Price',
+        line: { color: '#94a3b8', width: 1.2, dash: 'dot' },
+        yaxis: 'y',
+        hoverinfo: 'skip'
       };
       const trSMA20 = {
         type: 'scatter',
@@ -1120,18 +1130,25 @@
       // --- Build full traces array (price + indicators + ichimoku) ---
       const traces = [
         trCandles,   // 0
-        trSMA20,     // 1
-        trSMA50,     // 2
-        trSMA200,    // 3
-        trVol,       // 4
-        trRSI,       // 5
-        trRSI70,     // 6
-        trRSI30,     // 7
-        trMACD,      // 8
-        trSignal,    // 9
-        trHist,      // 10
-        cloudGreenLow, cloudGreenUp, cloudRedLow, cloudRedUp, trTenkan, trKijun, trChikou // 11-17
+        trCloseLine, // 1 (fallback price line)
+        trSMA20,     // 2
+        trSMA50,     // 3
+        trSMA200,    // 4
+        trVol,       // 5
+        trRSI,       // 6
+        trRSI70,     // 7
+        trRSI30,     // 8
+        trMACD,      // 9
+        trSignal,    // 10
+        trHist,      // 11
+        cloudGreenLow, cloudGreenUp, cloudRedLow, cloudRedUp, trTenkan, trKijun, trChikou // 12-18
       ];
+      // If nothing to draw, surface a friendly error
+      if (!x || x.length === 0 || !close || close.length === 0) {
+        try { window.showError?.('No price data available for this range/frequency. Try a different Time or Frequency.'); } catch {}
+      } else {
+        try { window.clearError?.(); } catch {}
+      }
       await Plotly.newPlot(els.chart, traces, layout, {
         responsive: true,
         scrollZoom: true,
@@ -1145,13 +1162,13 @@
       if (fibActive()) addOrUpdateAutoFibTraces();
       // --- Register trace indices for chip toggles ---
       traceMap = {
-        SMA20: 1,
-        SMA50: 2,
-        SMA200: 3,
-        VOL: 4,
-        RSI: [5,6,7],
-        MACD: [8,9,10],
-        ICHI: [11,12,13,14,15,16,17],
+        SMA20: 2,
+        SMA50: 3,
+        SMA200: 4,
+        VOL: 5,
+        RSI: [6,7,8],
+        MACD: [9,10,11],
+        ICHI: [12,13,14,15,16,17,18],
         AUTOFIB: []
       };
       applyVisibilityFromChips();
