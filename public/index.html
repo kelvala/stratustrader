@@ -245,14 +245,14 @@
       </div>
 
       <div class="toggle-row" id="toggles">
-        <button class="chip active" data-k="SMA20" type="button" aria-pressed="true">SMA 20</button>
-        <button class="chip active" data-k="SMA50" type="button" aria-pressed="true">SMA 50</button>
-        <button class="chip active" data-k="SMA200" type="button" aria-pressed="true">SMA 200</button>
-        <button class="chip active" data-k="RSI" type="button" aria-pressed="true">RSI</button>
-        <button class="chip active" data-k="MACD" type="button" aria-pressed="true">MACD</button>
-        <button class="chip active" data-k="VOL" type="button" aria-pressed="true">Volume</button>
+        <button class="chip" data-k="SMA20" type="button" aria-pressed="false">SMA 20</button>
+        <button class="chip" data-k="SMA50" type="button" aria-pressed="false">SMA 50</button>
+        <button class="chip" data-k="SMA200" type="button" aria-pressed="false">SMA 200</button>
+        <button class="chip" data-k="RSI" type="button" aria-pressed="false">RSI</button>
+        <button class="chip" data-k="MACD" type="button" aria-pressed="false">MACD</button>
+        <button class="chip" data-k="VOL" type="button" aria-pressed="false">Volume</button>
         <button class="chip" id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
-        <button class="chip active" data-k="ICHI" type="button" aria-pressed="true">Ichimoku</button>
+        <button class="chip" data-k="ICHI" type="button" aria-pressed="false">Ichimoku</button>
       </div>
 
       <div id="chart"></div>
@@ -556,6 +556,33 @@
     return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
   }
   const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
+
+  /* ---------- Subplot domain helpers (hide bottom panes when chips are OFF) ---------- */
+  const isChipActive = (k)=> !!els.toggles.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');
+  function buildSubplotDomains(){
+    const showRSI=isChipActive('RSI');
+    const showVOL=isChipActive('VOL');
+    const showMACD=isChipActive('MACD');
+    const gap=0.02; const rsiH=0.18, volH=0.10, macdH=0.14;
+    let bottom=0;
+    const rsiDom = showRSI ? [bottom, (bottom+=rsiH)] : [0,0]; bottom += showRSI?gap:0;
+    const volDom = showVOL ? [bottom, (bottom+=volH)] : [0,0]; bottom += showVOL?gap:0;
+    const macdDom= showMACD? [bottom, (bottom+=macdH)] : [0,0]; bottom += showMACD?gap:0;
+    const yDom=[bottom,1];
+    return { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD };
+  }
+  async function updateSubplotLayout(){
+    if(!els.chart||!window.Plotly) return;
+    const { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD } = buildSubplotDomains();
+    const payload={
+      'yaxis.domain': yDom,
+      'yaxis2.domain': rsiDom, 'yaxis2.showticklabels': showRSI, 'yaxis2.showgrid': showRSI,
+      'yaxis3.domain': volDom, 'yaxis3.showticklabels': showVOL, 'yaxis3.showgrid': showVOL,
+      'yaxis4.domain': macdDom,'yaxis4.showticklabels': showMACD,'yaxis4.showgrid': showMACD
+    };
+    try{ await relayoutPreserve(payload); }catch{}
+  }
+
   const addOrUpdateAutoFibTraces = debounce(async () => {
     if(!fibActive()||!els.chart||FIB_LOCK) return;
     const c=getCandleTrace(); if(!c) return;
@@ -984,13 +1011,14 @@
       if (UPDATE_INFO) { els.ivLine.textContent = `Intrinsic Value: ${iv==null ? '—' : '$'+fmt(iv)}`; }
 
       // --- Chart layout with proper domains ---
+      const doms = buildSubplotDomains();
       const layout = {
         margin:{l:56,r:28,t:18,b:26},
         xaxis:{ type:'date', domain:[0,1], showgrid:true, gridcolor:css('--grid') },
-        yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), domain:[0.42, 1] },
-        yaxis2:{ domain:[0,0.18], anchor:'x', title:'RSI', range:[0,100] },
-        yaxis3:{ domain:[0.18,0.28], anchor:'x', title:'Vol' },
-        yaxis4:{ domain:[0.28,0.42], anchor:'x', title:'MACD' },
+        yaxis:{ title:'Price', side:'right', showgrid:true, gridcolor:css('--grid'), domain: doms.yDom },
+        yaxis2:{ domain: doms.rsiDom, anchor:'x', title:'RSI', range:[0,100], showticklabels: doms.showRSI, showgrid: doms.showRSI },
+        yaxis3:{ domain: doms.volDom, anchor:'x', title:'Vol', showticklabels: doms.showVOL, showgrid: doms.showVOL },
+        yaxis4:{ domain: doms.macdDom, anchor:'x', title:'MACD', showticklabels: doms.showMACD, showgrid: doms.showMACD },
         legend:{orientation:'h'},
         paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor,
         plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor
@@ -1202,6 +1230,7 @@
         AUTOFIB: []
       };
       applyVisibilityFromChips();
+      await updateSubplotLayout();
       if (UPDATE_INFO) startPriceTicker();
       wireHoverDismiss();
     }catch(e){
@@ -1251,6 +1280,11 @@
     if (indices.length > 0) {
       const visible = nowActive ? true : 'legendonly';
       try { Plotly.restyle(els.chart, { visible }, indices); } catch {}
+    }
+
+    // If an indicator subplot changed, recompute domains
+    if (k==='RSI' || k==='VOL' || k==='MACD') {
+      updateSubplotLayout();
     }
   });
 
