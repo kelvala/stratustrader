@@ -87,7 +87,7 @@
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);} 
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);} 
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
 
@@ -338,9 +338,11 @@
       chart: document.getElementById('chart'),
       toggles: document.getElementById('toggles'),
       q: document.getElementById('q'),
+      ac: document.getElementById('ac'),
       searchBtn: document.getElementById('searchBtn')
     };
-    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [] };
+    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1 };
+    const isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 
     // Utilities
     const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
@@ -358,27 +360,37 @@
       return out;
     }
 
-    // Data fetch from Yahoo
+    // Chart data fetch (proxy first to avoid CORS; direct only on localhost)
     async function fetchRows(ticker, range, interval){
-      const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includeTimestamps=true`;
-      const r = await fetch(u, { cache: 'no-store', referrerPolicy: 'no-referrer' });
-      if(!r.ok) throw new Error('chart '+r.status);
-      const j = await r.json();
-      const res = j?.chart?.result?.[0];
-      if(!res) throw new Error('no data');
-      const ts = res.timestamp || [];
-      const o = res.indicators?.quote?.[0]?.open  || [];
-      const h = res.indicators?.quote?.[0]?.high  || [];
-      const l = res.indicators?.quote?.[0]?.low   || [];
-      const c = res.indicators?.quote?.[0]?.close || [];
-      const v = res.indicators?.quote?.[0]?.volume|| [];
-      const rows = [];
-      for(let i=0;i<ts.length;i++){
-        // Skip rows with missing close
-        if(!Number.isFinite(c[i])) continue;
-        rows.push({ t: ts[i]*1000, o:o[i], h:h[i], l:l[i], c:c[i], v:v[i] });
-      }
-      return rows;
+      // Try our Edge API first
+      try{
+        const u = `/api/chart?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`;
+        const r = await fetch(u, { cache:'no-store' });
+        if(r.ok){
+          const j = await r.json();
+          const res = j?.chart?.result?.[0];
+          if(res){
+            const ts = res.timestamp || [];
+            const q = res.indicators?.quote?.[0]||{};
+            const o=q.open||[], h=q.high||[], l=q.low||[], c=q.close||[], v=q.volume||[];
+            const rows=[]; for(let i=0;i<ts.length;i++){ if(!Number.isFinite(c[i])) continue; rows.push({ t:ts[i]*1000, o:o[i], h:h[i], l:l[i], c:c[i], v:v[i] }); }
+            return rows;
+          }
+        }
+      }catch{}
+      // Fallback to direct Yahoo only when running locally
+      if(!isLocal) throw new Error('CORS: use /api/chart in production');
+      const u2 = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includeTimestamps=true`;
+      const r2 = await fetch(u2, { cache:'no-store', referrerPolicy:'no-referrer' });
+      if(!r2.ok) throw new Error('chart '+r2.status);
+      const j2 = await r2.json();
+      const res2 = j2?.chart?.result?.[0];
+      if(!res2) throw new Error('no data');
+      const ts2 = res2.timestamp || [];
+      const q2 = res2.indicators?.quote?.[0]||{};
+      const o2=q2.open||[], h2=q2.high||[], l2=q2.low||[], c2=q2.close||[], v2=q2.volume||[];
+      const rows2=[]; for(let i=0;i<ts2.length;i++){ if(!Number.isFinite(c2[i])) continue; rows2.push({ t:ts2[i]*1000, o:o2[i], h:h2[i], l:l2[i], c:c2[i], v:v2[i] }); }
+      return rows2;
     }
 
     function buildLayout(){
@@ -448,18 +460,96 @@
       setSMAVisibility(key, on);
     });
 
+    // --- Autocomplete ---
+    async function loadSymbols(){
+      try{
+        const r = await fetch('/stock_data.csv', { cache:'no-store' });
+        if(!r.ok) return;
+        const txt = await r.text();
+        const lines = txt.split(/\r?\n/).filter(Boolean);
+        const out = [];
+        for(let i=0;i<lines.length;i++){
+          const parts = lines[i].split(',');
+          const sym = (parts[0]||'').trim().toUpperCase();
+          const name = (parts.slice(1).join(',')||'').trim();
+          if(!sym || sym==='Symbol') continue; // skip header
+          out.push({ sym, name, nameU: name.toUpperCase() });
+        }
+        state.symbols = out;
+      }catch{}
+    }
+
+    function renderAC(matches){
+      if(!els.ac) return;
+      if(!matches.length){ els.ac.classList.remove('show'); els.ac.innerHTML=''; state.acMatches=[]; state.acIndex=-1; return; }
+      state.acMatches = matches; state.acIndex = -1;
+      els.ac.innerHTML = matches.map((m,i)=>
+        `<div class="ac-item" data-idx="${i}">
+           <div class="ticker">${m.sym}</div>
+           <div class="company">${m.name||''}</div>
+         </div>`).join('');
+      els.ac.classList.add('show');
+    }
+
+    function updateAC(){
+      const val = (els.q?.value||'').trim();
+      if(!val){ renderAC([]); return; }
+      const term = val.toUpperCase();
+      const best = [];
+      for(const s of state.symbols){
+        if(s.sym.startsWith(term) || s.nameU.includes(term)) best.push(s);
+        if(best.length>=30) break;
+      }
+      renderAC(best);
+    }
+
+    els.q?.addEventListener('input', updateAC);
+    els.q?.addEventListener('focus', updateAC);
+    els.q?.addEventListener('keydown', (e)=>{
+      if(!els.ac?.classList.contains('show')) return;
+      const max = state.acMatches.length;
+      if(e.key==='ArrowDown'){
+        e.preventDefault(); state.acIndex = (state.acIndex+1+max)%max; highlightAC();
+      }else if(e.key==='ArrowUp'){
+        e.preventDefault(); state.acIndex = (state.acIndex-1+max)%max; highlightAC();
+      }else if(e.key==='Enter'){
+        if(state.acIndex>=0 && state.acIndex<max){ e.preventDefault(); chooseAC(state.acMatches[state.acIndex]); }
+      }else if(e.key==='Escape'){
+        els.ac.classList.remove('show');
+      }
+    });
+
+    function highlightAC(){
+      const items = els.ac?.querySelectorAll('.ac-item')||[];
+      items.forEach((el,i)=> el.classList.toggle('active', i===state.acIndex));
+    }
+    function chooseAC(item){
+      if(!item) return;
+      if(els.q) els.q.value = item.sym;
+      els.ac?.classList.remove('show');
+      doSearch();
+    }
+    els.ac?.addEventListener('mousedown', (e)=>{
+      const it = e.target.closest('.ac-item');
+      if(!it) return;
+      const idx = +it.getAttribute('data-idx');
+      chooseAC(state.acMatches[idx]);
+    });
+    els.q?.addEventListener('blur', ()=> setTimeout(()=> els.ac?.classList.remove('show'), 120));
+
     // Search
     function doSearch(){
       const t = (els.q?.value || '').trim().toUpperCase();
       if(!t) return;
       state.ticker = t;
-      plot(state.ticker).catch(()=>{});
+      plot(state.ticker).catch(err=>console.error(err));
     }
     els.searchBtn?.addEventListener('click', doSearch);
-    els.q?.addEventListener('keydown', (e)=>{ if(e.key==='Enter') doSearch(); });
+    els.q?.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !els.ac?.classList.contains('show')) doSearch(); });
 
-    // Initial: make sure chips are OFF and plot default
+    // Initial: chips OFF, load symbols, plot default
     ['SMA20','SMA50','SMA200'].forEach(k=>setChip(k,false));
+    loadSymbols();
     plot(state.ticker).catch(console.error);
     window.addEventListener('resize', ()=>{ if(els.chart) Plotly.Plots.resize(els.chart); });
   })();
