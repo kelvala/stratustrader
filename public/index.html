@@ -57,7 +57,8 @@
   .theme-toggle.active{background:var(--accent);color:#fff}
   .ac{position:absolute;left:0;top:calc(100% + 6px);width:100%;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:10px;display:none;max-height:280px;overflow:auto;box-shadow:0 10px 24px rgba(0,0,0,.18);z-index:12050}
   .ac.show{display:block}
-  .ac-item{padding:12px 14px;display:grid;grid-template-columns:110px 1fr;gap:12px;align-items:center;cursor:pointer;border-bottom:1px solid var(--metric-border)}
+  /* Give the ticker more room so it doesn't feel cramped */
+  .ac-item{padding:12px 14px;display:grid;grid-template-columns:minmax(160px, 240px) 1fr;gap:12px;align-items:center;cursor:pointer;border-bottom:1px solid var(--metric-border)}
   .ac-item:hover,.ac-item.active{background:var(--hover)}
   .ticker{font-weight:800}
   .company{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -177,8 +178,9 @@
   }
 
   /* Nicer colorization for autocomplete tickers */
-  .ac-item .ticker{ color: var(--focus); font-weight:900; letter-spacing:.3px; }
-  .ac-item:hover .ticker, .ac-item.active .ticker{ color: var(--accent); }
+  /* Make tickers a distinct color and keep them on one line */
+  .ac-item .ticker{ color: var(--accent); font-weight:900; letter-spacing:.3px; white-space:nowrap; }
+  .ac-item:hover .ticker, .ac-item.active .ticker{ color: color-mix(in srgb, var(--accent), #ffffff 14%); }
   /* Company name muted so ticker stands out */
   .ac-item .company{ color: var(--muted); font-weight:700; }
   .ac-item:hover .company, .ac-item.active .company{ color: var(--muted); opacity:.95; }
@@ -672,21 +674,32 @@
         if(!r.ok) return;
         const txt = await r.text();
         const lines = txt.split(/\r?\n/).filter(Boolean);
-        const map = new Map(); // de-dup by ticker symbol
-        for(const line of lines){
-          const parts = line.split(',');
-          const sym = (parts[0]||'').trim().toUpperCase();
-          if(!sym || sym==='SYMBOL' || sym==='Symbol') continue; // skip header/blank
-          // Join the rest as name and lightly clean generic suffixes
-          let name = (parts.slice(1).join(',')||'').trim();
+        const map = new Map(); // de-dup by pure ticker symbol
+        for(const raw of lines){
+          const line = raw.trim();
+          if(!line) continue;
+          const delim = line.includes('|') ? '|' : ','; // support both formats
+          let [symRaw, ...nameParts] = line.split(delim);
+          let sym = (symRaw||'').trim().toUpperCase();
+          // Skip header rows like "Symbol" or "Symbol|Company"
+          if(!sym || sym==='SYMBOL' || sym==='SYMBOL|COMPANY') continue;
+          let name = (nameParts.join(delim)||'').trim();
+          // If the file was pipe-delimited but read as comma, sym may contain a pipe and company. Fix that.
+          if(sym.includes('|')){
+            const [s2, ...rest] = sym.split('|');
+            sym = s2.trim().toUpperCase();
+            if(!name) name = rest.join('|').trim();
+          }
+          // Basic cleanup
           name = name
             .replace(/\s+/g,' ')
             .replace(/\s*-\s*ADR.*$/i,'')
             .replace(/\b(COMMON|PREFERRED)\s+STOCK.*$/i,'')
             .replace(/\b(ORDINARY\s+SHARES|CLASS\s+[A-Z]).*$/i,'')
+            .replace(/^\|+/,'')
             .trim();
           if(!map.has(sym)){
-            map.set(sym, { sym, name, nameU: name.toUpperCase() });
+            map.set(sym, { sym, name, nameU: (name||'').toUpperCase() });
           }
         }
         state.symbols = Array.from(map.values());
