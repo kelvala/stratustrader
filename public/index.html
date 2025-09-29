@@ -83,10 +83,10 @@
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   /* Chip base colors (fixed typos) */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);} 
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);} 
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);} 
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;} 
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;} 
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;} 
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;} 
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
@@ -175,6 +175,10 @@
     pointer-events: none;
     opacity: 0.7;
   }
+
+  /* Nicer colorization for autocomplete tickers */
+  .ac-item .ticker{ color: var(--focus); font-weight:900; letter-spacing:.3px; }
+  .ac-item:hover .ticker, .ac-item.active .ticker{ color: var(--accent); }
 
 </style>
 </head>
@@ -339,14 +343,22 @@
       toggles: document.getElementById('toggles'),
       q: document.getElementById('q'),
       ac: document.getElementById('ac'),
-      searchBtn: document.getElementById('searchBtn')
+      searchBtn: document.getElementById('searchBtn'),
+      lastLine: document.getElementById('lastLine'),
+      prevCloseLine: document.getElementById('prevCloseLine'),
+      ivLine: document.getElementById('ivLine'),
+      headline: document.getElementById('headline')
     };
-    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1 };
+    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null };
     const isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 
     // Utilities
     const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
-    function SMA(values, w){
+    const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+    const fmtPx = v => (Number.isFinite(+v) ? `$${fmt.format(+v)}` : '—');
+    const fmtPct = v => (Number.isFinite(+v) ? `${(+v).toFixed(2)}%` : '—');
+    function SMA(values, w, fullWidth = true){
+      // fullWidth=true fills the warmup using partial window so the line spans entire chart
       const out = new Array(values.length).fill(null);
       let sum = 0; let q = [];
       for(let i=0;i<values.length;i++){
@@ -354,10 +366,56 @@
         if(Number.isFinite(v)){
           q.push(v); sum += v;
           if(q.length > w){ sum -= q.shift(); }
-          if(q.length === w) out[i] = sum / w;
+          if(fullWidth ? q.length>0 : q.length===w){
+            out[i] = sum / (fullWidth ? q.length : w);
+          }
         }
       }
       return out;
+    }
+
+    // --- Live quote (independent of chart) ---
+    function parseQuotePayload(j){
+      const r = j?.quoteResponse?.result?.[0];
+      if(r){
+        return {
+          price: +r.regularMarketPrice,
+          change: +r.regularMarketChange,
+          changePct: +r.regularMarketChangePercent,
+          prevClose: +r.regularMarketPreviousClose,
+          name: r.shortName || r.longName || '',
+          currency: r.currency || 'USD'
+        };
+      }
+      // fallback shape from /api/quote
+      if(j && Number.isFinite(+j.price)){
+        return { price:+j.price, change:null, changePct:null, prevClose:null, name:'', currency:'USD' };
+      }
+      return null;
+    }
+
+    async function refreshQuoteOnce(){
+      try{
+        const r = await fetch(`/api/quote?ticker=${encodeURIComponent(state.ticker)}`, { cache:'no-store' });
+        if(!r.ok) throw new Error('quote '+r.status);
+        const j = await r.json();
+        const q = parseQuotePayload(j);
+        if(!q) throw new Error('bad quote payload');
+        // Update UI
+        const chText = (Number.isFinite(q.change) && Number.isFinite(q.changePct))
+          ? `${q.change>=0?'+':''}${fmt.format(q.change)} (${q.changePct>=0?'+':''}${Math.abs(q.changePct).toFixed(2)}%)`
+          : '—';
+        els.lastLine.textContent = `Last: ${fmtPx(q.price)} · Change: ${chText}`;
+        els.prevCloseLine.textContent = `Yesterday’s Close: ${fmtPx(q.prevClose)}`;
+        if(els.headline){ els.headline.textContent = `${state.ticker}${q.name? ' — '+q.name:''}`; }
+      }catch(err){ /* keep silent but don’t break UI */ }
+    }
+
+    function startQuoteTimer(){
+      if(state.quoteTimer){ clearInterval(state.quoteTimer); state.quoteTimer = null; }
+      // Refresh immediately, then every minute
+      refreshQuoteOnce();
+      state.quoteTimer = setInterval(refreshQuoteOnce, 60*1000);
     }
 
     // Chart data fetch (proxy first to avoid CORS; direct only on localhost)
@@ -418,7 +476,7 @@
 
     function smaTrace(rows, period, color, name){
       const x = rows.map(r=>new Date(r.t));
-      const y = SMA(rows.map(r=>r.c), period);
+      const y = SMA(rows.map(r=>r.c), period, true); // full width lines
       return { type:'scatter', mode:'lines', name, x, y, line:{ color, width:1.6 }, visible:false, hoverinfo:'skip' };
     }
 
@@ -484,10 +542,7 @@
       if(!matches.length){ els.ac.classList.remove('show'); els.ac.innerHTML=''; state.acMatches=[]; state.acIndex=-1; return; }
       state.acMatches = matches; state.acIndex = -1;
       els.ac.innerHTML = matches.map((m,i)=>
-        `<div class="ac-item" data-idx="${i}">
-           <div class="ticker">${m.sym}</div>
-           <div class="company">${m.name||''}</div>
-         </div>`).join('');
+        `<div class="ac-item" data-idx="${i}">\n           <div class="ticker">${m.sym}</div>\n           <div class="company">${m.name||''}</div>\n         </div>`).join('');
       els.ac.classList.add('show');
     }
 
@@ -543,14 +598,16 @@
       if(!t) return;
       state.ticker = t;
       plot(state.ticker).catch(err=>console.error(err));
+      startQuoteTimer();
     }
     els.searchBtn?.addEventListener('click', doSearch);
     els.q?.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !els.ac?.classList.contains('show')) doSearch(); });
 
-    // Initial: chips OFF, load symbols, plot default
+    // Initial: chips OFF, load symbols, plot default, start live quotes
     ['SMA20','SMA50','SMA200'].forEach(k=>setChip(k,false));
     loadSymbols();
     plot(state.ticker).catch(console.error);
+    startQuoteTimer();
     window.addEventListener('resize', ()=>{ if(els.chart) Plotly.Plots.resize(els.chart); });
   })();
   </script>
