@@ -433,15 +433,33 @@
   /* ---------- Fundamentals ---------- */
   async function getFundamentals(ticker){
     if(isCrypto(ticker)) return {};
+    const modules = 'defaultKeyStatistics,financialData,earningsTrend';
+    const canDirect = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+    // Try our proxy first to avoid CORS in production
     try{
-      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=defaultKeyStatistics,financialData,earningsTrend`);
+      const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=${encodeURIComponent(modules)}`, { cache:'no-store' });
+      if(r.ok){
+        const j = await r.json();
+        const res = j?.quoteSummary?.result?.[0] || {};
+        const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+        const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+        let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+        const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+        if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+        const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+        return { eps: +eps || null, growth: +growth || null, ivGraham };
+      }
+    }catch{}
+    // Only attempt direct Yahoo from localhost (avoids CORS errors in prod)
+    if(!canDirect) return {};
+    try{
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}`, { referrerPolicy:'no-referrer' });
       if(!r.ok) throw new Error('summary '+r.status);
       const j = await r.json();
       const res = j?.quoteSummary?.result?.[0] || {};
       const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
       const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
-      let growth=null;
-      const trends=Array.isArray(et.trend)?et.trend:[];
+      let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
       const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
       if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
       const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
@@ -666,36 +684,13 @@
   async function fetchChart(ticker,time,freq){
     const widen={'1m':['1d','2d','5d'],'5m':['5d','10d','1mo','2mo'],'15m':['10d','1mo','2mo'],'60m':['1mo','2mo','3mo']};
     const tryRanges=['1m','5m','15m','60m'].includes(freq)?[...new Set([time, ...(widen[freq]||[])])]:[time];
+    const canDirect = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
     const fetchOpts={ referrerPolicy:'no-referrer' };
-    let lastErr; for(const candidate of tryRanges){
+    let lastErr;
+    for(const candidate of tryRanges){
       try{
         const {range,interval}=normalizePair(candidate,freq);
-        const common = `range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits&formatted=false&lang=en-US&region=US&corsDomain=finance.yahoo.com`;
-        const urls = [
-          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?${common}`,
-          `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?${common}`
-        ];
-        for (const url of urls) {
-          try{
-            const r = await fetch(url, fetchOpts);
-            if (r.ok) {
-              const j = await r.json();
-              const res=j?.chart?.result?.[0]; if(!res) throw new Error('No result');
-              const q=res.indicators?.quote?.[0]||{}; const ts=res.timestamp||[];
-              const rows=[];
-              for(let i=0;i<ts.length;i++){
-                const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i];
-                const adj=res.indicators?.adjclose?.[0]?.adjclose;
-                const cRaw=(adj && adj[i]!=null) ? adj[i] : q.close?.[i];
-                const c=Number.isFinite(+cRaw)?+cRaw:null;
-                const v=Number.isFinite(q.volume?.[i])?+q.volume[i]:0;
-                if([o,h,l,c].every(Number.isFinite)) rows.push({date:new Date(ts[i]*1000),o:+o,h:+h,l:+l,c:+c,v});
-              }
-              return rows;
-            }
-          }catch(e){ lastErr=e; }
-        }
-        // Fallback via local proxy to bypass CORS (only if direct fetch failed)
+        // 1) Prefer our proxy to avoid CORS in production
         try{
           const proxy = `/api/chart?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`;
           const pr = await fetch(proxy, { cache:'no-store' });
@@ -715,6 +710,34 @@
             return rows;
           }
         }catch(e){ lastErr=e; }
+        // 2) Only try direct Yahoo when running locally
+        if(canDirect){
+          const common = `range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includePrePost=true&events=div,splits&formatted=false&lang=en-US&region=US&corsDomain=finance.yahoo.com`;
+          const urls = [
+            `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?${common}`,
+            `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?${common}`
+          ];
+          for (const url of urls) {
+            try{
+              const r = await fetch(url, fetchOpts);
+              if (r.ok) {
+                const j = await r.json();
+                const res=j?.chart?.result?.[0]; if(!res) throw new Error('No result');
+                const q=res.indicators?.quote?.[0]||{}; const ts=res.timestamp||[];
+                const rows=[];
+                for(let i=0;i<ts.length;i++){
+                  const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i];
+                  const adj=res.indicators?.adjclose?.[0]?.adjclose;
+                  const cRaw=(adj && adj[i]!=null) ? adj[i] : q.close?.[i];
+                  const c=Number.isFinite(+cRaw)?+cRaw:null;
+                  const v=Number.isFinite(q.volume?.[i])?+q.volume[i]:0;
+                  if([o,h,l,c].every(Number.isFinite)) rows.push({date:new Date(ts[i]*1000),o:+o,h:+h,l:+l,c:+c,v});
+                }
+                return rows;
+              }
+            }catch(e){ lastErr=e; }
+          }
+        }
         throw lastErr||new Error('All fetches failed');
       }catch(e){ lastErr=e; }
     }
@@ -749,33 +772,36 @@
 
   /* ---------- Price ticker ---------- */
   async function fetchLastPriceLight(ticker){
-    try{
-      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=price&corsDomain=finance.yahoo.com`, { referrerPolicy:'no-referrer' });
-      if (r.ok) {
-        const j=await r.json();
-        const p=j?.price ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice;
-        if(Number.isFinite(+p)) return +p;
-      }
-    }catch{}
-    try{
-      const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1m&formatted=false&lang=en-US&region=US&corsDomain=finance.yahoo.com`, { referrerPolicy:'no-referrer' });
-      if(!r.ok) throw 0;
-      const j=await r.json();
-      const res=j?.chart?.result?.[0];
-      const q=res?.indicators?.quote?.[0];
-      const adj=res?.indicators?.adjclose?.[0]?.adjclose;
-      const close=(adj && adj.at(-1)!=null) ? adj.at(-1) : q?.close?.at(-1);
-      return Number.isFinite(+close) ? +close : null;
-    }catch{}
-    // Fallback to local proxy
+    const canDirect = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+    // Prefer proxy to avoid CORS
     try{
       const pr = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { cache:'no-store' });
       if(pr.ok){
         const j = await pr.json();
-        const p=j?.price?.regularMarketPrice?.raw ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice;
+        const p=j?.price?.regularMarketPrice?.raw ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice ?? j?.price;
         if(Number.isFinite(+p)) return +p;
       }
     }catch{}
+    if(canDirect){
+      try{
+        const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=price&corsDomain=finance.yahoo.com`, { referrerPolicy:'no-referrer' });
+        if (r.ok) {
+          const j=await r.json();
+          const p=j?.price ?? j?.quoteResponse?.result?.[0]?.regularMarketPrice;
+          if(Number.isFinite(+p)) return +p;
+        }
+      }catch{}
+      try{
+        const r = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1d&interval=1m&formatted=false&lang=en-US&region=US&corsDomain=finance.yahoo.com`, { referrerPolicy:'no-referrer' });
+        if(!r.ok) throw 0;
+        const j=await r.json();
+        const res=j?.chart?.result?.[0];
+        const q=res?.indicators?.quote?.[0];
+        const adj=res?.indicators?.adjclose?.[0]?.adjclose;
+        const close=(adj && adj.at(-1)!=null) ? adj.at(-1) : q?.close?.at(-1);
+        if(Number.isFinite(+close)) return +close;
+      }catch{}
+    }
     return null;
   }
   async function tickPriceOnce(){
@@ -903,6 +929,7 @@
         const sma50All  = SMA(closesFull, 50);
         const sma200All = SMA(closesFull, 200);
         // Always fill left and right edges for full coverage
+
         function fillSMA(arr, len, startIdx) {
           let out = arr.slice(Math.max(0,startIdx), Math.max(0,startIdx)+len);
           while (out.length < len) out.unshift(null);
@@ -1220,9 +1247,10 @@
     // Toggle Plotly trace visibility for the group behind this chip
     const idxs = (traceMap[k] || []);
     if (!els.chart) return;
-    if (Array.isArray(idxs) && idxs.length > 0) {
+    const indices = Array.isArray(idxs) ? idxs : (idxs==null ? [] : [idxs]);
+    if (indices.length > 0) {
       const visible = nowActive ? true : 'legendonly';
-      try { Plotly.restyle(els.chart, { visible }, idxs); } catch {}
+      try { Plotly.restyle(els.chart, { visible }, indices); } catch {}
     }
   });
 
