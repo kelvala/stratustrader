@@ -179,6 +179,9 @@
   /* Nicer colorization for autocomplete tickers */
   .ac-item .ticker{ color: var(--focus); font-weight:900; letter-spacing:.3px; }
   .ac-item:hover .ticker, .ac-item.active .ticker{ color: var(--accent); }
+  /* Company name muted so ticker stands out */
+  .ac-item .company{ color: var(--muted); font-weight:700; }
+  .ac-item:hover .company, .ac-item.active .company{ color: var(--muted); opacity:.95; }
 
 </style>
 </head>
@@ -669,15 +672,24 @@
         if(!r.ok) return;
         const txt = await r.text();
         const lines = txt.split(/\r?\n/).filter(Boolean);
-        const out = [];
-        for(let i=0;i<lines.length;i++){
-          const parts = lines[i].split(',');
+        const map = new Map(); // de-dup by ticker symbol
+        for(const line of lines){
+          const parts = line.split(',');
           const sym = (parts[0]||'').trim().toUpperCase();
-          const name = (parts.slice(1).join(',')||'').trim();
-          if(!sym || sym==='Symbol') continue; // skip header
-          out.push({ sym, name, nameU: name.toUpperCase() });
+          if(!sym || sym==='SYMBOL' || sym==='Symbol') continue; // skip header/blank
+          // Join the rest as name and lightly clean generic suffixes
+          let name = (parts.slice(1).join(',')||'').trim();
+          name = name
+            .replace(/\s+/g,' ')
+            .replace(/\s*-\s*ADR.*$/i,'')
+            .replace(/\b(COMMON|PREFERRED)\s+STOCK.*$/i,'')
+            .replace(/\b(ORDINARY\s+SHARES|CLASS\s+[A-Z]).*$/i,'')
+            .trim();
+          if(!map.has(sym)){
+            map.set(sym, { sym, name, nameU: name.toUpperCase() });
+          }
         }
-        state.symbols = out;
+        state.symbols = Array.from(map.values());
       }catch{}
     }
 
@@ -694,10 +706,13 @@
       const val = (els.q?.value||'').trim();
       if(!val){ renderAC([]); return; }
       const term = val.toUpperCase();
-      const best = [];
+      const best = []; const seen = new Set();
       for(const s of state.symbols){
-        if(s.sym.startsWith(term) || s.nameU.includes(term)) best.push(s);
-        if(best.length>=30) break;
+        if(seen.has(s.sym)) continue; // de-dup at match time too
+        if(s.sym.startsWith(term) || s.nameU.includes(term)){
+          best.push(s); seen.add(s.sym);
+          if(best.length>=30) break;
+        }
       }
       renderAC(best);
     }
@@ -705,15 +720,20 @@
     els.q?.addEventListener('input', updateAC);
     els.q?.addEventListener('focus', updateAC);
     els.q?.addEventListener('keydown', (e)=>{
-      if(!els.ac?.classList.contains('show')) return;
+      const acShown = els.ac?.classList.contains('show');
       const max = state.acMatches.length;
-      if(e.key==='ArrowDown'){
+      if(e.key==='ArrowDown' && acShown){
         e.preventDefault(); state.acIndex = (state.acIndex+1+max)%max; highlightAC();
-      }else if(e.key==='ArrowUp'){
+      }else if(e.key==='ArrowUp' && acShown){
         e.preventDefault(); state.acIndex = (state.acIndex-1+max)%max; highlightAC();
       }else if(e.key==='Enter'){
-        if(state.acIndex>=0 && state.acIndex<max){ e.preventDefault(); chooseAC(state.acMatches[state.acIndex]); }
-      }else if(e.key==='Escape'){
+        // Always fetch on Enter: if a suggestion is highlighted, choose it; otherwise search current text
+        if(acShown && state.acIndex>=0 && state.acIndex<max){
+          e.preventDefault(); chooseAC(state.acMatches[state.acIndex]);
+        }else{
+          e.preventDefault(); els.ac?.classList.remove('show'); doSearch();
+        }
+      }else if(e.key==='Escape' && acShown){
         els.ac.classList.remove('show');
       }
     });
@@ -724,7 +744,7 @@
     }
     function chooseAC(item){
       if(!item) return;
-      if(els.q) els.q.value = item.sym;
+      if(els.q) els.q.value = item.sym; // fill TICKER only
       els.ac?.classList.remove('show');
       doSearch();
     }
@@ -745,7 +765,7 @@
       startQuoteTimer();
     }
     els.searchBtn?.addEventListener('click', doSearch);
-    els.q?.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !els.ac?.classList.contains('show')) doSearch(); });
+    // unified Enter handler above handles searching on Enter, so no extra keydown handler needed
 
     // Initial: chips OFF, load symbols, plot default, start live quotes
     ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
