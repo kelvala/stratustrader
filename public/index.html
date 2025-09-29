@@ -805,7 +805,7 @@
   /* ---------- Main flow ---------- */
   async function onSearch(ticker, company){
     if(!FUNDAMENTALS[ticker]){ try{ FUNDAMENTALS[ticker]=await getFundamentals(ticker); }catch{ FUNDAMENTALS[ticker]={}; } }
-    await go(ticker, company);
+    await go(ticker, company, { updateInfo: true });
   }
   // --- Fit y-axis strictly to visible candlestick highs/lows ------------------
   const fitPriceAxisToCandlesStrict = async () => {
@@ -863,10 +863,11 @@
   };
 
   
-  async function go(ticker, company){
+  async function go(ticker, company, opts={ updateInfo: true }){
+    const UPDATE_INFO = opts?.updateInfo !== false;
     CURRENT={...CURRENT,ticker,company};
     els.headline.textContent=`${ticker}${company?' — '+company:''}`;
-    els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent='';
+    if (UPDATE_INFO) { els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent=''; }
     try{
       await waitForPlotly();
 
@@ -934,7 +935,7 @@
       /* --- Last/Change lines & prev close --- */
       const last = close.at(-1);
       const prevClose = ['1m','5m','15m','60m'].includes(freq) ? prevDailyCloseFromIntraday(fullRows) : (close.length>=2 ? close.at(-2) : null);
-      CURRENT.prevClose = prevClose;
+      if (UPDATE_INFO) CURRENT.prevClose = prevClose;
       const ref = (prevClose!=null) ? prevClose : (close.length>=2 ? close.at(-2) : null);
       const dayChg = (ref!=null) ? (last - ref) : null;
       const dayPct = (ref!=null && ref!==0) ? (dayChg/ref)*100 : null;
@@ -942,16 +943,18 @@
       const chgClr = dayChg>0?upClr:dayChg<0?dnClr:'#cbd5e1';
       const signChg = dayChg>0?'+':dayChg<0?'-':'';
       const signPct = dayPct>0?'+':dayPct<0?'-':'';
-      els.lastLine.innerHTML = `Last: <b>$${fmt(last)}</b> · ` + (dayChg==null? 'Change: —' :
-        `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
-      els.prevCloseLine.textContent = `Yesterday’s Close: ${prevClose==null ? '—' : '$'+fmt(prevClose)}`;
+      if (UPDATE_INFO) {
+        els.lastLine.innerHTML = `Last: <b>$${fmt(last)}</b> · ` + (dayChg==null? 'Change: —' :
+          `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}$${fmt(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
+        els.prevCloseLine.textContent = `Yesterday’s Close: ${prevClose==null ? '—' : '$'+fmt(prevClose)}`;
+      }
 
       /* --- Intrinsic value (very rough) --- */
       const f = FUNDAMENTALS[ticker] || {};
       const ivs=[]; if(Number.isFinite(f.ivGraham)) ivs.push(f.ivGraham);
       const s50=sma50.at(-1), s200=sma200.at(-1); if(Number.isFinite(s50)&&Number.isFinite(s200)) ivs.push((s50+s200)/2);
       const iv = ivs.length ? (ivs.reduce((a,b)=>a+b,0)/ivs.length) : null;
-      els.ivLine.textContent = `Intrinsic Value: ${iv==null ? '—' : '$'+fmt(iv)}`;
+      if (UPDATE_INFO) { els.ivLine.textContent = `Intrinsic Value: ${iv==null ? '—' : '$'+fmt(iv)}`; }
 
       // --- Chart layout with proper domains ---
       const layout = {
@@ -993,7 +996,7 @@
         y: close,
         mode: 'lines',
         name: 'Price',
-        line: { color: '#94a3b8', width: 1.2, dash: 'dot' },
+        line: { color: '#94a3b8', width: 1.6, dash: 'dot' },
         yaxis: 'y',
         hoverinfo: 'skip'
       };
@@ -1172,7 +1175,7 @@
         AUTOFIB: []
       };
       applyVisibilityFromChips();
-      startPriceTicker();
+      if (UPDATE_INFO) startPriceTicker();
       wireHoverDismiss();
     }catch(e){
       console.error('[StockAnalyzer] Chart error:', e, { ticker, company });
@@ -1224,8 +1227,8 @@
   });
 
   /* ---------- Controls ---------- */
-  [els.timeSel, els.freqSel].forEach(sel=> sel.addEventListener('change', ()=>{ if(CURRENT.ticker) go(CURRENT.ticker, CURRENT.company); }));
-  els.refreshBtn.addEventListener('click', ()=>{ if(CURRENT.ticker) go(CURRENT.ticker, CURRENT.company); });
+  [els.timeSel, els.freqSel].forEach(sel=> sel.addEventListener('change', ()=>{ if(CURRENT.ticker) go(CURRENT.ticker, CURRENT.company, { updateInfo:false }); }));
+  els.refreshBtn.addEventListener('click', ()=>{ if(CURRENT.ticker) go(CURRENT.ticker, CURRENT.company, { updateInfo:false }); });
   els.wideBtn.addEventListener('click', ()=>{
     document.querySelector('.container').classList.toggle('wide');
     els.wideBtn.querySelector('.tool-txt').textContent = document.querySelector('.container').classList.contains('wide') ? 'Normal' : 'Wide';
