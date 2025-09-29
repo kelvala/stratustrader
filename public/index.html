@@ -361,6 +361,7 @@
     const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
     const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
     const fmtPx = v => (Number.isFinite(+v) ? `$${fmt.format(+v)}` : '—');
+    const fmtPxPos = v => (Number.isFinite(+v) && +v > 0 ? `$${fmt.format(+v)}` : '—');
     const fmtPct = v => (Number.isFinite(+v) ? `${(+v).toFixed(2)}%` : '—');
     function SMA(values, w, fullWidth = true){
       // fullWidth=true fills the warmup using partial window so the line spans entire chart
@@ -459,14 +460,58 @@
         const r = await fetch(`/api/quote?ticker=${encodeURIComponent(state.ticker)}`, { cache:'no-store' });
         if(!r.ok) throw new Error('quote '+r.status);
         const j = await r.json();
-        const q = parseQuotePayload(j);
-        if(!q) throw new Error('bad quote payload');
+        const q = parseQuotePayload(j) || {};
+
+        // Fallbacks using chart data when fields are missing or invalid
+        let price = Number.isFinite(+q.price) ? +q.price : null;
+        let prevClose = Number.isFinite(+q.prevClose) && +q.prevClose > 0 ? +q.prevClose : null;
+        if(!prevClose){
+          // Try from current plotted rows first
+          const rows = (state.rows||[]);
+          if(rows.length >= 2){
+            const p = rows[rows.length-2]?.c;
+            if(Number.isFinite(+p) && +p>0) prevClose = +p;
+          }
+          // As a final fallback, pull 5d/1d quickly
+          if(!prevClose){
+            try{
+              const last5 = await fetchRows(state.ticker, '5d', '1d');
+              if(last5?.length >= 2){
+                const p2 = last5[last5.length-2]?.c;
+                if(Number.isFinite(+p2) && +p2>0) prevClose = +p2;
+              }
+            }catch{}
+          }
+        }
+        if(price==null && state.rows?.length){
+          const last = state.rows.at(-1)?.c; if(Number.isFinite(+last)) price = +last;
+        }
+        let change = Number.isFinite(+q.change) ? +q.change : null;
+        let changePct = Number.isFinite(+q.changePct) ? +q.changePct : null;
+        if((change==null || changePct==null) && Number.isFinite(price) && Number.isFinite(prevClose) && prevClose>0){
+          change = price - prevClose;
+          changePct = (change / prevClose) * 100;
+        }
+
+        // Intrinsic value via analyst target mean (quick proxy)
+        let intrinsic = null;
+        try{
+          const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=financialData,defaultKeyStatistics,earningsTrend`, { cache:'no-store' });
+          if(sr.ok){
+            const sj = await sr.json();
+            const fd = sj?.quoteSummary?.result?.[0]?.financialData;
+            const tmean = fd?.targetMeanPrice?.raw ?? fd?.targetMeanPrice;
+            if(Number.isFinite(+tmean)) intrinsic = +tmean;
+          }
+        }catch{}
+
         // Update UI
-        const chText = (Number.isFinite(q.change) && Number.isFinite(q.changePct))
-          ? `${q.change>=0?'+':''}${fmt.format(q.change)} (${q.changePct>=0?'+':''}${Math.abs(q.changePct).toFixed(2)}%)`
+        const chText = (Number.isFinite(change) && Number.isFinite(changePct))
+          ? `${change>=0?'+':''}${fmt.format(change)} (${changePct>=0?'+':''}${Math.abs(changePct).toFixed(2)}%)`
           : '—';
-        els.lastLine.textContent = `Last: ${fmtPx(q.price)} · Change: ${chText}`;
-        els.prevCloseLine.textContent = `Yesterday’s Close: ${fmtPx(q.prevClose)}`;
+        els.lastLine.textContent = `Last: ${fmtPx(price)} · Change: ${chText}`;
+        els.prevCloseLine.textContent = `Yesterday’s Close: ${fmtPxPos(prevClose)}`;
+        els.ivLine.textContent = `Intrinsic Value: ${fmtPxPos(intrinsic)}`;
         if(els.headline){ els.headline.textContent = `${state.ticker}${q.name? ' — '+q.name:''}`; }
       }catch(err){ /* keep silent but don’t break UI */ }
     }
@@ -770,21 +815,23 @@
     els.q?.addEventListener('blur', ()=> setTimeout(()=> els.ac?.classList.remove('show'), 120));
 
     // Search
-    function doSearch(){
+    async function doSearch(){
       const t = (els.q?.value || '').trim().toUpperCase();
       if(!t) return;
       state.ticker = t;
-      plot(state.ticker).catch(err=>console.error(err));
+      await plot(state.ticker).catch(err=>console.error(err));
+      // Start quotes after plot so fallbacks can use fresh rows
       startQuoteTimer();
+      // Also refresh once right now to populate all fields
+      await refreshQuoteOnce();
     }
-    els.searchBtn?.addEventListener('click', doSearch);
-    // unified Enter handler above handles searching on Enter, so no extra keydown handler needed
+    els.searchBtn?.addEventListener('click', ()=>{ doSearch(); });
+    // unified Enter handler defined above will call doSearch();
 
     // Initial: chips OFF, load symbols, plot default, start live quotes
     ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
     loadSymbols();
-    plot(state.ticker).catch(console.error);
-    startQuoteTimer();
+    (async()=>{ await plot(state.ticker).catch(console.error); startQuoteTimer(); await refreshQuoteOnce(); })();
     window.addEventListener('resize', ()=>{ if(els.chart) Plotly.Plots.resize(els.chart); });
   })();
   </script>
