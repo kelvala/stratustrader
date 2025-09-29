@@ -1385,3 +1385,971 @@
   </script>
 </body>
 </html>
+  function fillEdges(arr){    const out = arr.slice();    let last = null;    for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; }    const fi = out.findIndex(v=>Number.isFinite(v));    if(fi>0){ for(let i=0;i<fi;i++) out[i]=out[fi]; }    let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } }    if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; }    return out;  }  function exaggerateCloud(spanA, spanB, mag=1.8, loClip=-Infinity, hiClip=Infinity){    if(!(mag>1)) return {spanA,spanB};    const A=spanA.slice(), B=spanB.slice();    for(let i=0;i<A.length;i++){      const a=A[i], b=B[i]; if(!Number.isFinite(a)||!Number.isFinite(b)) continue;      const mid=(a+b)/2, half=(a-b)/2;      A[i]=Math.min(Math.max(mid+half*mag, loClip), hiClip);      B[i]=Math.min(Math.max(mid-half*mag, loClip), hiClip);    }    return {spanA:A, spanB:B};  }  /* ---------- SMA helper ---------- */  function alignAndExtendSMA(smaAll, visibleLen, startIdx){    let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);    while (arr.length < visibleLen) arr.unshift(null);    const firstIdx = arr.findIndex(v => Number.isFinite(v));    if (firstIdx > 0){ const firstVal=arr[firstIdx]; for(let i=0;i<firstIdx;i++) arr[i]=firstVal; }    for (let i=1;i<arr.length;i++) if (arr[i]==null && Number.isFinite(arr[i-1])) arr[i]=arr[i-1];    return arr;  }  /* ---------- Auto-Fib ---------- */  function getAxisState(){    const L = els.chart && (els.chart._fullLayout || els.chart.layout);    const g = ax => ({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false });    return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };  }  function relayoutPreserve(payload){    const S=getAxisState(); const keep=(axKey,s)=>{ if(!s) return {}; const out={}; if(s.range){out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false;} else if(s.autorange){out[`${axKey}.autorange`]=true;} return out; };    return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});  }  const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };  /* ---------- Subplot domain helpers (hide bottom panes when chips are OFF) ---------- */  const isChipActive = (k)=> !!els.toggles.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');  function buildSubplotDomains(){    const showRSI=isChipActive('RSI');    const showVOL=isChipActive('VOL');    const showMACD=isChipActive('MACD');    const gap=0.02; const rsiH=0.18, volH=0.10, macdH=0.14;    let bottom=0;    const rsiDom = showRSI ? [bottom, (bottom+=rsiH)] : [0,0]; bottom += showRSI?gap:0;    const volDom = showVOL ? [bottom, (bottom+=volH)] : [0,0]; bottom += showVOL?gap:0;    const macdDom= showMACD? [bottom, (bottom+=macdH)] : [0,0]; bottom += showMACD?gap:0;    const yDom=[bottom,1];    return { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD };  }  async function updateSubplotLayout(){    if(!els.chart||!window.Plotly) return;    const { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD } = buildSubplotDomains();    const payload={      'yaxis.domain': yDom,      'yaxis2.domain': rsiDom,      'yaxis2.showticklabels': showRSI,      'yaxis2.showgrid': showRSI,      'yaxis2.title': showRSI ? 'RSI' : '',      'yaxis3.domain': volDom,      'yaxis3.showticklabels': showVOL,      'yaxis3.showgrid': showVOL,      'yaxis3.title': showVOL ? 'Vol' : '',      'yaxis4.domain': macdDom,      'yaxis4.showticklabels': showMACD,      'yaxis4.showgrid': showMACD,      'yaxis4.title': showMACD ? 'MACD' : ''    };    try{ await relayoutPreserve(payload); }catch{}  }  /* ---------- Theme toggle (new) ---------- */  const themeToggleEl = q('#themeToggle');  if (themeToggleEl) {    themeToggleEl.addEventListener('click', () => {      const isDark = document.body.classList.toggle('light');      localStorage.setItem('theme', isDark ? 'light' : 'dark');      applyChartTheme();    });  }  /* ---------- Fundamentals ---------- */  async function getFundamentals(ticker){    if(isCrypto(ticker)) return {};    const modules = 'defaultKeyStatistics,financialData,earningsTrend';    const canDirect = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');    // Try our proxy first to avoid CORS in production
+    try{
+      const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=${encodeURIComponent(modules)}`, { cache:'no-store' });
+      if(r.ok){
+        const j = await r.json();
+        const res = j?.quoteSummary?.result?.[0] || {};
+        const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+        const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+        let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+        const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+        if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+        const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+        return { eps: +eps || null, growth: +growth || null, ivGraham };
+      }
+    }catch{}
+    // Only attempt direct Yahoo from localhost (avoids CORS errors in prod)
+    if(!canDirect) return {};
+    try{
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}`, { referrerPolicy:'no-referrer' });
+      if(!r.ok) throw new Error('summary '+r.status);
+      const j = await r.json();
+      const res = j?.quoteSummary?.result?.[0] || {};
+      const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+      const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+      let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+      const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+      if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+      const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+      return { eps: +eps || null, growth: +growth || null, ivGraham };
+    }catch{ return {}; }
+  }
+
+  /* ---------- Indicators ---------- */
+  function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;} out[i]= count > 0 ? sum / count : null; if(count > w){ const old = vals[i - w]; if(Number.isFinite(old)){sum -= old; count--;}} }
+    return out; }
+  function EMA(vals,span){ const out=new Array(vals.length).fill(null),k=2/(span+1); let ema=null;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(!Number.isFinite(v)){ out[i]=(i>0?out[i-1]:null); continue; } ema=(ema==null)?v:v*k+ema*(1-k); out[i]=ema; } return out; }
+  function RSI(values, period=14){ const rsi=new Array(values.length).fill(null); const p = Math.min(period, values.length - 1); if(values.length <= p) return rsi;
+    let gain=0,loss=0; for(let i=1;i<=p;i++){ const d=values[i]-values[i-1]; if(d>0) gain+=d; else loss-=d; }
+    gain/=p; loss/=p; rsi[p]=100-100/(1+(gain/(loss||1e-10)));
+    for(let i=p+1;i<values.length;i++){ const d=values[i]-values[i-1];
+      if(d>0){ gain=(gain*(p-1)+d)/p; loss=(loss*(p-1))/p; }
+      else { gain=(gain*(p-1))/p; loss=(loss*(p-1)-d)/p; }
+      rsi[i]=100-100/(1+(gain/(loss||1e-10)));
+    } return rsi;
+  }
+  function MACD(closes,f=12,s=26,sig=9){ const ef=EMA(closes,f), es=EMA(closes,s);
+    const macd=closes.map((_,i)=> (ef[i]!=null&&es[i]!=null)? ef[i]-es[i] : null);
+    const signal=EMA(macd.map(x=>x==null?null:x),sig);
+    const hist=macd.map((m,i)=> (m!=null&&signal[i]!=null)? (m-signal[i]) : null);
+    return {macd,signal,hist};
+  }
+
+  /* ---------- Ichimoku helpers ---------- */
+  function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
+  function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let lo=Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) lo=Math.min(lo,arr[j]); out[i]=Number.isFinite(lo)?lo:null; } return out; }
+  function arrShiftFwd(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i+k<n) out[i+k]=arr[i]; return out; }
+  function arrShiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
+  function calcIchimoku(rows){
+    const n=rows.length, high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c);
+    const convHi=rollingHigh(high,9),  convLo=rollingLow(low,9);
+    const kijHi =rollingHigh(high,26), kijLo=rollingLow(low,26);
+    const senBHi=rollingHigh(high,52),  senBLo=rollingLow(low,52);
+    const tenkan=convHi.map((h,i)=> (h!=null&&convLo[i]!=null)?(h+convLo[i])/2:null);
+    const kijun =kijHi .map((h,i)=> (h!=null&&kijLo[i]!=null)?(h+kijLo[i])/2:null);
+    const senA0=tenkan.map((t,i)=> (t!=null&&kijun[i]!=null)?(t+kijun[i])/2:null);
+    const senB0=senBHi.map((h,i)=> (h!=null&&senBLo[i]!=null)?(h+senBLo[i])/2:null);
+    const shift=26, spanA=arrShiftFwd(senA0,shift,n), spanB=arrShiftFwd(senB0,shift,n), chikou=arrShiftBack(close,shift,n);
+    return { tenkan, kijun, spanA, spanB, chikou };
+  }
+  function segmentCloud(a,b){
+    const n=a.length, gLow=Array(n).fill(null), gUp=Array(n).fill(null), rLow=Array(n).fill(null), rUp=Array(n).fill(null);
+    for(let i=0;i<n;i++){ const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue; if(A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; } }
+    return { gLow, gUp, rLow, rUp };
+  }
+  function fillEdges(arr){
+    const out = arr.slice();
+    let last = null;
+    for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; }
+    const fi = out.findIndex(v=>Number.isFinite(v));
+    if(fi>0){ for(let i=0;i<fi;i++) out[i]=out[fi]; }
+    let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } }
+    if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; }
+    return out;
+  }
+  function exaggerateCloud(spanA, spanB, mag=1.8, loClip=-Infinity, hiClip=Infinity){
+    if(!(mag>1)) return {spanA,spanB};
+    const A=spanA.slice(), B=spanB.slice();
+    for(let i=0;i<A.length;i++){
+      const a=A[i], b=B[i]; if(!Number.isFinite(a)||!Number.isFinite(b)) continue;
+      const mid=(a+b)/2, half=(a-b)/2;
+      A[i]=Math.min(Math.max(mid+half*mag, loClip), hiClip);
+      B[i]=Math.min(Math.max(mid-half*mag, loClip), hiClip);
+    }
+    return {spanA:A, spanB:B};
+  }
+
+  /* ---------- SMA helper ---------- */
+  function alignAndExtendSMA(smaAll, visibleLen, startIdx){
+    let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
+    while (arr.length < visibleLen) arr.unshift(null);
+    const firstIdx = arr.findIndex(v => Number.isFinite(v));
+    if (firstIdx > 0){ const firstVal=arr[firstIdx]; for(let i=0;i<firstIdx;i++) arr[i]=firstVal; }
+    for (let i=1;i<arr.length;i++) if (arr[i]==null && Number.isFinite(arr[i-1])) arr[i]=arr[i-1];
+    return arr;
+  }
+
+  /* ---------- Auto-Fib ---------- */
+  function getAxisState(){
+    const L = els.chart && (els.chart._fullLayout || els.chart.layout);
+    const g = ax => ({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false });
+    return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
+  }
+  function relayoutPreserve(payload){
+    const S=getAxisState(); const keep=(axKey,s)=>{ if(!s) return {}; const out={}; if(s.range){out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false;} else if(s.autorange){out[`${axKey}.autorange`]=true;} return out; };
+    return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
+  }
+  const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
+
+  /* ---------- Subplot domain helpers (hide bottom panes when chips are OFF) ---------- */
+  const isChipActive = (k)=> !!els.toggles.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');
+  function buildSubplotDomains(){
+    const showRSI=isChipActive('RSI');
+    const showVOL=isChipActive('VOL');
+    const showMACD=isChipActive('MACD');
+    const gap=0.02; const rsiH=0.18, volH=0.10, macdH=0.14;
+    let bottom=0;
+    const rsiDom = showRSI ? [bottom, (bottom+=rsiH)] : [0,0]; bottom += showRSI?gap:0;
+    const volDom = showVOL ? [bottom, (bottom+=volH)] : [0,0]; bottom += showVOL?gap:0;
+    const macdDom= showMACD? [bottom, (bottom+=macdH)] : [0,0]; bottom += showMACD?gap:0;
+    const yDom=[bottom,1];
+    return { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD };
+  }
+  async function updateSubplotLayout(){
+    if(!els.chart||!window.Plotly) return;
+    const { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD } = buildSubplotDomains();
+    const payload={
+      'yaxis.domain': yDom,
+      'yaxis2.domain': rsiDom,
+      'yaxis2.showticklabels': showRSI,
+      'yaxis2.showgrid': showRSI,
+      'yaxis2.title': showRSI ? 'RSI' : '',
+      'yaxis3.domain': volDom,
+      'yaxis3.showticklabels': showVOL,
+      'yaxis3.showgrid': showVOL,
+      'yaxis3.title': showVOL ? 'Vol' : '',
+      'yaxis4.domain': macdDom,
+      'yaxis4.showticklabels': showMACD,
+      'yaxis4.showgrid': showMACD,
+      'yaxis4.title': showMACD ? 'MACD' : ''
+    };
+    try{ await relayoutPreserve(payload); }catch{}
+  }
+
+  /* ---------- Theme toggle (new) ---------- */
+  const themeToggleEl = q('#themeToggle');
+  if (themeToggleEl) {
+    themeToggleEl.addEventListener('click', () => {
+      const isDark = document.body.classList.toggle('light');
+      localStorage.setItem('theme', isDark ? 'light' : 'dark');
+      applyChartTheme();
+    });
+  }
+
+  /* ---------- Fundamentals ---------- */
+  async function getFundamentals(ticker){
+    if(isCrypto(ticker)) return {};
+    const modules = 'defaultKeyStatistics,financialData,earningsTrend';
+    const canDirect = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+    // Try our proxy first to avoid CORS in production
+    try{
+      const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=${encodeURIComponent(modules)}`, { cache:'no-store' });
+      if(r.ok){
+        const j = await r.json();
+        const res = j?.quoteSummary?.result?.[0] || {};
+        const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+        const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+        let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+        const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+        if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+        const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+        return { eps: +eps || null, growth: +growth || null, ivGraham };
+      }
+    }catch{}
+    // Only attempt direct Yahoo from localhost (avoids CORS errors in prod)
+    if(!canDirect) return {};
+    try{
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}`, { referrerPolicy:'no-referrer' });
+      if(!r.ok) throw new Error('summary '+r.status);
+      const j = await r.json();
+      const res = j?.quoteSummary?.result?.[0] || {};
+      const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+      const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+      let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+      const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+      if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+      const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+      return { eps: +eps || null, growth: +growth || null, ivGraham };
+    }catch{ return {}; }
+  }
+
+  /* ---------- Indicators ---------- */
+  function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;} out[i]= count > 0 ? sum / count : null; if(count > w){ const old = vals[i - w]; if(Number.isFinite(old)){sum -= old; count--;}} }
+    return out; }
+  function EMA(vals,span){ const out=new Array(vals.length).fill(null),k=2/(span+1); let ema=null;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(!Number.isFinite(v)){ out[i]=(i>0?out[i-1]:null); continue; } ema=(ema==null)?v:v*k+ema*(1-k); out[i]=ema; } return out; }
+  function RSI(values, period=14){ const rsi=new Array(values.length).fill(null); const p = Math.min(period, values.length - 1); if(values.length <= p) return rsi;
+    let gain=0,loss=0; for(let i=1;i<=p;i++){ const d=values[i]-values[i-1]; if(d>0) gain+=d; else loss-=d; }
+    gain/=p; loss/=p; rsi[p]=100-100/(1+(gain/(loss||1e-10)));
+    for(let i=p+1;i<values.length;i++){ const d=values[i]-values[i-1];
+      if(d>0){ gain=(gain*(p-1)+d)/p; loss=(loss*(p-1))/p; }
+      else { gain=(gain*(p-1))/p; loss=(loss*(p-1)-d)/p; }
+      rsi[i]=100-100/(1+(gain/(loss||1e-10)));
+    } return rsi;
+  }
+  function MACD(closes,f=12,s=26,sig=9){ const ef=EMA(closes,f), es=EMA(closes,s);
+    const macd=closes.map((_,i)=> (ef[i]!=null&&es[i]!=null)? ef[i]-es[i] : null);
+    const signal=EMA(macd.map(x=>x==null?null:x),sig);
+    const hist=macd.map((m,i)=> (m!=null&&signal[i]!=null)? (m-signal[i]) : null);
+    return {macd,signal,hist};
+  }
+
+  /* ---------- Ichimoku helpers ---------- */
+  function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
+  function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let lo=Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) lo=Math.min(lo,arr[j]); out[i]=Number.isFinite(lo)?lo:null; } return out; }
+  function arrShiftFwd(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i+k<n) out[i+k]=arr[i]; return out; }
+  function arrShiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
+  function calcIchimoku(rows){
+    const n=rows.length, high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c);
+    const convHi=rollingHigh(high,9),  convLo=rollingLow(low,9);
+    const kijHi =rollingHigh(high,26), kijLo=rollingLow(low,26);
+    const senBHi=rollingHigh(high,52),  senBLo=rollingLow(low,52);
+    const tenkan=convHi.map((h,i)=> (h!=null&&convLo[i]!=null)?(h+convLo[i])/2:null);
+    const kijun =kijHi .map((h,i)=> (h!=null&&kijLo[i]!=null)?(h+kijLo[i])/2:null);
+    const senA0=tenkan.map((t,i)=> (t!=null&&kijun[i]!=null)?(t+kijun[i])/2:null);
+    const senB0=senBHi.map((h,i)=> (h!=null&&senBLo[i]!=null)?(h+senBLo[i])/2:null);
+    const shift=26, spanA=arrShiftFwd(senA0,shift,n), spanB=arrShiftFwd(senB0,shift,n), chikou=arrShiftBack(close,shift,n);
+    return { tenkan, kijun, spanA, spanB, chikou };
+  }
+  function segmentCloud(a,b){
+    const n=a.length, gLow=Array(n).fill(null), gUp=Array(n).fill(null), rLow=Array(n).fill(null), rUp=Array(n).fill(null);
+    for(let i=0;i<n;i++){ const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue; if(A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; } }
+    return { gLow, gUp, rLow, rUp };
+  }
+  function fillEdges(arr){
+    const out = arr.slice();
+    let last = null;
+    for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; }
+    const fi = out.findIndex(v=>Number.isFinite(v));
+    if(fi>0){ for(let i=0;i<fi;i++) out[i]=out[fi]; }
+    let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } }
+    if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; }
+    return out;
+  }
+  function exaggerateCloud(spanA, spanB, mag=1.8, loClip=-Infinity, hiClip=Infinity){
+    if(!(mag>1)) return {spanA,spanB};
+    const A=spanA.slice(), B=spanB.slice();
+    for(let i=0;i<A.length;i++){
+      const a=A[i], b=B[i]; if(!Number.isFinite(a)||!Number.isFinite(b)) continue;
+      const mid=(a+b)/2, half=(a-b)/2;
+      A[i]=Math.min(Math.max(mid+half*mag, loClip), hiClip);
+      B[i]=Math.min(Math.max(mid-half*mag, loClip), hiClip);
+    }
+    return {spanA:A, spanB:B};
+  }
+
+  /* ---------- SMA helper ---------- */
+  function alignAndExtendSMA(smaAll, visibleLen, startIdx){
+    let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
+    while (arr.length < visibleLen) arr.unshift(null);
+    const firstIdx = arr.findIndex(v => Number.isFinite(v));
+    if (firstIdx > 0){ const firstVal=arr[firstIdx]; for(let i=0;i<firstIdx;i++) arr[i]=firstVal; }
+    for (let i=1;i<arr.length;i++) if (arr[i]==null && Number.isFinite(arr[i-1])) arr[i]=arr[i-1];
+    return arr;
+  }
+
+  /* ---------- Auto-Fib ---------- */
+  function getAxisState(){
+    const L = els.chart && (els.chart._fullLayout || els.chart.layout);
+    const g = ax => ({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false });
+    return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
+  }
+  function relayoutPreserve(payload){
+    const S=getAxisState(); const keep=(axKey,s)=>{ if(!s) return {}; const out={}; if(s.range){out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false;} else if(s.autorange){out[`${axKey}.autorange`]=true;} return out; };
+    return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
+  }
+  const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
+
+  /* ---------- Subplot domain helpers (hide bottom panes when chips are OFF) ---------- */
+  const isChipActive = (k)=> !!els.toggles.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');
+  function buildSubplotDomains(){
+    const showRSI=isChipActive('RSI');
+    const showVOL=isChipActive('VOL');
+    const showMACD=isChipActive('MACD');
+    const gap=0.02; const rsiH=0.18, volH=0.10, macdH=0.14;
+    let bottom=0;
+    const rsiDom = showRSI ? [bottom, (bottom+=rsiH)] : [0,0]; bottom += showRSI?gap:0;
+    const volDom = showVOL ? [bottom, (bottom+=volH)] : [0,0]; bottom += showVOL?gap:0;
+    const macdDom= showMACD? [bottom, (bottom+=macdH)] : [0,0]; bottom += showMACD?gap:0;
+    const yDom=[bottom,1];
+    return { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD };
+  }
+  async function updateSubplotLayout(){
+    if(!els.chart||!window.Plotly) return;
+    const { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD } = buildSubplotDomains();
+    const payload={
+      'yaxis.domain': yDom,
+      'yaxis2.domain': rsiDom,
+      'yaxis2.showticklabels': showRSI,
+      'yaxis2.showgrid': showRSI,
+      'yaxis2.title': showRSI ? 'RSI' : '',
+      'yaxis3.domain': volDom,
+      'yaxis3.showticklabels': showVOL,
+      'yaxis3.showgrid': showVOL,
+      'yaxis3.title': showVOL ? 'Vol' : '',
+      'yaxis4.domain': macdDom,
+      'yaxis4.showticklabels': showMACD,
+      'yaxis4.showgrid': showMACD,
+      'yaxis4.title': showMACD ? 'MACD' : ''
+    };
+    try{ await relayoutPreserve(payload); }catch{}
+  }
+
+  /* ---------- Theme toggle (new) ---------- */
+  const themeToggleEl = q('#themeToggle');
+  if (themeToggleEl) {
+    themeToggleEl.addEventListener('click', () => {
+      const isDark = document.body.classList.toggle('light');
+      localStorage.setItem('theme', isDark ? 'light' : 'dark');
+      applyChartTheme();
+    });
+  }
+
+  /* ---------- Fundamentals ---------- */
+  async function getFundamentals(ticker){
+    if(isCrypto(ticker)) return {};
+    const modules = 'defaultKeyStatistics,financialData,earningsTrend';
+    const canDirect = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+    // Try our proxy first to avoid CORS in production
+    try{
+      const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=${encodeURIComponent(modules)}`, { cache:'no-store' });
+      if(r.ok){
+        const j = await r.json();
+        const res = j?.quoteSummary?.result?.[0] || {};
+        const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+        const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+        let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+        const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+        if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+        const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+        return { eps: +eps || null, growth: +growth || null, ivGraham };
+      }
+    }catch{}
+    // Only attempt direct Yahoo from localhost (avoids CORS errors in prod)
+    if(!canDirect) return {};
+    try{
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}`, { referrerPolicy:'no-referrer' });
+      if(!r.ok) throw new Error('summary '+r.status);
+      const j = await r.json();
+      const res = j?.quoteSummary?.result?.[0] || {};
+      const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+      const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+      let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+      const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+      if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+      const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+      return { eps: +eps || null, growth: +growth || null, ivGraham };
+    }catch{ return {}; }
+  }
+
+  /* ---------- Indicators ---------- */
+  function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;} out[i]= count > 0 ? sum / count : null; if(count > w){ const old = vals[i - w]; if(Number.isFinite(old)){sum -= old; count--;}} }
+    return out; }
+  function EMA(vals,span){ const out=new Array(vals.length).fill(null),k=2/(span+1); let ema=null;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(!Number.isFinite(v)){ out[i]=(i>0?out[i-1]:null); continue; } ema=(ema==null)?v:v*k+ema*(1-k); out[i]=ema; } return out; }
+  function RSI(values, period=14){ const rsi=new Array(values.length).fill(null); const p = Math.min(period, values.length - 1); if(values.length <= p) return rsi;
+    let gain=0,loss=0; for(let i=1;i<=p;i++){ const d=values[i]-values[i-1]; if(d>0) gain+=d; else loss-=d; }
+    gain/=p; loss/=p; rsi[p]=100-100/(1+(gain/(loss||1e-10)));
+    for(let i=p+1;i<values.length;i++){ const d=values[i]-values[i-1];
+      if(d>0){ gain=(gain*(p-1)+d)/p; loss=(loss*(p-1))/p; }
+      else { gain=(gain*(p-1))/p; loss=(loss*(p-1)-d)/p; }
+      rsi[i]=100-100/(1+(gain/(loss||1e-10)));
+    } return rsi;
+  }
+  function MACD(closes,f=12,s=26,sig=9){ const ef=EMA(closes,f), es=EMA(closes,s);
+    const macd=closes.map((_,i)=> (ef[i]!=null&&es[i]!=null)? ef[i]-es[i] : null);
+    const signal=EMA(macd.map(x=>x==null?null:x),sig);
+    const hist=macd.map((m,i)=> (m!=null&&signal[i]!=null)? (m-signal[i]) : null);
+    return {macd,signal,hist};
+  }
+
+  /* ---------- Ichimoku helpers ---------- */
+  function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
+  function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let lo=Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) lo=Math.min(lo,arr[j]); out[i]=Number.isFinite(lo)?lo:null; } return out; }
+  function arrShiftFwd(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i+k<n) out[i+k]=arr[i]; return out; }
+  function arrShiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
+  function calcIchimoku(rows){
+    const n=rows.length, high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c);
+    const convHi=rollingHigh(high,9),  convLo=rollingLow(low,9);
+    const kijHi =rollingHigh(high,26), kijLo=rollingLow(low,26);
+    const senBHi=rollingHigh(high,52),  senBLo=rollingLow(low,52);
+    const tenkan=convHi.map((h,i)=> (h!=null&&convLo[i]!=null)?(h+convLo[i])/2:null);
+    const kijun =kijHi .map((h,i)=> (h!=null&&kijLo[i]!=null)?(h+kijLo[i])/2:null);
+    const senA0=tenkan.map((t,i)=> (t!=null&&kijun[i]!=null)?(t+kijun[i])/2:null);
+    const senB0=senBHi.map((h,i)=> (h!=null&&senBLo[i]!=null)?(h+senBLo[i])/2:null);
+    const shift=26, spanA=arrShiftFwd(senA0,shift,n), spanB=arrShiftFwd(senB0,shift,n), chikou=arrShiftBack(close,shift,n);
+    return { tenkan, kijun, spanA, spanB, chikou };
+  }
+  function segmentCloud(a,b){
+    const n=a.length, gLow=Array(n).fill(null), gUp=Array(n).fill(null), rLow=Array(n).fill(null), rUp=Array(n).fill(null);
+    for(let i=0;i<n;i++){ const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue; if(A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; } }
+    return { gLow, gUp, rLow, rUp };
+  }
+  function fillEdges(arr){
+    const out = arr.slice();
+    let last = null;
+    for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; }
+    const fi = out.findIndex(v=>Number.isFinite(v));
+    if(fi>0){ for(let i=0;i<fi;i++) out[i]=out[fi]; }
+    let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } }
+    if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; }
+    return out;
+  }
+  function exaggerateCloud(spanA, spanB, mag=1.8, loClip=-Infinity, hiClip=Infinity){
+    if(!(mag>1)) return {spanA,spanB};
+    const A=spanA.slice(), B=spanB.slice();
+    for(let i=0;i<A.length;i++){
+      const a=A[i], b=B[i]; if(!Number.isFinite(a)||!Number.isFinite(b)) continue;
+      const mid=(a+b)/2, half=(a-b)/2;
+      A[i]=Math.min(Math.max(mid+half*mag, loClip), hiClip);
+      B[i]=Math.min(Math.max(mid-half*mag, loClip), hiClip);
+    }
+    return {spanA:A, spanB:B};
+  }
+
+  /* ---------- SMA helper ---------- */
+  function alignAndExtendSMA(smaAll, visibleLen, startIdx){
+    let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
+    while (arr.length < visibleLen) arr.unshift(null);
+    const firstIdx = arr.findIndex(v => Number.isFinite(v));
+    if (firstIdx > 0){ const firstVal=arr[firstIdx]; for(let i=0;i<firstIdx;i++) arr[i]=firstVal; }
+    for (let i=1;i<arr.length;i++) if (arr[i]==null && Number.isFinite(arr[i-1])) arr[i]=arr[i-1];
+    return arr;
+  }
+
+  /* ---------- Auto-Fib ---------- */
+  function getAxisState(){
+    const L = els.chart && (els.chart._fullLayout || els.chart.layout);
+    const g = ax => ({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false });
+    return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
+  }
+  function relayoutPreserve(payload){
+    const S=getAxisState(); const keep=(axKey,s)=>{ if(!s) return {}; const out={}; if(s.range){out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false;} else if(s.autorange){out[`${axKey}.autorange`]=true;} return out; };
+    return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
+  }
+  const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
+
+  /* ---------- Subplot domain helpers (hide bottom panes when chips are OFF) ---------- */
+  const isChipActive = (k)=> !!els.toggles.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');
+  function buildSubplotDomains(){
+    const showRSI=isChipActive('RSI');
+    const showVOL=isChipActive('VOL');
+    const showMACD=isChipActive('MACD');
+    const gap=0.02; const rsiH=0.18, volH=0.10, macdH=0.14;
+    let bottom=0;
+    const rsiDom = showRSI ? [bottom, (bottom+=rsiH)] : [0,0]; bottom += showRSI?gap:0;
+    const volDom = showVOL ? [bottom, (bottom+=volH)] : [0,0]; bottom += showVOL?gap:0;
+    const macdDom= showMACD? [bottom, (bottom+=macdH)] : [0,0]; bottom += showMACD?gap:0;
+    const yDom=[bottom,1];
+    return { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD };
+  }
+  async function updateSubplotLayout(){
+    if(!els.chart||!window.Plotly) return;
+    const { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD } = buildSubplotDomains();
+    const payload={
+      'yaxis.domain': yDom,
+      'yaxis2.domain': rsiDom,
+      'yaxis2.showticklabels': showRSI,
+      'yaxis2.showgrid': showRSI,
+      'yaxis2.title': showRSI ? 'RSI' : '',
+      'yaxis3.domain': volDom,
+      'yaxis3.showticklabels': showVOL,
+      'yaxis3.showgrid': showVOL,
+      'yaxis3.title': showVOL ? 'Vol' : '',
+      'yaxis4.domain': macdDom,
+      'yaxis4.showticklabels': showMACD,
+      'yaxis4.showgrid': showMACD,
+      'yaxis4.title': showMACD ? 'MACD' : ''
+    };
+    try{ await relayoutPreserve(payload); }catch{}
+  }
+
+  /* ---------- Theme toggle (new) ---------- */
+  const themeToggleEl = q('#themeToggle');
+  if (themeToggleEl) {
+    themeToggleEl.addEventListener('click', () => {
+      const isDark = document.body.classList.toggle('light');
+      localStorage.setItem('theme', isDark ? 'light' : 'dark');
+      applyChartTheme();
+    });
+  }
+
+  /* ---------- Fundamentals ---------- */
+  async function getFundamentals(ticker){
+    if(isCrypto(ticker)) return {};
+    const modules = 'defaultKeyStatistics,financialData,earningsTrend';
+    const canDirect = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+    // Try our proxy first to avoid CORS in production
+    try{
+      const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=${encodeURIComponent(modules)}`, { cache:'no-store' });
+      if(r.ok){
+        const j = await r.json();
+        const res = j?.quoteSummary?.result?.[0] || {};
+        const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+        const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+        let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+        const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+        if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+        const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+        return { eps: +eps || null, growth: +growth || null, ivGraham };
+      }
+    }catch{}
+    // Only attempt direct Yahoo from localhost (avoids CORS errors in prod)
+    if(!canDirect) return {};
+    try{
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}`, { referrerPolicy:'no-referrer' });
+      if(!r.ok) throw new Error('summary '+r.status);
+      const j = await r.json();
+      const res = j?.quoteSummary?.result?.[0] || {};
+      const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+      const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+      let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+      const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+      if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+      const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+      return { eps: +eps || null, growth: +growth || null, ivGraham };
+    }catch{ return {}; }
+  }
+
+  /* ---------- Indicators ---------- */
+  function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;} out[i]= count > 0 ? sum / count : null; if(count > w){ const old = vals[i - w]; if(Number.isFinite(old)){sum -= old; count--;}} }
+    return out; }
+  function EMA(vals,span){ const out=new Array(vals.length).fill(null),k=2/(span+1); let ema=null;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(!Number.isFinite(v)){ out[i]=(i>0?out[i-1]:null); continue; } ema=(ema==null)?v:v*k+ema*(1-k); out[i]=ema; } return out; }
+  function RSI(values, period=14){ const rsi=new Array(values.length).fill(null); const p = Math.min(period, values.length - 1); if(values.length <= p) return rsi;
+    let gain=0,loss=0; for(let i=1;i<=p;i++){ const d=values[i]-values[i-1]; if(d>0) gain+=d; else loss-=d; }
+    gain/=p; loss/=p; rsi[p]=100-100/(1+(gain/(loss||1e-10)));
+    for(let i=p+1;i<values.length;i++){ const d=values[i]-values[i-1];
+      if(d>0){ gain=(gain*(p-1)+d)/p; loss=(loss*(p-1))/p; }
+      else { gain=(gain*(p-1))/p; loss=(loss*(p-1)-d)/p; }
+      rsi[i]=100-100/(1+(gain/(loss||1e-10)));
+    } return rsi;
+  }
+  function MACD(closes,f=12,s=26,sig=9){ const ef=EMA(closes,f), es=EMA(closes,s);
+    const macd=closes.map((_,i)=> (ef[i]!=null&&es[i]!=null)? ef[i]-es[i] : null);
+    const signal=EMA(macd.map(x=>x==null?null:x),sig);
+    const hist=macd.map((m,i)=> (m!=null&&signal[i]!=null)? (m-signal[i]) : null);
+    return {macd,signal,hist};
+  }
+
+  /* ---------- Ichimoku helpers ---------- */
+  function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
+  function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let lo=Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) lo=Math.min(lo,arr[j]); out[i]=Number.isFinite(lo)?lo:null; } return out; }
+  function arrShiftFwd(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i+k<n) out[i+k]=arr[i]; return out; }
+  function arrShiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
+  function calcIchimoku(rows){
+    const n=rows.length, high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c);
+    const convHi=rollingHigh(high,9),  convLo=rollingLow(low,9);
+    const kijHi =rollingHigh(high,26), kijLo=rollingLow(low,26);
+    const senBHi=rollingHigh(high,52),  senBLo=rollingLow(low,52);
+    const tenkan=convHi.map((h,i)=> (h!=null&&convLo[i]!=null)?(h+convLo[i])/2:null);
+    const kijun =kijHi .map((h,i)=> (h!=null&&kijLo[i]!=null)?(h+kijLo[i])/2:null);
+    const senA0=tenkan.map((t,i)=> (t!=null&&kijun[i]!=null)?(t+kijun[i])/2:null);
+    const senB0=senBHi.map((h,i)=> (h!=null&&senBLo[i]!=null)?(h+senBLo[i])/2:null);
+    const shift=26, spanA=arrShiftFwd(senA0,shift,n), spanB=arrShiftFwd(senB0,shift,n), chikou=arrShiftBack(close,shift,n);
+    return { tenkan, kijun, spanA, spanB, chikou };
+  }
+  function segmentCloud(a,b){
+    const n=a.length, gLow=Array(n).fill(null), gUp=Array(n).fill(null), rLow=Array(n).fill(null), rUp=Array(n).fill(null);
+    for(let i=0;i<n;i++){ const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue; if(A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; } }
+    return { gLow, gUp, rLow, rUp };
+  }
+  function fillEdges(arr){
+    const out = arr.slice();
+    let last = null;
+    for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; }
+    const fi = out.findIndex(v=>Number.isFinite(v));
+    if(fi>0){ for(let i=0;i<fi;i++) out[i]=out[fi]; }
+    let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } }
+    if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; }
+    return out;
+  }
+  function exaggerateCloud(spanA, spanB, mag=1.8, loClip=-Infinity, hiClip=Infinity){
+    if(!(mag>1)) return {spanA,spanB};
+    const A=spanA.slice(), B=spanB.slice();
+    for(let i=0;i<A.length;i++){
+      const a=A[i], b=B[i]; if(!Number.isFinite(a)||!Number.isFinite(b)) continue;
+      const mid=(a+b)/2, half=(a-b)/2;
+      A[i]=Math.min(Math.max(mid+half*mag, loClip), hiClip);
+      B[i]=Math.min(Math.max(mid-half*mag, loClip), hiClip);
+    }
+    return {spanA:A, spanB:B};
+  }
+
+  /* ---------- SMA helper ---------- */
+  function alignAndExtendSMA(smaAll, visibleLen, startIdx){
+    let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
+    while (arr.length < visibleLen) arr.unshift(null);
+    const firstIdx = arr.findIndex(v => Number.isFinite(v));
+    if (firstIdx > 0){ const firstVal=arr[firstIdx]; for(let i=0;i<firstIdx;i++) arr[i]=firstVal; }
+    for (let i=1;i<arr.length;i++) if (arr[i]==null && Number.isFinite(arr[i-1])) arr[i]=arr[i-1];
+    return arr;
+  }
+
+  /* ---------- Auto-Fib ---------- */
+  function getAxisState(){
+    const L = els.chart && (els.chart._fullLayout || els.chart.layout);
+    const g = ax => ({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false });
+    return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
+  }
+  function relayoutPreserve(payload){
+    const S=getAxisState(); const keep=(axKey,s)=>{ if(!s) return {}; const out={}; if(s.range){out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false;} else if(s.autorange){out[`${axKey}.autorange`]=true;} return out; };
+    return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
+  }
+  const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
+
+  /* ---------- Subplot domain helpers (hide bottom panes when chips are OFF) ---------- */
+  const isChipActive = (k)=> !!els.toggles.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');
+  function buildSubplotDomains(){
+    const showRSI=isChipActive('RSI');
+    const showVOL=isChipActive('VOL');
+    const showMACD=isChipActive('MACD');
+    const gap=0.02; const rsiH=0.18, volH=0.10, macdH=0.14;
+    let bottom=0;
+    const rsiDom = showRSI ? [bottom, (bottom+=rsiH)] : [0,0]; bottom += showRSI?gap:0;
+    const volDom = showVOL ? [bottom, (bottom+=volH)] : [0,0]; bottom += showVOL?gap:0;
+    const macdDom= showMACD? [bottom, (bottom+=macdH)] : [0,0]; bottom += showMACD?gap:0;
+    const yDom=[bottom,1];
+    return { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD };
+  }
+  async function updateSubplotLayout(){
+    if(!els.chart||!window.Plotly) return;
+    const { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD } = buildSubplotDomains();
+    const payload={
+      'yaxis.domain': yDom,
+      'yaxis2.domain': rsiDom,
+      'yaxis2.showticklabels': showRSI,
+      'yaxis2.showgrid': showRSI,
+      'yaxis2.title': showRSI ? 'RSI' : '',
+      'yaxis3.domain': volDom,
+      'yaxis3.showticklabels': showVOL,
+      'yaxis3.showgrid': showVOL,
+      'yaxis3.title': showVOL ? 'Vol' : '',
+      'yaxis4.domain': macdDom,
+      'yaxis4.showticklabels': showMACD,
+      'yaxis4.showgrid': showMACD,
+      'yaxis4.title': showMACD ? 'MACD' : ''
+    };
+    try{ await relayoutPreserve(payload); }catch{}
+  }
+
+  /* ---------- Theme toggle (new) ---------- */
+  const themeToggleEl = q('#themeToggle');
+  if (themeToggleEl) {
+    themeToggleEl.addEventListener('click', () => {
+      const isDark = document.body.classList.toggle('light');
+      localStorage.setItem('theme', isDark ? 'light' : 'dark');
+      applyChartTheme();
+    });
+  }
+
+  /* ---------- Fundamentals ---------- */
+  async function getFundamentals(ticker){
+    if(isCrypto(ticker)) return {};
+    const modules = 'defaultKeyStatistics,financialData,earningsTrend';
+    const canDirect = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+    // Try our proxy first to avoid CORS in production
+    try{
+      const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=${encodeURIComponent(modules)}`, { cache:'no-store' });
+      if(r.ok){
+        const j = await r.json();
+        const res = j?.quoteSummary?.result?.[0] || {};
+        const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+        const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+        let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+        const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+        if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+        const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+        return { eps: +eps || null, growth: +growth || null, ivGraham };
+      }
+    }catch{}
+    // Only attempt direct Yahoo from localhost (avoids CORS errors in prod)
+    if(!canDirect) return {};
+    try{
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}`, { referrerPolicy:'no-referrer' });
+      if(!r.ok) throw new Error('summary '+r.status);
+      const j = await r.json();
+      const res = j?.quoteSummary?.result?.[0] || {};
+      const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+      const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+      let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+      const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+      if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+      const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+      return { eps: +eps || null, growth: +growth || null, ivGraham };
+    }catch{ return {}; }
+  }
+
+  /* ---------- Indicators ---------- */
+  function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;} out[i]= count > 0 ? sum / count : null; if(count > w){ const old = vals[i - w]; if(Number.isFinite(old)){sum -= old; count--;}} }
+    return out; }
+  function EMA(vals,span){ const out=new Array(vals.length).fill(null),k=2/(span+1); let ema=null;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(!Number.isFinite(v)){ out[i]=(i>0?out[i-1]:null); continue; } ema=(ema==null)?v:v*k+ema*(1-k); out[i]=ema; } return out; }
+  function RSI(values, period=14){ const rsi=new Array(values.length).fill(null); const p = Math.min(period, values.length - 1); if(values.length <= p) return rsi;
+    let gain=0,loss=0; for(let i=1;i<=p;i++){ const d=values[i]-values[i-1]; if(d>0) gain+=d; else loss-=d; }
+    gain/=p; loss/=p; rsi[p]=100-100/(1+(gain/(loss||1e-10)));
+    for(let i=p+1;i<values.length;i++){ const d=values[i]-values[i-1];
+      if(d>0){ gain=(gain*(p-1)+d)/p; loss=(loss*(p-1))/p; }
+      else { gain=(gain*(p-1))/p; loss=(loss*(p-1)-d)/p; }
+      rsi[i]=100-100/(1+(gain/(loss||1e-10)));
+    } return rsi;
+  }
+  function MACD(closes,f=12,s=26,sig=9){ const ef=EMA(closes,f), es=EMA(closes,s);
+    const macd=closes.map((_,i)=> (ef[i]!=null&&es[i]!=null)? ef[i]-es[i] : null);
+    const signal=EMA(macd.map(x=>x==null?null:x),sig);
+    const hist=macd.map((m,i)=> (m!=null&&signal[i]!=null)? (m-signal[i]) : null);
+    return {macd,signal,hist};
+  }
+
+  /* ---------- Ichimoku helpers ---------- */
+  function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
+  function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let lo=Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) lo=Math.min(lo,arr[j]); out[i]=Number.isFinite(lo)?lo:null; } return out; }
+  function arrShiftFwd(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i+k<n) out[i+k]=arr[i]; return out; }
+  function arrShiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
+  function calcIchimoku(rows){
+    const n=rows.length, high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c);
+    const convHi=rollingHigh(high,9),  convLo=rollingLow(low,9);
+    const kijHi =rollingHigh(high,26), kijLo=rollingLow(low,26);
+    const senBHi=rollingHigh(high,52),  senBLo=rollingLow(low,52);
+    const tenkan=convHi.map((h,i)=> (h!=null&&convLo[i]!=null)?(h+convLo[i])/2:null);
+    const kijun =kijHi .map((h,i)=> (h!=null&&kijLo[i]!=null)?(h+kijLo[i])/2:null);
+    const senA0=tenkan.map((t,i)=> (t!=null&&kijun[i]!=null)?(t+kijun[i])/2:null);
+    const senB0=senBHi.map((h,i)=> (h!=null&&senBLo[i]!=null)?(h+senBLo[i])/2:null);
+    const shift=26, spanA=arrShiftFwd(senA0,shift,n), spanB=arrShiftFwd(senB0,shift,n), chikou=arrShiftBack(close,shift,n);
+    return { tenkan, kijun, spanA, spanB, chikou };
+  }
+  function segmentCloud(a,b){
+    const n=a.length, gLow=Array(n).fill(null), gUp=Array(n).fill(null), rLow=Array(n).fill(null), rUp=Array(n).fill(null);
+    for(let i=0;i<n;i++){ const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue; if(A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; } }
+    return { gLow, gUp, rLow, rUp };
+  }
+  function fillEdges(arr){
+    const out = arr.slice();
+    let last = null;
+    for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; }
+    const fi = out.findIndex(v=>Number.isFinite(v));
+    if(fi>0){ for(let i=0;i<fi;i++) out[i]=out[fi]; }
+    let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } }
+    if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; }
+    return out;
+  }
+  function exaggerateCloud(spanA, spanB, mag=1.8, loClip=-Infinity, hiClip=Infinity){
+    if(!(mag>1)) return {spanA,spanB};
+    const A=spanA.slice(), B=spanB.slice();
+    for(let i=0;i<A.length;i++){
+      const a=A[i], b=B[i]; if(!Number.isFinite(a)||!Number.isFinite(b)) continue;
+      const mid=(a+b)/2, half=(a-b)/2;
+      A[i]=Math.min(Math.max(mid+half*mag, loClip), hiClip);
+      B[i]=Math.min(Math.max(mid-half*mag, loClip), hiClip);
+    }
+    return {spanA:A, spanB:B};
+  }
+
+  /* ---------- SMA helper ---------- */
+  function alignAndExtendSMA(smaAll, visibleLen, startIdx){
+    let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
+    while (arr.length < visibleLen) arr.unshift(null);
+    const firstIdx = arr.findIndex(v => Number.isFinite(v));
+    if (firstIdx > 0){ const firstVal=arr[firstIdx]; for(let i=0;i<firstIdx;i++) arr[i]=firstVal; }
+    for (let i=1;i<arr.length;i++) if (arr[i]==null && Number.isFinite(arr[i-1])) arr[i]=arr[i-1];
+    return arr;
+  }
+
+  /* ---------- Auto-Fib ---------- */
+  function getAxisState(){
+    const L = els.chart && (els.chart._fullLayout || els.chart.layout);
+    const g = ax => ({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false });
+    return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') };
+  }
+  function relayoutPreserve(payload){
+    const S=getAxisState(); const keep=(axKey,s)=>{ if(!s) return {}; const out={}; if(s.range){out[`${axKey}.range`]=s.range; out[`${axKey}.autorange`]=false;} else if(s.autorange){out[`${axKey}.autorange`]=true;} return out; };
+    return Plotly.relayout(els.chart,{...payload,...keep('xaxis',S.x),...keep('yaxis',S.y),...keep('yaxis2',S.y2),...keep('yaxis3',S.y3),...keep('yaxis4',S.y4)});
+  }
+  const getCandleTrace = () => { const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
+
+  /* ---------- Subplot domain helpers (hide bottom panes when chips are OFF) ---------- */
+  const isChipActive = (k)=> !!els.toggles.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');
+  function buildSubplotDomains(){
+    const showRSI=isChipActive('RSI');
+    const showVOL=isChipActive('VOL');
+    const showMACD=isChipActive('MACD');
+    const gap=0.02; const rsiH=0.18, volH=0.10, macdH=0.14;
+    let bottom=0;
+    const rsiDom = showRSI ? [bottom, (bottom+=rsiH)] : [0,0]; bottom += showRSI?gap:0;
+    const volDom = showVOL ? [bottom, (bottom+=volH)] : [0,0]; bottom += showVOL?gap:0;
+    const macdDom= showMACD? [bottom, (bottom+=macdH)] : [0,0]; bottom += showMACD?gap:0;
+    const yDom=[bottom,1];
+    return { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD };
+  }
+  async function updateSubplotLayout(){
+    if(!els.chart||!window.Plotly) return;
+    const { yDom, rsiDom, volDom, macdDom, showRSI, showVOL, showMACD } = buildSubplotDomains();
+    const payload={
+      'yaxis.domain': yDom,
+      'yaxis2.domain': rsiDom,
+      'yaxis2.showticklabels': showRSI,
+      'yaxis2.showgrid': showRSI,
+      'yaxis2.title': showRSI ? 'RSI' : '',
+      'yaxis3.domain': volDom,
+      'yaxis3.showticklabels': showVOL,
+      'yaxis3.showgrid': showVOL,
+      'yaxis3.title': showVOL ? 'Vol' : '',
+      'yaxis4.domain': macdDom,
+      'yaxis4.showticklabels': showMACD,
+      'yaxis4.showgrid': showMACD,
+      'yaxis4.title': showMACD ? 'MACD' : ''
+    };
+    try{ await relayoutPreserve(payload); }catch{}
+  }
+
+  /* ---------- Theme toggle (new) ---------- */
+  const themeToggleEl = q('#themeToggle');
+  if (themeToggleEl) {
+    themeToggleEl.addEventListener('click', () => {
+      const isDark = document.body.classList.toggle('light');
+      localStorage.setItem('theme', isDark ? 'light' : 'dark');
+      applyChartTheme();
+    });
+  }
+
+  /* ---------- Fundamentals ---------- */
+  async function getFundamentals(ticker){
+    if(isCrypto(ticker)) return {};
+    const modules = 'defaultKeyStatistics,financialData,earningsTrend';
+    const canDirect = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+    // Try our proxy first to avoid CORS in production
+    try{
+      const r = await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=${encodeURIComponent(modules)}`, { cache:'no-store' });
+      if(r.ok){
+        const j = await r.json();
+        const res = j?.quoteSummary?.result?.[0] || {};
+        const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+        const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+        let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+        const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+        if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+        const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+        return { eps: +eps || null, growth: +growth || null, ivGraham };
+      }
+    }catch{}
+    // Only attempt direct Yahoo from localhost (avoids CORS errors in prod)
+    if(!canDirect) return {};
+    try{
+      const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}`, { referrerPolicy:'no-referrer' });
+      if(!r.ok) throw new Error('summary '+r.status);
+      const j = await r.json();
+      const res = j?.quoteSummary?.result?.[0] || {};
+      const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+      const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+      let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+      const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+      if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+      const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+      return { eps: +eps || null, growth: +growth || null, ivGraham };
+    }catch{ return {}; }
+  }
+
+  /* ---------- Indicators ---------- */
+  function SMA(vals,w){ const out=new Array(vals.length).fill(null); let sum=0,count=0;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(Number.isFinite(v)){sum+=v;count++;} out[i]= count > 0 ? sum / count : null; if(count > w){ const old = vals[i - w]; if(Number.isFinite(old)){sum -= old; count--;}} }
+    return out; }
+  function EMA(vals,span){ const out=new Array(vals.length).fill(null),k=2/(span+1); let ema=null;
+    for(let i=0;i<vals.length;i++){ const v=vals[i]; if(!Number.isFinite(v)){ out[i]=(i>0?out[i-1]:null); continue; } ema=(ema==null)?v:v*k+ema*(1-k); out[i]=ema; } return out; }
+  function RSI(values, period=14){ const rsi=new Array(values.length).fill(null); const p = Math.min(period, values.length - 1); if(values.length <= p) return rsi;
+    let gain=0,loss=0; for(let i=1;i<=p;i++){ const d=values[i]-values[i-1]; if(d>0) gain+=d; else loss-=d; }
+    gain/=p; loss/=p; rsi[p]=100-100/(1+(gain/(loss||1e-10)));
+    for(let i=p+1;i<values.length;i++){ const d=values[i]-values[i-1];
+      if(d>0){ gain=(gain*(p-1)+d)/p; loss=(loss*(p-1))/p; }
+      else { gain=(gain*(p-1))/p; loss=(loss*(p-1)-d)/p; }
+      rsi[i]=100-100/(1+(gain/(loss||1e-10)));
+    } return rsi;
+  }
+  function MACD(closes,f=12,s=26,sig=9){ const ef=EMA(closes,f), es=EMA(closes,s);
+    const macd=closes.map((_,i)=> (ef[i]!=null&&es[i]!=null)? ef[i]-es[i] : null);
+    const signal=EMA(macd.map(x=>x==null?null:x),sig);
+    const hist=macd.map((m,i)=> (m!=null&&signal[i]!=null)? (m-signal[i]) : null);
+    return {macd,signal,hist};
+  }
+
+  /* ---------- Ichimoku helpers ---------- */
+  function rollingHigh(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let hi=-Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) hi=Math.max(hi,arr[j]); out[i]=Number.isFinite(hi)?hi:null; } return out; }
+  function rollingLow(arr, window){ const out=new Array(arr.length).fill(null);
+    for(let i=0;i<arr.length;i++){ if(i<window-1) continue; let lo=Infinity; for(let j=i-window+1;j<=i;j++) if(Number.isFinite(arr[j])) lo=Math.min(lo,arr[j]); out[i]=Number.isFinite(lo)?lo:null; } return out; }
+  function arrShiftFwd(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i+k<n) out[i+k]=arr[i]; return out; }
+  function arrShiftBack(arr,k,n){ const out=new Array(n).fill(null); for(let i=0;i<n;i++) if(i-k>=0) out[i-k]=arr[i]; return out; }
+  function calcIchimoku(rows){
+    const n=rows.length, high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c);
+    const convHi=rollingHigh(high,9),  convLo=rollingLow(low,9);
+    const kijHi =rollingHigh(high,26), kijLo=rollingLow(low,26);
+    const senBHi=rollingHigh(high,52),  senBLo=rollingLow(low,52);
+    const tenkan=convHi.map((h,i)=> (h!=null&&convLo[i]!=null)?(h+convLo[i])/2:null);
+    const kijun =kijHi .map((h,i)=> (h!=null&&kijLo[i]!=null)?(h+kijLo[i])/2:null);
+    const senA0=tenkan.map((t,i)=> (t!=null&&kijun[i]!=null)?(t+kijun[i])/2:null);
+    const senB0=senBHi.map((h,i)=> (h!=null&&senBLo[i]!=null)?(h+senBLo[i])/2:null);
+    const shift=26, spanA=arrShiftFwd(senA0,shift,n), spanB=arrShiftFwd(senB0,shift,n), chikou=arrShiftBack(close,shift,n);
+    return { tenkan, kijun, spanA, spanB, chikou };
+  }
+  function segmentCloud(a,b){
+    const n=a.length, gLow=Array(n).fill(null), gUp=Array(n).fill(null), rLow=Array(n).fill(null), rUp=Array(n).fill(null);
+    for(let i=0;i<n;i++){ const A=a[i], B=b[i]; if(!Number.isFinite(A)||!Number.isFinite(B)) continue; if(A>=B){ gLow[i]=B; gUp[i]=A; } else { rLow[i]=A; rUp[i]=B; } }
+    return { gLow, gUp, rLow, rUp };
+  }
+  function fillEdges(arr){
+    const out = arr.slice();
+    let last = null;
+    for(let i=0;i<out.length;i++){ if(Number.isFinite(out[i])) last=out[i]; else if(last!=null) out[i]=last; }
+    const fi = out.findIndex(v=>Number.isFinite(v));
+    if(fi>0){ for(let i=0;i<fi;i++) out[i]=out[fi]; }
+    let li=-1; for(let i=out.length-1;i>=0;i--){ if(Number.isFinite(out[i])){ li=i; break; } }
+    if(li>=0){ for(let i=li+1;i<out.length;i++) out[i]=out[li]; }
+    return out;
+  }
+  function exaggerateCloud(spanA, spanB, mag=1.8, loClip=-Infinity, hiClip=Infinity){
+    if(!(mag>1)) return {spanA,spanB};
+    const A=spanA.slice(), B=spanB.slice();
+    for(let i=0;i<A.length;i++){
+      const a=A[i], b=B[i]; if(!Number.isFinite(a)||!Number.isFinite(b)) continue;
+      const mid=(a+b)/2, half=(a-b)/2;
+      A[i]=Math.min(Math.max(mid+half*mag, loClip), hiClip);
+      B[i]=Math.min(Math.max(mid-half*mag, loClip), hiClip);
+    }
+    return {spanA:A, spanB:B};
+  }
+
+  /* ---------- SMA helper ---------- */
+  function alignAndExtendSMA(smaAll, visibleLen, startIdx){
+    let arr = smaAll.slice(Math.max(0,startIdx), Math.max(0,startIdx)+visibleLen);
+    while (arr.length < visibleLen) arr.unshift(null);
+    const firstIdx = arr.findIndex(v => Number.isFinite(v));
+    if (firstIdx > 0){ const firstVal=arr[firstIdx]; for(let i=0;i<firstIdx;i++) arr[i]=firstVal; }
+    for (let i=1;i<arr.length;i++) if (arr[i]==null && Number.isFinite(arr[i-1])) arr[i]=arr[i-1];
+    return arr;
