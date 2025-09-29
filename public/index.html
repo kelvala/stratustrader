@@ -349,7 +349,7 @@
       ivLine: document.getElementById('ivLine'),
       headline: document.getElementById('headline')
     };
-    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null };
+    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null, fibOn:false, fibShapes:[] };
     const isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 
     // Utilities
@@ -372,6 +372,61 @@
         }
       }
       return out;
+    }
+    function EMA(values, p){
+      const k = 2/(p+1); let ema=null; const out=new Array(values.length).fill(null);
+      for(let i=0;i<values.length;i++){
+        const v = values[i];
+        if(!Number.isFinite(v)) continue;
+        if(ema==null){ ema = v; } else { ema = v*k + ema*(1-k); }
+        out[i] = ema;
+      }
+      return out;
+    }
+    function RSI(values, p=14){
+      const out = new Array(values.length).fill(null);
+      let gain=0, loss=0; let prev = values[0];
+      for(let i=1;i<values.length;i++){
+        const v = values[i];
+        if(!Number.isFinite(v) || !Number.isFinite(prev)){ prev=v; continue; }
+        const ch = v - prev; prev = v;
+        const g = Math.max(ch,0), l = Math.max(-ch,0);
+        if(i<=p){ gain += g; loss += l; if(i===p){ const rs = (gain/p)/((loss/p)||1e-9); out[i] = 100 - 100/(1+rs); } }
+        else{
+          gain = (gain*(p-1)+g)/p; loss = (loss*(p-1)+l)/p; const rs = gain/((loss)||1e-9); out[i] = 100 - 100/(1+rs);
+        }
+      }
+      return out;
+    }
+    function MACD(values, fast=12, slow=26, signal=9){
+      const emaF = EMA(values, fast), emaS = EMA(values, slow);
+      const macd = values.map((_,i)=> (Number.isFinite(emaF[i])&&Number.isFinite(emaS[i]))? emaF[i]-emaS[i] : null);
+      const sig = EMA(macd.map(v=>Number.isFinite(v)?v:null), signal);
+      const hist = macd.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(sig[i])) ? v - sig[i] : null);
+      return { macd, signal: sig, hist };
+    }
+    function Ichimoku(rows){
+      const n = rows.length; const highs = rows.map(r=>r.h), lows = rows.map(r=>r.l), closes = rows.map(r=>r.c);
+      const convP=9, baseP=26, spanBP=52, shift=26;
+      const conv = new Array(n).fill(null), base = new Array(n).fill(null), spanA = new Array(n).fill(null), spanB = new Array(n).fill(null), chikou = new Array(n).fill(null);
+      function mid(i,p){ const s=Math.max(0,i-p+1); let hi=-Infinity, lo=Infinity; for(let j=s;j<=i;j++){ const H=highs[j], L=lows[j]; if(Number.isFinite(H)) hi=Math.max(hi,H); if(Number.isFinite(L)) lo=Math.min(lo,L); } return (hi>-Infinity && lo<Infinity)? (hi+lo)/2 : null; }
+      for(let i=0;i<n;i++){
+        const c = mid(i,convP); const b = mid(i,baseP); const sb = mid(i,spanBP);
+        conv[i]=c; base[i]=b;
+        const a = (Number.isFinite(c)&&Number.isFinite(b))? (c+b)/2 : null;
+        if(i+shift<n){ spanA[i+shift]=a; spanB[i+shift]=sb; }
+        if(i-shift>=0){ chikou[i-shift]=closes[i]; }
+      }
+      return { tenkan:conv, kijun:base, spanA, spanB, chikou };
+    }
+    function makeFibShapes(rows){
+      if(!rows?.length) return [];
+      const xs = rows.map(r=>new Date(r.t)); const x0 = xs[0], x1 = xs[xs.length-1];
+      let hi=-Infinity, lo=Infinity; for(const r of rows){ hi=Math.max(hi,r.h); lo=Math.min(lo,r.l); }
+      if(!Number.isFinite(hi) || !Number.isFinite(lo) || hi<=lo) return [];
+      const diff = hi-lo; const lvls=[0,0.236,0.382,0.5,0.618,0.786,1].map(p=>hi - diff*p);
+      const color = '#8b5cf6';
+      return lvls.map(y=>({ type:'line', xref:'x', yref:'y', x0, x1, y0:y, y1:y, line:{ color, width:1, dash:'dot' } }));
     }
 
     // --- Live quote (independent of chart) ---
@@ -460,7 +515,12 @@
         legend: { orientation: 'h', y: -0.12 },
         xaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
         yaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
-        font: { color: css('--text') }
+        // Overlay axes for indicators (hidden ticks, no grid)
+        yaxis2: { overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false }, // Volume
+        yaxis3: { overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },      // RSI
+        yaxis4: { overlaying:'y', side:'right', showgrid:false, showticklabels:false },                      // MACD
+        font: { color: css('--text') },
+        shapes: []
       };
     }
 
@@ -479,6 +539,39 @@
       const y = SMA(rows.map(r=>r.c), period, true); // full width lines
       return { type:'scatter', mode:'lines', name, x, y, line:{ color, width:1.6 }, visible:false, hoverinfo:'skip' };
     }
+    function volTrace(rows){
+      const x = rows.map(r=>new Date(r.t));
+      const y = rows.map(r=>r.v||0);
+      const col = rows.map(r=> (r.c>=r.o? css('--c-up'): css('--c-down')) );
+      return { type:'bar', name:'Volume', x, y, yaxis:'y2', marker:{ color: col, opacity:0.28 }, visible:false, hoverinfo:'skip' };
+    }
+    function rsiTrace(rows){
+      const x = rows.map(r=>new Date(r.t));
+      const y = RSI(rows.map(r=>r.c), 14);
+      return { type:'scatter', mode:'lines', name:'RSI 14', x, y, yaxis:'y3', line:{ color: css('--c-rsi'), width:1.4 }, visible:false, hoverinfo:'skip' };
+    }
+    function macdTraces(rows){
+      const x = rows.map(r=>new Date(r.t));
+      const { macd, signal, hist } = MACD(rows.map(r=>r.c));
+      const col = hist.map(v=> v>=0? css('--c-up') : css('--c-down'));
+      return [
+        { type:'scatter', mode:'lines', name:'MACD', x, y:macd, yaxis:'y4', line:{ color: css('--c-macd'), width:1.4 }, visible:false, hoverinfo:'skip' },
+        { type:'scatter', mode:'lines', name:'Signal', x, y:signal, yaxis:'y4', line:{ color: '#94d9f8', width:1.2, dash:'dot' }, visible:false, hoverinfo:'skip' },
+        { type:'bar', name:'Histogram', x, y:hist, yaxis:'y4', marker:{ color: col, opacity:.4 }, visible:false, hoverinfo:'skip' }
+      ];
+    }
+    function ichiTraces(rows){
+      const x = rows.map(r=>new Date(r.t));
+      const ichi = Ichimoku(rows);
+      const spanA = { type:'scatter', mode:'lines', name:'Span A', x, y:ichi.spanA, line:{ color: css('--c-ichi-chikou'), width:1 }, visible:false, hoverinfo:'skip' };
+      const spanB = { type:'scatter', mode:'lines', name:'Span B', x, y:ichi.spanB, line:{ color: 'rgba(0,0,0,0)' }, fill:'tonexty', fillcolor: css('--c-ichi-up'), visible:false, hoverinfo:'skip' };
+      return [
+        { type:'scatter', mode:'lines', name:'Tenkan', x, y:ichi.tenkan, line:{ color: css('--c-ichi-tenkan'), width:1.2 }, visible:false, hoverinfo:'skip' },
+        { type:'scatter', mode:'lines', name:'Kijun', x, y:ichi.kijun, line:{ color: css('--c-ichi-kijun'), width:1.2 }, visible:false, hoverinfo:'skip' },
+        { type:'scatter', mode:'lines', name:'Chikou', x, y:ichi.chikou, line:{ color: css('--c-ichi-chikou'), width:1 }, visible:false, hoverinfo:'skip' },
+        spanA, spanB
+      ];
+    }
 
     async function plot(ticker){
       state.rows = await fetchRows(ticker, state.range, state.interval);
@@ -486,12 +579,17 @@
         candleTrace(state.rows),
         smaTrace(state.rows, 20, css('--c-sma20'), 'SMA 20'),
         smaTrace(state.rows, 50, css('--c-sma50'), 'SMA 50'),
-        smaTrace(state.rows, 200, css('--c-sma200'), 'SMA 200')
+        smaTrace(state.rows, 200, css('--c-sma200'), 'SMA 200'),
+        volTrace(state.rows),
+        rsiTrace(state.rows),
+        ...macdTraces(state.rows),
+        ...ichiTraces(state.rows)
       ];
       const layout = buildLayout();
+      state.fibShapes = makeFibShapes(state.rows); // prepared but not shown until toggled
       await Plotly.newPlot(els.chart, traces, layout, { displayModeBar:false, responsive:true });
       // Ensure buttons reflect off state on first render
-      setChip('SMA20', false); setChip('SMA50', false); setChip('SMA200', false);
+      ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
     }
 
     function setChip(key, on){
@@ -501,21 +599,41 @@
       chip.setAttribute('aria-pressed', on ? 'true' : 'false');
     }
 
+    function setVisibilityByNames(names, on){
+      const ids = [];
+      (els.chart?.data||[]).forEach((t,idx)=>{ if(t && names.includes(t.name)) ids.push(idx); });
+      if(ids.length) Plotly.restyle(els.chart, { visible: on }, ids);
+    }
     function setSMAVisibility(key, on){
       const name = key==='SMA20'?'SMA 20': key==='SMA50'?'SMA 50':'SMA 200';
-      const idx = (els.chart?.data||[]).findIndex(t=>t && t.name===name);
-      if(idx>=0) Plotly.restyle(els.chart, { visible: on }, [idx]);
-      setChip(key, on);
+      setVisibilityByNames([name], on); setChip(key, on);
+    }
+    function setRSI(on){ setVisibilityByNames(['RSI 14'], on); setChip('RSI', on); }
+    function setMACD(on){ setVisibilityByNames(['MACD','Signal','Histogram'], on); setChip('MACD', on); }
+    function setVOL(on){ setVisibilityByNames(['Volume'], on); setChip('VOL', on); }
+    function setICHI(on){ setVisibilityByNames(['Tenkan','Kijun','Chikou','Span A','Span B'], on); setChip('ICHI', on); }
+    function setAutoFib(on){
+      state.fibOn = !!on;
+      const base = els.chart?.layout?.shapes||[];
+      const others = base.filter(s=>!s.__fib);
+      const fibs = (state.fibShapes||[]).map(s=>({ ...s, __fib:true }));
+      const shapes = on ? [...others, ...fibs] : [...others];
+      Plotly.relayout(els.chart, { shapes });
+      setChip('AUTOFIB', on);
     }
 
-    // Toggle handlers (SMA only)
+    // Toggle handlers
     els.toggles?.addEventListener('click', (e)=>{
       const btn = e.target.closest('.chip');
       if(!btn) return;
       const key = btn.getAttribute('data-k');
-      if(!/^SMA(20|50|200)$/.test(key)) return;
       const on = !btn.classList.contains('active');
-      setSMAVisibility(key, on);
+      if(/^SMA(20|50|200)$/.test(key))      return void setSMAVisibility(key, on);
+      if(key==='RSI')    return void setRSI(on);
+      if(key==='MACD')   return void setMACD(on);
+      if(key==='VOL')    return void setVOL(on);
+      if(key==='ICHI')   return void setICHI(on);
+      if(key==='AUTOFIB')return void setAutoFib(on);
     });
 
     // --- Autocomplete ---
@@ -604,7 +722,7 @@
     els.q?.addEventListener('keydown', (e)=>{ if(e.key==='Enter' && !els.ac?.classList.contains('show')) doSearch(); });
 
     // Initial: chips OFF, load symbols, plot default, start live quotes
-    ['SMA20','SMA50','SMA200'].forEach(k=>setChip(k,false));
+    ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
     loadSymbols();
     plot(state.ticker).catch(console.error);
     startQuoteTimer();
