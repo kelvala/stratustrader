@@ -84,9 +84,9 @@
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   /* Chip base colors (fixed typos) */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);} 
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50;} 
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);} 
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;} 
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;} 
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
@@ -371,7 +371,6 @@
     const fmtPxPos = v => (Number.isFinite(+v) && +v > 0 ? `$${fmt.format(+v)}` : '—');
     const fmtPct = v => (Number.isFinite(+v) ? `${(+v).toFixed(2)}%` : '—');
     function SMA(values, w, fullWidth = true){
-      // fullWidth=true fills the warmup using partial window so the line spans entire chart
       const out = new Array(values.length).fill(null);
       let sum = 0; let q = [];
       for(let i=0;i<values.length;i++){
@@ -379,9 +378,7 @@
         if(Number.isFinite(v)){
           q.push(v); sum += v;
           if(q.length > w){ sum -= q.shift(); }
-          if(fullWidth ? q.length>0 : q.length===w){
-            out[i] = sum / (fullWidth ? q.length : w);
-          }
+          if(fullWidth ? q.length>0 : q.length===w){ out[i] = sum / (fullWidth ? q.length : w); }
         }
       }
       return out;
@@ -389,8 +386,7 @@
     function EMA(values, p){
       const k = 2/(p+1); let ema=null; const out=new Array(values.length).fill(null);
       for(let i=0;i<values.length;i++){
-        const v = values[i];
-        if(!Number.isFinite(v)) continue;
+        const v = values[i]; if(!Number.isFinite(v)) continue;
         if(ema==null){ ema = v; } else { ema = v*k + ema*(1-k); }
         out[i] = ema;
       }
@@ -404,8 +400,10 @@
         if(!Number.isFinite(v) || !Number.isFinite(prev)){ prev=v; continue; }
         const ch = v - prev; prev = v;
         const g = Math.max(ch,0), l = Math.max(-ch,0);
-        if(i<=p){ gain += g; loss += l; if(i===p){ const rs = (gain/p)/((loss/p)||1e-9); out[i] = 100 - 100/(1+rs); } }
-        else{
+        if(i<=p){
+          gain += g; loss += l;
+          if(i===p){ const rs = (gain/p)/((loss/p)||1e-9); out[i] = 100 - 100/(1+rs); }
+        } else {
           gain = (gain*(p-1)+g)/p; loss = (loss*(p-1)+l)/p; const rs = gain/((loss)||1e-9); out[i] = 100 - 100/(1+rs);
         }
       }
@@ -513,89 +511,75 @@
         let changePct = Number.isFinite(+q.changePct) ? +q.changePct : null;
         if((change==null || changePct==null) && Number.isFinite(price) && Number.isFinite(prevClose) && prevClose>0){ change = price - prevClose; changePct = (change / prevClose) * 100; }
 
-        // Intrinsic value via analyst targets with strong fallbacks
+        // Intrinsic value via analyst targets with fallbacks
         let intrinsic = null;
         try{
-          const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=financialData,summaryDetail,defaultKeyStatistics,earningsTrend,price`, { cache:'no-store' });
+          const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=financialData,defaultKeyStatistics,earningsTrend`, { cache:'no-store' });
           if(sr.ok){
             const sj = await sr.json();
-            const root = sj?.quoteSummary?.result?.[0] || {};alData || {};
-            const fd = root.financialData || {};object'&&'raw' in v)? v.raw : v;
-            const sd = root.summaryDetail || {};MeanPrice), getNum(fd.targetMedianPrice), getNum(fd.targetHighPrice), getNum(fd.targetLowPrice)];
-            const getNum = v => (v && typeof v==='object' && 'raw' in v) ? v.raw : v;
+            const fd = sj?.quoteSummary?.result?.[0]?.financialData || {};
+            const getNum = v => (v&&typeof v==='object'&&'raw' in v)? v.raw : v;
             const candidates = [getNum(fd.targetMeanPrice), getNum(fd.targetMedianPrice), getNum(fd.targetHighPrice), getNum(fd.targetLowPrice)];
             intrinsic = candidates.find(v=>Number.isFinite(+v)) ?? null;
-            if(intrinsic==null){
-              const hi = getNum(sd.fiftyTwoWeekHigh), lo = getNum(sd.fiftyTwoWeekLow);
-              if(Number.isFinite(+hi) && Number.isFinite(+lo) && +hi>0 && +lo>0){ intrinsic = (+hi + +lo)/2; }
-            }${change>=0?'+':''}${fmt.format(change)} (${changePct>=0?'+':''}${Math.abs(changePct).toFixed(2)}%)`
-            if(intrinsic==null && Number.isFinite(price) && +price>0){ intrinsic = +price; }
-          }.lastLine.textContent = `Last: ${fmtPx(price)} · Change: ${chText}`;
-        }catch{}CloseLine.textContent = `Yesterday’s Close: ${fmtPxPos(prevClose)}`;
-        els.ivLine.textContent = `Intrinsic Value: ${fmtPxPos(intrinsic)}`;
-        // Last-resort fallback: if nothing available, show the current price so the field is never blank
-        if(intrinsic==null && Number.isFinite(price) && +price>0){ intrinsic = +price; }
-    }
-        // Update UI
+          }
+        }catch{}
+
         const chText = (Number.isFinite(change) && Number.isFinite(changePct))
           ? `${change>=0?'+':''}${fmt.format(change)} (${changePct>=0?'+':''}${Math.abs(changePct).toFixed(2)}%)`
-          : '—'; immediately, then every minute
+          : '—';
         els.lastLine.textContent = `Last: ${fmtPx(price)} · Change: ${chText}`;
         els.prevCloseLine.textContent = `Yesterday’s Close: ${fmtPxPos(prevClose)}`;
         els.ivLine.textContent = `Intrinsic Value: ${fmtPxPos(intrinsic)}`;
         if(els.headline){ els.headline.textContent = `${state.ticker}${q.name? ' — '+q.name:''}`; }
-      }catch(err){ /* keep silent but don’t break UI */ }t only on localhost)
-    }sync function fetchRows(ticker, range, interval){
-      // Try our Edge API first
+      }catch(err){ /* silent */ }
+    }
+
     function startQuoteTimer(){
-      if(state.quoteTimer){ clearInterval(state.quoteTimer); state.quoteTimer = null; }ponent(range)}&interval=${encodeURIComponent(interval)}`;
-      // Refresh immediately, then every minuteore' });
+      if(state.quoteTimer){ clearInterval(state.quoteTimer); state.quoteTimer = null; }
       refreshQuoteOnce();
       state.quoteTimer = setInterval(refreshQuoteOnce, 60*1000);
-    }     const res = j?.chart?.result?.[0];
-          if(res){
+    }
+
     // Chart data fetch (proxy first to avoid CORS; direct only on localhost)
     async function fetchRows(ticker, range, interval){
-      // Try our Edge API first h=q.high||[], l=q.low||[], c=q.close||[], v=q.volume||[];
-      try{  const rows=[]; for(let i=0;i<ts.length;i++){ if(!Number.isFinite(c[i])) continue; rows.push({ t:ts[i]*1000, o:o[i], h:h[i], l:l[i], c:c[i], v:v[i] }); }
+      try{
         const u = `/api/chart?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`;
         const r = await fetch(u, { cache:'no-store' });
         if(r.ok){
           const j = await r.json();
-          const res = j?.chart?.result?.[0];running locally
-          if(res){ throw new Error('CORS: use /api/chart in production');
-            const ts = res.timestamp || [];hoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includeTimestamps=true`;
-            const q = res.indicators?.quote?.[0]||{};referrerPolicy:'no-referrer' });
+          const res = j?.chart?.result?.[0];
+          if(res){
+            const ts = res.timestamp || [];
+            const q = res.indicators?.quote?.[0]||{};
             const o=q.open||[], h=q.high||[], l=q.low||[], c=q.close||[], v=q.volume||[];
             const rows=[]; for(let i=0;i<ts.length;i++){ if(!Number.isFinite(c[i])) continue; rows.push({ t:ts[i]*1000, o:o[i], h:h[i], l:l[i], c:c[i], v:v[i] }); }
-            return rows;hart?.result?.[0];
-          }es2) throw new Error('no data');
-        }st ts2 = res2.timestamp || [];
-      }catch{} = res2.indicators?.quote?.[0]||{};
-      // Fallback to direct Yahoo only when running locallyc2=q2.close||[], v2=q2.volume||[];
-      if(!isLocal) throw new Error('CORS: use /api/chart in production');c2[i])) continue; rows2.push({ t:ts2[i]*1000, o:o2[i], h:h2[i], l:l2[i], c:c2[i], v:v2[i] }); }
+            return rows;
+          }
+        }
+      }catch{}
+      if(!isLocal) throw new Error('CORS: use /api/chart in production');
       const u2 = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includeTimestamps=true`;
       const r2 = await fetch(u2, { cache:'no-store', referrerPolicy:'no-referrer' });
       if(!r2.ok) throw new Error('chart '+r2.status);
-      const j2 = await r2.json();{
-      const res2 = j2?.chart?.result?.[0];rval } = opts;
-      if(!res2) throw new Error('no data');;
-      const ts2 = res2.timestamp || [];ionDecor(rows) : { shapes:[], annotations:[] };
+      const j2 = await r2.json();
+      const res2 = j2?.chart?.result?.[0];
+      if(!res2) throw new Error('no data');
+      const ts2 = res2.timestamp || [];
       const q2 = res2.indicators?.quote?.[0]||{};
       const o2=q2.open||[], h2=q2.high||[], l2=q2.low||[], c2=q2.close||[], v2=q2.volume||[];
       const rows2=[]; for(let i=0;i<ts2.length;i++){ if(!Number.isFinite(c2[i])) continue; rows2.push({ t:ts2[i]*1000, o:o2[i], h:h2[i], l:l2[i], c:c2[i], v:v2[i] }); }
-      return rows2;r: 'rgba(0,0,0,0)',
-    }   showlegend: true,
-        legend: { orientation: 'h', y: -0.12 },
-    function buildLayout(opts={}){-grid'), showgrid: true, zeroline: false },
-      const { rows=[], interval=state.interval } = opts;e, zeroline: false },
-      const intraday = isIntraday(interval);t', rangemode:'tozero', showgrid:false, showticklabels:false },
-      const decor = intraday ? makeSessionDecor(rows) : { shapes:[], annotations:[] };klabels:false },
-      const layout = {laying:'y', side:'right', showgrid:false, showticklabels:false },
+      return rows2;
+    }
+
+    function buildLayout(opts={}){
+      const { rows=[], interval=state.interval } = opts;
+      const intraday = isIntraday(interval);
+      const decor = intraday ? makeSessionDecor(rows) : { shapes:[], annotations:[] };
+      const layout = {
         margin: { l: 56, r: 24, t: 18, b: 28 },
-        paper_bgcolor: 'rgba(0,0,0,0)',r.shapes.map(s=>({ ...s, __session:true })) : [],
-        plot_bgcolor: 'rgba(0,0,0,0)',? decor.annotations : [],
-        showlegend: true,ate.ticker}|${state.range}|${state.interval}`
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        showlegend: true,
         legend: { orientation: 'h', y: -0.12 },
         xaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
         yaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
@@ -606,353 +590,332 @@
         shapes: state.sessionsOn ? decor.shapes.map(s=>({ ...s, __session:true })) : [],
         annotations: state.sessionsOn ? decor.annotations : [],
         uirevision: `${state.ticker}|${state.range}|${state.interval}`
-      };tion candleTrace(rows){
-      if(intraday){s.map(r=>new Date(r.t));
-        layout.xaxis.rangebreaks = [te.interval) ? '%b %d, %Y %H:%M' : '%b %d, %Y';
+      };
+      if(intraday){
+        layout.xaxis.rangebreaks = [
           { pattern:'day of week', bounds:['sat','mon'] },
-          { pattern:'hour', bounds:[20, 9.5] } // hide 8pm-9:30am local time
-        ];en: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c),
-      } increasing: { line: { color: css('--c-up') } },
-      return layout;{ line: { color: css('--c-down') } },
-    }   hovertemplate: `<b>%{x|${dateFmt}}</b><br>` +
-                       `High: $%{high:,.2f}<br>` +
-    function candleTrace(rows){{low:,.2f}` +
+          { pattern:'hour', bounds:[20, 9.5] }
+        ];
+      }
+      return layout;
+    }
+
+    function candleTrace(rows){
       const x = rows.map(r=>new Date(r.t));
       const dateFmt = isIntraday(state.interval) ? '%b %d, %Y %H:%M' : '%b %d, %Y';
       return {
         type: 'candlestick', name: 'Price', x,
         open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c),
         increasing: { line: { color: css('--c-up') } },
-        decreasing: { line: { color: css('--c-down') } },ull width lines
-        hovertemplate: `<b>%{x|${dateFmt}}</b><br>` + y, line:{ color, width:1.6 }, visible:false, hoverinfo:'skip' };
+        decreasing: { line: { color: css('--c-down') } },
+        hovertemplate: `<b>%{x|${dateFmt}}</b><br>` +
                        `High: $%{high:,.2f}<br>` +
                        `Low: $%{low:,.2f}` +
-                       `<extra></extra>`));
-      };nst y = rows.map(r=>r.v||0);
-    } const col = rows.map(r=> (r.c>=r.o? css('--c-up'): css('--c-down')) );
-      return { type:'bar', name:'Volume', x, y, yaxis:'y2', marker:{ color: col, opacity:0.28 }, visible:false, hoverinfo:'skip' };
+                       `<extra></extra>`
+      };
+    }
     function smaTrace(rows, period, color, name){
       const x = rows.map(r=>new Date(r.t));
-      const y = SMA(rows.map(r=>r.c), period, true); // full width lines
+      const y = SMA(rows.map(r=>r.c), period, true);
       return { type:'scatter', mode:'lines', name, x, y, line:{ color, width:1.6 }, visible:false, hoverinfo:'skip' };
-    } return { type:'scatter', mode:'lines', name:'RSI 14', x, y, yaxis:'y3', line:{ color: css('--c-rsi'), width:1.4 }, visible:false, hoverinfo:'skip' };
+    }
     function volTrace(rows){
       const x = rows.map(r=>new Date(r.t));
-      const y = rows.map(r=>r.v||0);(r.t));
+      const y = rows.map(r=>r.v||0);
       const col = rows.map(r=> (r.c>=r.o? css('--c-up'): css('--c-down')) );
       return { type:'bar', name:'Volume', x, y, yaxis:'y2', marker:{ color: col, opacity:0.28 }, visible:false, hoverinfo:'skip' };
-    } return [
-    function rsiTrace(rows){de:'lines', name:'MACD', x, y:macd, yaxis:'y4', line:{ color: css('--c-macd'), width:1.4 }, visible:false, hoverinfo:'skip' },
-      const x = rows.map(r=>new Date(r.t));e:'Signal', x, y:signal, yaxis:'y4', line:{ color: '#94d9f8', width:1.2, dash:'dot' }, visible:false, hoverinfo:'skip' },
-      const y = RSI(rows.map(r=>r.c), 14); y:hist, yaxis:'y4', marker:{ color: col, opacity:.4 }, visible:false, hoverinfo:'skip' }
+    }
+    function rsiTrace(rows){
+      const x = rows.map(r=>new Date(r.t));
+      const y = RSI(rows.map(r=>r.c), 14);
       return { type:'scatter', mode:'lines', name:'RSI 14', x, y, yaxis:'y3', line:{ color: css('--c-rsi'), width:1.4 }, visible:false, hoverinfo:'skip' };
     }
     function macdTraces(rows){
       const x = rows.map(r=>new Date(r.t));
       const { macd, signal, hist } = MACD(rows.map(r=>r.c));
       const col = hist.map(v=> v>=0? css('--c-up') : css('--c-down'));
-      return [nal thin lines for Tenkan/Kijun/Chikou
-        { type:'scatter', mode:'lines', name:'MACD', x, y:macd, yaxis:'y4', line:{ color: css('--c-macd'), width:1.4 }, visible:false, hoverinfo:'skip' },info:'skip', showlegend:false, meta:'ICHI' });
-        { type:'scatter', mode:'lines', name:'Signal', x, y:signal, yaxis:'y4', line:{ color: '#94d9f8', width:1.2, dash:'dot' }, visible:false, hoverinfo:'skip' },showlegend:false, meta:'ICHI' });
-        { type:'bar', name:'Histogram', x, y:hist, yaxis:'y4', marker:{ color: col, opacity:.4 }, visible:false, hoverinfo:'skip' } visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
-      ]; Build cloud segments: green where Span A >= Span B, red otherwise
-    } const sa = ichi.spanA, sb = ichi.spanB; const n = x.length;
+      return [
+        { type:'scatter', mode:'lines', name:'MACD', x, y:macd, yaxis:'y4', line:{ color: css('--c-macd'), width:1.4 }, visible:false, hoverinfo:'skip' },
+        { type:'scatter', mode:'lines', name:'Signal', x, y:signal, yaxis:'y4', line:{ color: '#94d9f8', width:1.2, dash:'dot' }, visible:false, hoverinfo:'skip' },
+        { type:'bar', name:'Histogram', x, y:hist, yaxis:'y4', marker:{ color: col, opacity:.4 }, visible:false, hoverinfo:'skip' }
+      ];
+    }
     function ichiTraces(rows){
-      const x = rows.map(r=>new Date(r.t));, lower, color, label){
+      const x = rows.map(r=>new Date(r.t));
       const ichi = Ichimoku(rows);
-      const traces = [];no fill), then upper with fill to previous
-      // optional thin lines for Tenkan/Kijun/Chikouname:label+' base', x:xSeg, y:lower, line:{ color:'rgba(0,0,0,0)', width:0.5 }, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
-      traces.push({ type:'scatter', mode:'lines', name:'Tenkan', x, y:ichi.tenkan, line:{ color: css('--c-ichi-tenkan'), width:1.2 }, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });d:false, meta:'ICHI' });
+      const traces = [];
+      traces.push({ type:'scatter', mode:'lines', name:'Tenkan', x, y:ichi.tenkan, line:{ color: css('--c-ichi-tenkan'), width:1.2 }, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
       traces.push({ type:'scatter', mode:'lines', name:'Kijun', x, y:ichi.kijun, line:{ color: css('--c-ichi-kijun'), width:1.2 }, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
       traces.push({ type:'scatter', mode:'lines', name:'Chikou', x, y:ichi.chikou, line:{ color: css('--c-ichi-chikou'), width:1 }, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
-      // Build cloud segments: green where Span A >= Span B, red otherwise
-      const sa = ichi.spanA, sb = ichi.spanB; const n = x.length;(sb[i]))) i++;
-      let i = 0; break;
+      const sa = ichi.spanA, sb = ichi.spanB; const n = x.length;
+      let i = 0;
       function pushCloudSegment(xSeg, upper, lower, color, label){
-        if(xSeg.length<2) return; bSeg=[];
-        // lower first (no fill), then upper with fill to previousi]) && ((sa[i]>=sb[i])===up)){
+        if(xSeg.length<2) return;
         traces.push({ type:'scatter', mode:'lines', name:label+' base', x:xSeg, y:lower, line:{ color:'rgba(0,0,0,0)', width:0.5 }, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
         traces.push({ type:'scatter', mode:'lines', name:label, x:xSeg, y:upper, line:{ color:'rgba(0,0,0,0)', width:0.5 }, fill:'tonexty', fillcolor: color, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
-      } const color = up ? css('--c-ichi-up') : css('--c-ichi-down');
-      while(i<n){er = up ? aSeg : bSeg;
-        // advance to first finite pair
-        while(i<n && (!Number.isFinite(sa[i]) || !Number.isFinite(sb[i]))) i++;;
+      }
+      while(i<n){
+        while(i<n && (!Number.isFinite(sa[i]) || !Number.isFinite(sb[i]))) i++;
         if(i>=n) break;
         const up = sa[i] >= sb[i];
         const xSeg = [], aSeg=[], bSeg=[];
         while(i<n && Number.isFinite(sa[i]) && Number.isFinite(sb[i]) && ((sa[i]>=sb[i])===up)){
           xSeg.push(x[i]); aSeg.push(sa[i]); bSeg.push(sb[i]); i++;
-        }ion setChip(key, on){
-        const color = up ? css('--c-ichi-up') : css('--c-ichi-down');`);
+        }
+        const color = up ? css('--c-ichi-up') : css('--c-ichi-down');
         const upper = up ? aSeg : bSeg;
-        const lower = up ? bSeg : aSeg;!on);
+        const lower = up ? bSeg : aSeg;
         pushCloudSegment(xSeg, upper, lower, color, up?'Cloud Up':'Cloud Down');
       }
-      return traces;bilityByNames(names, on){
-    } const ids = [];
-      (els.chart?.data||[]).forEach((t,idx)=>{ if(t && names.includes(t.name)) ids.push(idx); });
-    // === Overlay helpers (restored) ===hart, { visible: on }, ids);
+      return traces;
+    }
+
+    // === Overlay helpers ===
     function setChip(key, on){
       const chip = els.toggles?.querySelector(`.chip[data-k="${key}"]`);
-      if(!chip) return;=='SMA20'?'SMA 20': key==='SMA50'?'SMA 50':'SMA 200';
-      chip.classList.toggle('active', !!on);hip(key, on);
+      if(!chip) return;
+      chip.classList.toggle('active', !!on);
       chip.setAttribute('aria-pressed', on ? 'true' : 'false');
-    }unction setRSI(on){ setVisibilityByNames(['RSI 14'], on); setChip('RSI', on); }
-    function setVisibilityByNames(names, on){s(['MACD','Signal','Histogram'], on); setChip('MACD', on); }
-      const ids = [];n){ setVisibilityByNames(['Volume'], on); setChip('VOL', on); }
+    }
+    function setVisibilityByNames(names, on){
+      const ids = [];
       (els.chart?.data||[]).forEach((t,idx)=>{ if(t && names.includes(t.name)) ids.push(idx); });
       if(ids.length) Plotly.restyle(els.chart, { visible: on }, ids);
-    } (els.chart?.data||[]).forEach((t,idx)=>{ if(t?.meta==='ICHI') ids.push(idx); });
-    function setSMAVisibility(key, on){.chart, { visible: on }, ids);
+    }
+    function setSMAVisibility(key, on){
       const name = key==='SMA20'?'SMA 20': key==='SMA50'?'SMA 50':'SMA 200';
       setVisibilityByNames([name], on); setChip(key, on);
-    }unction setAutoFib(on){
+    }
     function setRSI(on){ setVisibilityByNames(['RSI 14'], on); setChip('RSI', on); }
     function setMACD(on){ setVisibilityByNames(['MACD','Signal','Histogram'], on); setChip('MACD', on); }
     function setVOL(on){ setVisibilityByNames(['Volume'], on); setChip('VOL', on); }
-    function setICHI(on){.fibShapes||[]).map(s=>({ ...s, __fib:true }));
-      const ids = [];on ? [...others, ...fibs] : [...others];
+    function setICHI(on){
+      const ids = [];
       (els.chart?.data||[]).forEach((t,idx)=>{ if(t?.meta==='ICHI') ids.push(idx); });
       if(ids.length) Plotly.restyle(els.chart, { visible: on }, ids);
       setChip('ICHI', on);
-    }unction setSessions(on){
-    function setAutoFib(on){n;
-      state.fibOn = !!on;n shapes for current rows
-      const base = els.chart?.layout?.shapes||[];;
-      const others = base.filter(s=>!s.__fib);On ? makeSessionDecor(state.rows) : { shapes:[], annotations:[] };
+    }
+    function setAutoFib(on){
+      state.fibOn = !!on;
+      const base = els.chart?.layout?.shapes||[];
+      const others = base.filter(s=>!s.__fib);
       const fibs = (state.fibShapes||[]).map(s=>({ ...s, __fib:true }));
-      const shapes = on ? [...others, ...fibs] : [...others];bs and any other shapes
-      Plotly.relayout(els.chart, { shapes });..others, ...decor.shapes.map(s=>({ ...s, __session:true }))] : [...others];
-      setChip('AUTOFIB', on);ges to avoid autoscale/squish
-    } const yRange = els.chart?.layout?.yaxis?.range ? [...els.chart.layout.yaxis.range] : null;
-    function setSessions(on){t?.layout?.xaxis?.range ? [...els.chart.layout.xaxis.range] : null;
-      state.sessionsOn = !!on;wShapes, annotations: (state.sessionsOn ? decor.annotations : []) };
-      // Recompute session shapes for current rows
+      const shapes = on ? [...others, ...fibs] : [...others];
+      Plotly.relayout(els.chart, { shapes });
+      setChip('AUTOFIB', on);
+    }
+    function setSessions(on){
+      state.sessionsOn = !!on;
       const intraday = isIntraday(state.interval);
       const decor = intraday && state.sessionsOn ? makeSessionDecor(state.rows) : { shapes:[], annotations:[] };
       const base = els.chart?.layout?.shapes||[];
-      const others = base.filter(s=>!s.__session); // keep fibs and any other shapes
+      const others = base.filter(s=>!s.__session);
       const newShapes = state.sessionsOn ? [...others, ...decor.shapes.map(s=>({ ...s, __session:true }))] : [...others];
-      // Preserve current ranges to avoid autoscale/squish
       const yRange = els.chart?.layout?.yaxis?.range ? [...els.chart.layout.yaxis.range] : null;
       const xRange = els.chart?.layout?.xaxis?.range ? [...els.chart.layout.xaxis.range] : null;
       const upd = { shapes: newShapes, annotations: (state.sessionsOn ? decor.annotations : []) };
       if(yRange) upd['yaxis.range'] = yRange;
-      if(xRange) upd['xaxis.range'] = xRange;ive');
-      Plotly.relayout(els.chart, upd);      return void setSMAVisibility(key, on);
-      setChip('SESS', on);eturn void setRSI(on);
-    } if(key==='MACD')   return void setMACD(on);
-      if(key==='VOL')    return void setVOL(on);
-    // Toggle click handlingurn void setICHI(on);
-    els.toggles?.addEventListener('click', (e)=>{n);
-      const btn = e.target.closest('.chip');ions(on);
+      if(xRange) upd['xaxis.range'] = xRange;
+      Plotly.relayout(els.chart, upd);
+      setChip('SESS', on);
+    }
+
+    // Toggle click handling
+    els.toggles?.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.chip');
       if(!btn) return;
       const key = btn.getAttribute('data-k');
-      const on = !btn.classList.contains('active');} = {}){
+      const on = !btn.classList.contains('active');
       if(/^SMA(20|50|200)$/.test(key))      return void setSMAVisibility(key, on);
       if(key==='RSI')    return void setRSI(on);
       if(key==='MACD')   return void setMACD(on);
-      if(key==='VOL')    return void setVOL(on);), 'SMA 20'),
-      if(key==='ICHI')   return void setICHI(on);, 'SMA 50'),
-      if(key==='AUTOFIB')return void setAutoFib(on); 'SMA 200'),
+      if(key==='VOL')    return void setVOL(on);
+      if(key==='ICHI')   return void setICHI(on);
+      if(key==='AUTOFIB')return void setAutoFib(on);
       if(key==='SESS')   return void setSessions(on);
-    }); rsiTrace(state.rows),
-        ...macdTraces(state.rows),
+    });
+
     async function plot(ticker, { resetChips=false } = {}){
       state.rows = await fetchRows(ticker, state.range, state.interval);
-      const traces = [uildLayout({ rows: state.rows, interval: state.interval });
-        candleTrace(state.rows),hapes(state.rows);
-        smaTrace(state.rows, 20, css('--c-sma20'), 'SMA 20'),ayModeBar:false, responsive:true });
+      const traces = [
+        candleTrace(state.rows),
+        smaTrace(state.rows, 20, css('--c-sma20'), 'SMA 20'),
         smaTrace(state.rows, 50, css('--c-sma50'), 'SMA 50'),
-        smaTrace(state.rows, 200, css('--c-sma200'), 'SMA 200'),OFIB'].forEach(k=>setChip(k,false));
-        volTrace(state.rows),.sessionsOn);
+        smaTrace(state.rows, 200, css('--c-sma200'), 'SMA 200'),
+        volTrace(state.rows),
         rsiTrace(state.rows),
-        ...macdTraces(state.rows),les.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');
-        ...ichiTraces(state.rows) on('SMA20'));
-      ];setSMAVisibility('SMA50', on('SMA50'));
+        ...macdTraces(state.rows),
+        ...ichiTraces(state.rows)
+      ];
       const layout = buildLayout({ rows: state.rows, interval: state.interval });
       state.fibShapes = makeFibShapes(state.rows);
       await Plotly.newPlot(els.chart, traces, layout, { displayModeBar:false, responsive:true });
-      if(resetChips){L'));
+      if(resetChips){
         ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
         setChip('SESS', state.sessionsOn);
-      } else {sions(on('SESS'));
+      } else {
         const on = k => !!els.toggles.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');
         setSMAVisibility('SMA20', on('SMA20'));
         setSMAVisibility('SMA50', on('SMA50'));
         setSMAVisibility('SMA200', on('SMA200'));
-        setRSI(on('RSI'));frame(range, interval){
-        setMACD(on('MACD'));5|15|60)m$/.test(interval);
+        setRSI(on('RSI'));
+        setMACD(on('MACD'));
         setVOL(on('VOL'));
-        setICHI(on('ICHI'));{
-        setAutoFib(on('AUTOFIB'));,'2d','5d','10d','1mo','3mo','6mo']);
-        setSessions(on('SESS'));ge = '3mo';
-      } } else {
-    }     const ok = new Set(['1d','2d','5d','10d']);
-          if(!ok.has(range)) range = '10d';
+        setICHI(on('ICHI'));
+        setAutoFib(on('AUTOFIB'));
+        setSessions(on('SESS'));
+      }
+    }
+
     // --- Timeframe selection handlers ---
     function normalizeTimeframe(range, interval){
       const isMinute = /^(1|5|15|60)m$/.test(interval);
       if(isMinute){
         if(interval==='60m'){
           const ok = new Set(['1d','2d','5d','10d','1mo','3mo','6mo']);
-          if(!ok.has(range)) range = '3mo';, interval);
-        } else {e = norm.range; state.interval = norm.interval;
-          const ok = new Set(['1d','2d','5d','10d']);nged values
-          if(!ok.has(range)) range = '10d';== state.range) els.timeSel.value = state.range;
-        }els.freqSel && els.freqSel.value !== state.interval) els.freqSel.value = state.interval;
-      }wait plot(state.ticker); // preserve chip states
+          if(!ok.has(range)) range = '3mo';
+        } else {
+          const ok = new Set(['1d','2d','5d','10d']);
+          if(!ok.has(range)) range = '10d';
+        }
+      }
       return { range, interval };
     }
 
     async function applyTimeframe(range, interval){
-      const norm = normalizeTimeframe(range, interval);l?.value || state.interval;
+      const norm = normalizeTimeframe(range, interval);
       state.range = norm.range; state.interval = norm.interval;
-      // reflect back to selects if normalization changed values
       if(els.timeSel && els.timeSel.value !== state.range) els.timeSel.value = state.range;
       if(els.freqSel && els.freqSel.value !== state.interval) els.freqSel.value = state.interval;
-      await plot(state.ticker); // preserve chip states
+      await plot(state.ticker);
       await refreshQuoteOnce();
     }
-    // --- Autocomplete ---
+
     els.timeSel?.addEventListener('change', ()=>{
       const r = els.timeSel.value; const i = els.freqSel?.value || state.interval;
-      applyTimeframe(r, i).catch(console.error); { cache:'no-store' });
-    }); if(!r.ok) return;
+      applyTimeframe(r, i).catch(console.error);
+    });
     els.freqSel?.addEventListener('change', ()=>{
       const r = els.timeSel?.value || state.range; const i = els.freqSel.value;
-      applyTimeframe(r, i).catch(console.error); ticker symbol
-    }); for(const raw of lines){
-          const line = raw.trim();
-    // --- Autocomplete ---e;
-    async function loadSymbols(){udes('|') ? '|' : ','; // support both formats
-      try{let [symRaw, ...nameParts] = line.split(delim);
+      applyTimeframe(r, i).catch(console.error);
+    });
+
+    // --- Autocomplete ---
+    async function loadSymbols(){
+      try{
         const r = await fetch('/stock_data.csv', { cache:'no-store' });
-        if(!r.ok) return;rows like "Symbol" or "Symbol|Company"
-        const txt = await r.text(); || sym==='SYMBOL|COMPANY') continue;
+        if(!r.ok) return;
+        const txt = await r.text();
         const lines = txt.split(/\r?\n/).filter(Boolean);
-        const map = new Map(); // de-dup by pure ticker symbol sym may contain a pipe and company. Fix that.
+        const map = new Map();
         for(const raw of lines){
-          const line = raw.trim();sym.split('|');
-          if(!line) continue;oUpperCase();
-          const delim = line.includes('|') ? '|' : ','; // support both formats
+          const line = raw.trim(); if(!line) continue;
+          const delim = line.includes('|') ? '|' : ',';
           let [symRaw, ...nameParts] = line.split(delim);
           let sym = (symRaw||'').trim().toUpperCase();
-          // Skip header rows like "Symbol" or "Symbol|Company"
           if(!sym || sym==='SYMBOL' || sym==='SYMBOL|COMPANY') continue;
           let name = (nameParts.join(delim)||'').trim();
-          // If the file was pipe-delimited but read as comma, sym may contain a pipe and company. Fix that.
-          if(sym.includes('|')){Y\s+SHARES|CLASS\s+[A-Z]).*$/i,'')
-            const [s2, ...rest] = sym.split('|');
-            sym = s2.trim().toUpperCase();
-            if(!name) name = rest.join('|').trim();
-          } map.set(sym, { sym, name, nameU: (name||'').toUpperCase() });
-          // Basic cleanup
+          if(sym.includes('|')){ const [s2, ...rest] = sym.split('|'); sym = s2.trim().toUpperCase(); if(!name) name = rest.join('|').trim(); }
           name = name
-            .replace(/\s+/g,' ')om(map.values());
+            .replace(/\s+/g,' ')
             .replace(/\s*-\s*ADR.*$/i,'')
             .replace(/\b(COMMON|PREFERRED)\s+STOCK.*$/i,'')
             .replace(/\b(ORDINARY\s+SHARES|CLASS\s+[A-Z]).*$/i,'')
             .replace(/^\|+/,'')
-            .trim();turn;
-          if(!map.has(sym)){ls.ac.classList.remove('show'); els.ac.innerHTML=''; state.acMatches=[]; state.acIndex=-1; return; }
-            map.set(sym, { sym, name, nameU: (name||'').toUpperCase() });
-          }c.innerHTML = matches.map((m,i)=>
-        }<div class="ac-item" data-idx="${i}">\n           <div class="ticker">${m.sym}</div>\n           <div class="company">${m.name||''}</div>\n         </div>`).join('');
+            .trim();
+          if(!map.has(sym)) map.set(sym, { sym, name, nameU: (name||'').toUpperCase() });
+        }
         state.symbols = Array.from(map.values());
       }catch{}
     }
-    function updateAC(){
-    function renderAC(matches){||'').trim();
-      if(!els.ac) return;[]); return; }
+
+    function renderAC(matches){
+      if(!els.ac) return;
       if(!matches.length){ els.ac.classList.remove('show'); els.ac.innerHTML=''; state.acMatches=[]; state.acIndex=-1; return; }
       state.acMatches = matches; state.acIndex = -1;
       els.ac.innerHTML = matches.map((m,i)=>
         `<div class="ac-item" data-idx="${i}">\n           <div class="ticker">${m.sym}</div>\n           <div class="company">${m.name||''}</div>\n         </div>`).join('');
-      els.ac.classList.add('show');| s.nameU.includes(term)){
-    }     best.push(s); seen.add(s.sym);
-          if(best.length>=30) break;
+      els.ac.classList.add('show');
+    }
+
     function updateAC(){
       const val = (els.q?.value||'').trim();
       if(!val){ renderAC([]); return; }
       const term = val.toUpperCase();
       const best = []; const seen = new Set();
-      for(const s of state.symbols){ updateAC);
-        if(seen.has(s.sym)) continue; // de-dup at match time too
+      for(const s of state.symbols){
+        if(seen.has(s.sym)) continue;
         if(s.sym.startsWith(term) || s.nameU.includes(term)){
-          best.push(s); seen.add(s.sym);contains('show');
-          if(best.length>=30) break;ngth;
-        }e.key==='ArrowDown' && acShown){
-      } e.preventDefault(); state.acIndex = (state.acIndex+1+max)%max; highlightAC();
-      renderAC(best);=='ArrowUp' && acShown){
-    }   e.preventDefault(); state.acIndex = (state.acIndex-1+max)%max; highlightAC();
-      }else if(e.key==='Enter'){
-    els.q?.addEventListener('input', updateAC);on is highlighted, choose it; otherwise search current text
-    els.q?.addEventListener('focus', updateAC);.acIndex<max){
-    els.q?.addEventListener('keydown', (e)=>{acMatches[state.acIndex]);
-      const acShown = els.ac?.classList.contains('show');
-      const max = state.acMatches.length;ssList.remove('show'); doSearch();
-      if(e.key==='ArrowDown' && acShown){
-        e.preventDefault(); state.acIndex = (state.acIndex+1+max)%max; highlightAC();
-      }else if(e.key==='ArrowUp' && acShown){
-        e.preventDefault(); state.acIndex = (state.acIndex-1+max)%max; highlightAC();
-      }else if(e.key==='Enter'){
-        // Always fetch on Enter: if a suggestion is highlighted, choose it; otherwise search current text
-        if(acShown && state.acIndex>=0 && state.acIndex<max){
-          e.preventDefault(); chooseAC(state.acMatches[state.acIndex]);
-        }else{rEach((el,i)=> el.classList.toggle('active', i===state.acIndex));
-          e.preventDefault(); els.ac?.classList.remove('show'); doSearch();
-        }ion chooseAC(item){
-      }else if(e.key==='Escape' && acShown){
-        els.ac.classList.remove('show');// fill TICKER only
-      }ls.ac?.classList.remove('show');
-    });oSearch();
+          best.push(s); seen.add(s.sym);
+          if(best.length>=30) break;
+        }
+      }
+      renderAC(best);
     }
-    function highlightAC(){r('mousedown', (e)=>{
+
+    els.q?.addEventListener('input', updateAC);
+    els.q?.addEventListener('focus', updateAC);
+    els.q?.addEventListener('keydown', (e)=>{
+      const acShown = els.ac?.classList.contains('show');
+      const max = state.acMatches.length;
+      if(e.key==='ArrowDown' && acShown){ e.preventDefault(); state.acIndex = (state.acIndex+1+max)%max; highlightAC(); }
+      else if(e.key==='ArrowUp' && acShown){ e.preventDefault(); state.acIndex = (state.acIndex-1+max)%max; highlightAC(); }
+      else if(e.key==='Enter'){
+        if(acShown && state.acIndex>=0 && state.acIndex<max){ e.preventDefault(); chooseAC(state.acMatches[state.acIndex]); }
+        else { e.preventDefault(); els.ac?.classList.remove('show'); doSearch(); }
+      } else if(e.key==='Escape' && acShown){ els.ac.classList.remove('show'); }
+    });
+
+    function highlightAC(){
       const items = els.ac?.querySelectorAll('.ac-item')||[];
       items.forEach((el,i)=> el.classList.toggle('active', i===state.acIndex));
-    } const idx = +it.getAttribute('data-idx');
-    function chooseAC(item){es[idx]);
+    }
+    function chooseAC(item){
       if(!item) return;
-      if(els.q) els.q.value = item.sym; // fill TICKER onlys.ac?.classList.remove('show'), 120));
+      if(els.q) els.q.value = item.sym;
       els.ac?.classList.remove('show');
       doSearch();
-    }sync function doSearch(){
-    els.ac?.addEventListener('mousedown', (e)=>{perCase();
-      const it = e.target.closest('.ac-item');
-      if(!it) return;t;
-      const idx = +it.getAttribute('data-idx');le.error(err));
-      chooseAC(state.acMatches[idx]);allbacks can use fresh rows
-    });tartQuoteTimer();
+    }
+    els.ac?.addEventListener('mousedown', (e)=>{
+      const it = e.target.closest('.ac-item'); if(!it) return;
+      const idx = +it.getAttribute('data-idx');
+      chooseAC(state.acMatches[idx]);
+    });
     els.q?.addEventListener('blur', ()=> setTimeout(()=> els.ac?.classList.remove('show'), 120));
-      await refreshQuoteOnce();
+
     // Search
-    async function doSearch(){tener('click', ()=>{ doSearch(); });
-      const t = (els.q?.value || '').trim().toUpperCase();rch();
+    async function doSearch(){
+      const t = (els.q?.value || '').trim().toUpperCase();
       if(!t) return;
-      state.ticker = t;idth controls
-      await plot(state.ticker).catch(err=>console.error(err));k', ()=>{
-      // Start quotes after plot so fallbacks can use fresh rowsde');
+      state.ticker = t;
+      await plot(state.ticker).catch(console.error);
       startQuoteTimer();
-      // Also refresh once right now to populate all fieldsick', ()=>{
-      await refreshQuoteOnce();ElementById('chartCard');
-    } if(!card) return;
+      await refreshQuoteOnce();
+    }
     els.searchBtn?.addEventListener('click', ()=>{ doSearch(); });
-    // unified Enter handler defined above will call doSearch();
-      // Update button label
-    // Fullscreen and width controlsctor('#maxBtn .tool-txt');
+
+    // Fullscreen and width controls
     document.getElementById('wideBtn')?.addEventListener('click', ()=>{
       document.querySelector('.container')?.classList.toggle('wide');
-    });etTimeout(()=>{ if(els.chart) Plotly.Plots.resize(els.chart); }, 60);
-    document.getElementById('maxBtn')?.addEventListener('click', ()=>{
-      const card = document.getElementById('chartCard');
-      if(!card) return;FF (indicators), sessions default ON, load symbols, plot default, start live quotes
-      const makeMax = !card.classList.contains('max');','AUTOFIB'].forEach(k=>setChip(k,false));
-      card.classList.toggle('max', makeMax);
-      // Update button label
-      const txt = document.querySelector('#maxBtn .tool-txt');catch(console.error); startQuoteTimer(); await refreshQuoteOnce(); })();
-      if(txt) txt.textContent = makeMax ? 'Exit' : 'Max'; Plotly.Plots.resize(els.chart); });
-      // Resize plot
       setTimeout(()=>{ if(els.chart) Plotly.Plots.resize(els.chart); }, 60);
     });
-</html>    // Initial: chips OFF (indicators), sessions default ON, load symbols, plot default, start live quotes    ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
+    document.getElementById('maxBtn')?.addEventListener('click', ()=>{
+      const card = document.getElementById('chartCard');
+      if(!card) return;
+      const makeMax = !card.classList.contains('max');
+      card.classList.toggle('max', makeMax);
+      const txt = document.querySelector('#maxBtn .tool-txt');
+      if(txt) txt.textContent = makeMax ? 'Exit' : 'Max';
+      setTimeout(()=>{ if(els.chart) Plotly.Plots.resize(els.chart); }, 60);
+    });
+
+    // Initial setup
+    ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
+    setChip('SESS', state.sessionsOn);
+    loadSymbols();
+    (async()=>{ await plot(state.ticker, { resetChips:true }).catch(console.error); startQuoteTimer(); await refreshQuoteOnce(); })();
+    window.addEventListener('resize', ()=>{ if(els.chart) Plotly.Plots.resize(els.chart); });
+  })();
+  </script>
+</body>
+</html>
