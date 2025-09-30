@@ -84,13 +84,14 @@
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s}
   /* Chip base colors (fixed typos) */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);} 
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);} 
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;} 
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;} 
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;} 
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;} 
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
+  .chip[data-k="SESS"]{border-color:#93c5fd;color:#93c5fd}
 
   /* Active backgrounds (kept) */
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -101,6 +102,7 @@
   .chip.active[data-k="VOL"]{background:rgba(16,185,129,.12)}
   .chip.active[data-k="AUTOFIB"]{background:rgba(139,92,246,.12)}
   .chip.active[data-k="ICHI"]{background:rgba(96,165,250,.12)}
+  .chip.active[data-k="SESS"]{background:rgba(147,197,253,.12)}
 
   /* Bright glow for active chips only (already present; keep it)
      This guarantees inactive chips have NO glow. */
@@ -262,6 +264,7 @@
         <button class="chip" data-k="VOL" type="button" aria-pressed="false">Volume</button>
         <button class="chip" id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
         <button class="chip" data-k="ICHI" type="button" aria-pressed="false">Ichimoku</button>
+        <button class="chip" data-k="SESS" type="button" aria-pressed="true" title="Toggle pre/post-market bands">Pre/Post</button>
       </div>
 
       <div id="chart"></div>
@@ -354,7 +357,7 @@
       ivLine: document.getElementById('ivLine'),
       headline: document.getElementById('headline')
     };
-    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null, fibOn:false, fibShapes:[] };
+    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null, fibOn:false, fibShapes:[], sessionsOn:true };
     const isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 
     // Cache timeframe selects
@@ -577,7 +580,7 @@
     function buildLayout(opts={}){
       const { rows=[], interval=state.interval } = opts;
       const intraday = isIntraday(interval);
-      const decor = makeSessionDecor(rows);
+      const decor = intraday ? makeSessionDecor(rows) : { shapes:[], annotations:[] };
       const layout = {
         margin: { l: 56, r: 24, t: 18, b: 28 },
         paper_bgcolor: 'rgba(0,0,0,0)',
@@ -590,8 +593,8 @@
         yaxis3: { overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
         yaxis4: { overlaying:'y', side:'right', showgrid:false, showticklabels:false },
         font: { color: css('--text') },
-        shapes: decor.shapes,
-        annotations: decor.annotations
+        shapes: state.sessionsOn ? decor.shapes.map(s=>({ ...s, __session:true })) : [],
+        annotations: state.sessionsOn ? decor.annotations : []
       };
       if(intraday){
         layout.xaxis.rangebreaks = [
@@ -604,11 +607,16 @@
 
     function candleTrace(rows){
       const x = rows.map(r=>new Date(r.t));
+      const dateFmt = isIntraday(state.interval) ? '%b %d, %Y %H:%M' : '%b %d, %Y';
       return {
         type: 'candlestick', name: 'Price', x,
         open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c),
         increasing: { line: { color: css('--c-up') } },
-        decreasing: { line: { color: css('--c-down') } }
+        decreasing: { line: { color: css('--c-down') } },
+        hovertemplate: `<b>%{x|${dateFmt}}</b><br>` +
+                       `High: $%{high:,.2f}<br>` +
+                       `Low: $%{low:,.2f}` +
+                       `<extra></extra>`
       };
     }
 
@@ -706,6 +714,17 @@
       Plotly.relayout(els.chart, { shapes });
       setChip('AUTOFIB', on);
     }
+    function setSessions(on){
+      state.sessionsOn = !!on;
+      // Recompute session shapes for current rows
+      const intraday = isIntraday(state.interval);
+      const decor = intraday && state.sessionsOn ? makeSessionDecor(state.rows) : { shapes:[], annotations:[] };
+      const base = els.chart?.layout?.shapes||[];
+      const others = base.filter(s=>!s.__session); // keep fibs and any other shapes
+      const newShapes = state.sessionsOn ? [...others, ...decor.shapes.map(s=>({ ...s, __session:true }))] : [...others];
+      Plotly.relayout(els.chart, { shapes: newShapes, annotations: (state.sessionsOn ? decor.annotations : []) });
+      setChip('SESS', on);
+    }
 
     // Toggle click handling
     els.toggles?.addEventListener('click', (e)=>{
@@ -719,6 +738,7 @@
       if(key==='VOL')    return void setVOL(on);
       if(key==='ICHI')   return void setICHI(on);
       if(key==='AUTOFIB')return void setAutoFib(on);
+      if(key==='SESS')   return void setSessions(on);
     });
 
     async function plot(ticker, { resetChips=false } = {}){
@@ -738,6 +758,7 @@
       await Plotly.newPlot(els.chart, traces, layout, { displayModeBar:false, responsive:true });
       if(resetChips){
         ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
+        setChip('SESS', state.sessionsOn);
       } else {
         const on = k => !!els.toggles.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');
         setSMAVisibility('SMA20', on('SMA20'));
@@ -748,6 +769,7 @@
         setVOL(on('VOL'));
         setICHI(on('ICHI'));
         setAutoFib(on('AUTOFIB'));
+        setSessions(on('SESS'));
       }
     }
 
@@ -901,8 +923,25 @@
     els.searchBtn?.addEventListener('click', ()=>{ doSearch(); });
     // unified Enter handler defined above will call doSearch();
 
-    // Initial: chips OFF, load symbols, plot default, start live quotes
+    // Fullscreen and width controls
+    document.getElementById('wideBtn')?.addEventListener('click', ()=>{
+      document.querySelector('.container')?.classList.toggle('wide');
+    });
+    document.getElementById('maxBtn')?.addEventListener('click', ()=>{
+      const card = document.getElementById('chartCard');
+      if(!card) return;
+      const makeMax = !card.classList.contains('max');
+      card.classList.toggle('max', makeMax);
+      // Update button label
+      const txt = document.querySelector('#maxBtn .tool-txt');
+      if(txt) txt.textContent = makeMax ? 'Exit' : 'Max';
+      // Resize plot
+      setTimeout(()=>{ if(els.chart) Plotly.Plots.resize(els.chart); }, 60);
+    });
+
+    // Initial: chips OFF (indicators), sessions default ON, load symbols, plot default, start live quotes
     ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
+    setChip('SESS', state.sessionsOn);
     loadSymbols();
     (async()=>{ await plot(state.ticker, { resetChips:true }).catch(console.error); startQuoteTimer(); await refreshQuoteOnce(); })();
     window.addEventListener('resize', ()=>{ if(els.chart) Plotly.Plots.resize(els.chart); });
