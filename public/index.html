@@ -357,6 +357,10 @@
     const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null, fibOn:false, fibShapes:[] };
     const isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 
+    // Cache timeframe selects
+    els.timeSel = document.getElementById('timeSel');
+    els.freqSel = document.getElementById('freqSel');
+
     // Utilities
     const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
     const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
@@ -644,7 +648,7 @@
       return traces;
     }
 
-    async function plot(ticker){
+    async function plot(ticker, { resetChips=false } = {}){
       state.rows = await fetchRows(ticker, state.range, state.interval);
       const traces = [
         candleTrace(state.rows),
@@ -659,57 +663,54 @@
       const layout = buildLayout();
       state.fibShapes = makeFibShapes(state.rows); // prepared but not shown until toggled
       await Plotly.newPlot(els.chart, traces, layout, { displayModeBar:false, responsive:true });
-      // Ensure buttons reflect off state on first render
-      ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
+      if(resetChips){
+        ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
+      } else {
+        // Reapply user-selected overlays after replot
+        const on = k => !!els.toggles.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');
+        setSMAVisibility('SMA20', on('SMA20'));
+        setSMAVisibility('SMA50', on('SMA50'));
+        setSMAVisibility('SMA200', on('SMA200'));
+        setRSI(on('RSI'));
+        setMACD(on('MACD'));
+        setVOL(on('VOL'));
+        setICHI(on('ICHI'));
+        setAutoFib(on('AUTOFIB'));
+      }
     }
 
-    function setChip(key, on){
-      const chip = els.toggles.querySelector(`.chip[data-k="${key}"]`);
-      if(!chip) return;
-      chip.classList.toggle('active', !!on);
-      chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+    // --- Timeframe selection handlers ---
+    function normalizeTimeframe(range, interval){
+      const isMinute = /^(1|5|15|60)m$/.test(interval);
+      if(isMinute){
+        if(interval==='60m'){
+          const ok = new Set(['1d','2d','5d','10d','1mo','3mo','6mo']);
+          if(!ok.has(range)) range = '3mo';
+        } else {
+          const ok = new Set(['1d','2d','5d','10d']);
+          if(!ok.has(range)) range = '10d';
+        }
+      }
+      return { range, interval };
     }
 
-    function setVisibilityByNames(names, on){
-      const ids = [];
-      (els.chart?.data||[]).forEach((t,idx)=>{ if(t && names.includes(t.name)) ids.push(idx); });
-      if(ids.length) Plotly.restyle(els.chart, { visible: on }, ids);
-    }
-    function setSMAVisibility(key, on){
-      const name = key==='SMA20'?'SMA 20': key==='SMA50'?'SMA 50':'SMA 200';
-      setVisibilityByNames([name], on); setChip(key, on);
-    }
-    function setRSI(on){ setVisibilityByNames(['RSI 14'], on); setChip('RSI', on); }
-    function setMACD(on){ setVisibilityByNames(['MACD','Signal','Histogram'], on); setChip('MACD', on); }
-    function setVOL(on){ setVisibilityByNames(['Volume'], on); setChip('VOL', on); }
-    function setICHI(on){
-      const ids = [];
-      (els.chart?.data||[]).forEach((t,idx)=>{ if(t?.meta==='ICHI') ids.push(idx); });
-      if(ids.length) Plotly.restyle(els.chart, { visible: on }, ids);
-      setChip('ICHI', on);
-    }
-    function setAutoFib(on){
-      state.fibOn = !!on;
-      const base = els.chart?.layout?.shapes||[];
-      const others = base.filter(s=>!s.__fib);
-      const fibs = (state.fibShapes||[]).map(s=>({ ...s, __fib:true }));
-      const shapes = on ? [...others, ...fibs] : [...others];
-      Plotly.relayout(els.chart, { shapes });
-      setChip('AUTOFIB', on);
+    async function applyTimeframe(range, interval){
+      const norm = normalizeTimeframe(range, interval);
+      state.range = norm.range; state.interval = norm.interval;
+      // reflect back to selects if normalization changed values
+      if(els.timeSel && els.timeSel.value !== state.range) els.timeSel.value = state.range;
+      if(els.freqSel && els.freqSel.value !== state.interval) els.freqSel.value = state.interval;
+      await plot(state.ticker); // preserve chip states
+      await refreshQuoteOnce();
     }
 
-    // Toggle handlers
-    els.toggles?.addEventListener('click', (e)=>{
-      const btn = e.target.closest('.chip');
-      if(!btn) return;
-      const key = btn.getAttribute('data-k');
-      const on = !btn.classList.contains('active');
-      if(/^SMA(20|50|200)$/.test(key))      return void setSMAVisibility(key, on);
-      if(key==='RSI')    return void setRSI(on);
-      if(key==='MACD')   return void setMACD(on);
-      if(key==='VOL')    return void setVOL(on);
-      if(key==='ICHI')   return void setICHI(on);
-      if(key==='AUTOFIB')return void setAutoFib(on);
+    els.timeSel?.addEventListener('change', ()=>{
+      const r = els.timeSel.value; const i = els.freqSel?.value || state.interval;
+      applyTimeframe(r, i).catch(console.error);
+    });
+    els.freqSel?.addEventListener('change', ()=>{
+      const r = els.timeSel?.value || state.range; const i = els.freqSel.value;
+      applyTimeframe(r, i).catch(console.error);
     });
 
     // --- Autocomplete ---
@@ -831,7 +832,7 @@
     // Initial: chips OFF, load symbols, plot default, start live quotes
     ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
     loadSymbols();
-    (async()=>{ await plot(state.ticker).catch(console.error); startQuoteTimer(); await refreshQuoteOnce(); })();
+    (async()=>{ await plot(state.ticker, { resetChips:true }).catch(console.error); startQuoteTimer(); await refreshQuoteOnce(); })();
     window.addEventListener('resize', ()=>{ if(els.chart) Plotly.Plots.resize(els.chart); });
   })();
   </script>
