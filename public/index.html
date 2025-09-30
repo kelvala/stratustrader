@@ -459,8 +459,8 @@
           { type:'rect', xref:'x', yref:'paper', x0:post0, x1:post1, y0:0, y1:1, fillcolor:'rgba(139,92,246,0.06)', line:{width:0}, layer:'below' }
         );
         annotations.push(
-          { x:new Date(y,m,day,4,10,0), y:1.02, xref:'x', yref:'paper', text:'Pre', showarrow:false, font:{size:10,color:'#93c5fd'} },
-          { x:new Date(y,m,day,16,10,0), y:1.02, xref:'x', yref:'paper', text:'Post', showarrow:false, font:{size:10,color:'#c4b5fd'} }
+          { x:new Date(y,m,day,4,10,0), y:0.98, xref:'x', yref:'paper', yanchor:'top', text:'Pre', showarrow:false, font:{size:10,color:'#93c5fd'} },
+          { x:new Date(y,m,day,16,10,0), y:0.98, xref:'x', yref:'paper', yanchor:'top', text:'Post', showarrow:false, font:{size:10,color:'#c4b5fd'} }
         );
       }
       return { shapes, annotations };
@@ -594,7 +594,8 @@
         yaxis4: { overlaying:'y', side:'right', showgrid:false, showticklabels:false },
         font: { color: css('--text') },
         shapes: state.sessionsOn ? decor.shapes.map(s=>({ ...s, __session:true })) : [],
-        annotations: state.sessionsOn ? decor.annotations : []
+        annotations: state.sessionsOn ? decor.annotations : [],
+        uirevision: `${state.ticker}|${state.range}|${state.interval}`
       };
       if(intraday){
         layout.xaxis.rangebreaks = [
@@ -722,7 +723,13 @@
       const base = els.chart?.layout?.shapes||[];
       const others = base.filter(s=>!s.__session); // keep fibs and any other shapes
       const newShapes = state.sessionsOn ? [...others, ...decor.shapes.map(s=>({ ...s, __session:true }))] : [...others];
-      Plotly.relayout(els.chart, { shapes: newShapes, annotations: (state.sessionsOn ? decor.annotations : []) });
+      // Preserve current ranges to avoid autoscale/squish
+      const yRange = els.chart?.layout?.yaxis?.range ? [...els.chart.layout.yaxis.range] : null;
+      const xRange = els.chart?.layout?.xaxis?.range ? [...els.chart.layout.xaxis.range] : null;
+      const upd = { shapes: newShapes, annotations: (state.sessionsOn ? decor.annotations : []) };
+      if(yRange) upd['yaxis.range'] = yRange;
+      if(xRange) upd['xaxis.range'] = xRange;
+      Plotly.relayout(els.chart, upd);
       setChip('SESS', on);
     }
 
