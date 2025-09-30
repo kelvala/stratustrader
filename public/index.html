@@ -87,7 +87,7 @@
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);} 
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);} 
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;} 
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
@@ -439,6 +439,30 @@
       return lvls.map(y=>({ type:'line', xref:'x', yref:'y', x0, x1, y0:y, y1:y, line:{ color, width:1, dash:'dot' } }));
     }
 
+    // Pre/Post-market shading and intraday rangebreaks
+    const isIntraday = (intv)=>/^(1|5|15|60)m$/.test(intv);
+    function makeSessionDecor(rows){
+      const shapes=[]; const annotations=[];
+      if(!rows?.length || !isIntraday(state.interval)) return { shapes, annotations };
+      // Build one pre and one post rectangle per day in local time
+      const byDay = new Map();
+      for(const r of rows){ const d = new Date(r.t); const key = d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); if(!byDay.has(key)) byDay.set(key, d); }
+      for(const d of byDay.values()){
+        const y = d.getFullYear(), m=d.getMonth(), day=d.getDate();
+        const pre0 = new Date(y,m,day,4,0,0);  const pre1 = new Date(y,m,day,9,30,0);
+        const post0= new Date(y,m,day,16,0,0); const post1= new Date(y,m,day,20,0,0);
+        shapes.push(
+          { type:'rect', xref:'x', yref:'paper', x0:pre0, x1:pre1, y0:0, y1:1, fillcolor:'rgba(59,130,246,0.06)', line:{width:0}, layer:'below' },
+          { type:'rect', xref:'x', yref:'paper', x0:post0, x1:post1, y0:0, y1:1, fillcolor:'rgba(139,92,246,0.06)', line:{width:0}, layer:'below' }
+        );
+        annotations.push(
+          { x:new Date(y,m,day,4,10,0), y:1.02, xref:'x', yref:'paper', text:'Pre', showarrow:false, font:{size:10,color:'#93c5fd'} },
+          { x:new Date(y,m,day,16,10,0), y:1.02, xref:'x', yref:'paper', text:'Post', showarrow:false, font:{size:10,color:'#c4b5fd'} }
+        );
+      }
+      return { shapes, annotations };
+    }
+
     // --- Live quote (independent of chart) ---
     function parseQuotePayload(j){
       const r = j?.quoteResponse?.result?.[0];
@@ -470,42 +494,32 @@
         let price = Number.isFinite(+q.price) ? +q.price : null;
         let prevClose = Number.isFinite(+q.prevClose) && +q.prevClose > 0 ? +q.prevClose : null;
         if(!prevClose){
-          // Try from current plotted rows first
           const rows = (state.rows||[]);
           if(rows.length >= 2){
-            const p = rows[rows.length-2]?.c;
-            if(Number.isFinite(+p) && +p>0) prevClose = +p;
+            const p = rows[rows.length-2]?.c; if(Number.isFinite(+p) && +p>0) prevClose = +p;
           }
-          // As a final fallback, pull 5d/1d quickly
           if(!prevClose){
             try{
               const last5 = await fetchRows(state.ticker, '5d', '1d');
-              if(last5?.length >= 2){
-                const p2 = last5[last5.length-2]?.c;
-                if(Number.isFinite(+p2) && +p2>0) prevClose = +p2;
-              }
+              if(last5?.length >= 2){ const p2 = last5[last5.length-2]?.c; if(Number.isFinite(+p2) && +p2>0) prevClose = +p2; }
             }catch{}
           }
         }
-        if(price==null && state.rows?.length){
-          const last = state.rows.at(-1)?.c; if(Number.isFinite(+last)) price = +last;
-        }
+        if(price==null && state.rows?.length){ const last = state.rows.at(-1)?.c; if(Number.isFinite(+last)) price = +last; }
         let change = Number.isFinite(+q.change) ? +q.change : null;
         let changePct = Number.isFinite(+q.changePct) ? +q.changePct : null;
-        if((change==null || changePct==null) && Number.isFinite(price) && Number.isFinite(prevClose) && prevClose>0){
-          change = price - prevClose;
-          changePct = (change / prevClose) * 100;
-        }
+        if((change==null || changePct==null) && Number.isFinite(price) && Number.isFinite(prevClose) && prevClose>0){ change = price - prevClose; changePct = (change / prevClose) * 100; }
 
-        // Intrinsic value via analyst target mean (quick proxy)
+        // Intrinsic value via analyst targets with fallbacks
         let intrinsic = null;
         try{
           const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=financialData,defaultKeyStatistics,earningsTrend`, { cache:'no-store' });
           if(sr.ok){
             const sj = await sr.json();
-            const fd = sj?.quoteSummary?.result?.[0]?.financialData;
-            const tmean = fd?.targetMeanPrice?.raw ?? fd?.targetMeanPrice;
-            if(Number.isFinite(+tmean)) intrinsic = +tmean;
+            const fd = sj?.quoteSummary?.result?.[0]?.financialData || {};
+            const getNum = v => (v&&typeof v==='object'&&'raw' in v)? v.raw : v;
+            const candidates = [getNum(fd.targetMeanPrice), getNum(fd.targetMedianPrice), getNum(fd.targetHighPrice), getNum(fd.targetLowPrice)];
+            intrinsic = candidates.find(v=>Number.isFinite(+v)) ?? null;
           }
         }catch{}
 
@@ -560,8 +574,11 @@
       return rows2;
     }
 
-    function buildLayout(){
-      return {
+    function buildLayout(opts={}){
+      const { rows=[], interval=state.interval } = opts;
+      const intraday = isIntraday(interval);
+      const decor = makeSessionDecor(rows);
+      const layout = {
         margin: { l: 56, r: 24, t: 18, b: 28 },
         paper_bgcolor: 'rgba(0,0,0,0)',
         plot_bgcolor: 'rgba(0,0,0,0)',
@@ -569,13 +586,20 @@
         legend: { orientation: 'h', y: -0.12 },
         xaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
         yaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
-        // Overlay axes for indicators (hidden ticks, no grid)
-        yaxis2: { overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false }, // Volume
-        yaxis3: { overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },      // RSI
-        yaxis4: { overlaying:'y', side:'right', showgrid:false, showticklabels:false },                      // MACD
+        yaxis2: { overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false },
+        yaxis3: { overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
+        yaxis4: { overlaying:'y', side:'right', showgrid:false, showticklabels:false },
         font: { color: css('--text') },
-        shapes: []
+        shapes: decor.shapes,
+        annotations: decor.annotations
       };
+      if(intraday){
+        layout.xaxis.rangebreaks = [
+          { pattern:'day of week', bounds:['sat','mon'] },
+          { pattern:'hour', bounds:[20, 9.5] } // hide 8pm-9:30am local time
+        ];
+      }
+      return layout;
     }
 
     function candleTrace(rows){
@@ -709,13 +733,12 @@
         ...macdTraces(state.rows),
         ...ichiTraces(state.rows)
       ];
-      const layout = buildLayout();
-      state.fibShapes = makeFibShapes(state.rows); // prepared but not shown until toggled
+      const layout = buildLayout({ rows: state.rows, interval: state.interval });
+      state.fibShapes = makeFibShapes(state.rows);
       await Plotly.newPlot(els.chart, traces, layout, { displayModeBar:false, responsive:true });
       if(resetChips){
         ['SMA20','SMA50','SMA200','RSI','MACD','VOL','ICHI','AUTOFIB'].forEach(k=>setChip(k,false));
       } else {
-        // Reapply user-selected overlays after replot
         const on = k => !!els.toggles.querySelector(`.chip[data-k="${k}"]`)?.classList.contains('active');
         setSMAVisibility('SMA20', on('SMA20'));
         setSMAVisibility('SMA50', on('SMA50'));
