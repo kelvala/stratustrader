@@ -88,7 +88,7 @@
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);} 
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);} 
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
 
@@ -647,6 +647,55 @@
       }
       return traces;
     }
+
+    // === Overlay helpers (restored) ===
+    function setChip(key, on){
+      const chip = els.toggles?.querySelector(`.chip[data-k="${key}"]`);
+      if(!chip) return;
+      chip.classList.toggle('active', !!on);
+      chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    function setVisibilityByNames(names, on){
+      const ids = [];
+      (els.chart?.data||[]).forEach((t,idx)=>{ if(t && names.includes(t.name)) ids.push(idx); });
+      if(ids.length) Plotly.restyle(els.chart, { visible: on }, ids);
+    }
+    function setSMAVisibility(key, on){
+      const name = key==='SMA20'?'SMA 20': key==='SMA50'?'SMA 50':'SMA 200';
+      setVisibilityByNames([name], on); setChip(key, on);
+    }
+    function setRSI(on){ setVisibilityByNames(['RSI 14'], on); setChip('RSI', on); }
+    function setMACD(on){ setVisibilityByNames(['MACD','Signal','Histogram'], on); setChip('MACD', on); }
+    function setVOL(on){ setVisibilityByNames(['Volume'], on); setChip('VOL', on); }
+    function setICHI(on){
+      const ids = [];
+      (els.chart?.data||[]).forEach((t,idx)=>{ if(t?.meta==='ICHI') ids.push(idx); });
+      if(ids.length) Plotly.restyle(els.chart, { visible: on }, ids);
+      setChip('ICHI', on);
+    }
+    function setAutoFib(on){
+      state.fibOn = !!on;
+      const base = els.chart?.layout?.shapes||[];
+      const others = base.filter(s=>!s.__fib);
+      const fibs = (state.fibShapes||[]).map(s=>({ ...s, __fib:true }));
+      const shapes = on ? [...others, ...fibs] : [...others];
+      Plotly.relayout(els.chart, { shapes });
+      setChip('AUTOFIB', on);
+    }
+
+    // Toggle click handling
+    els.toggles?.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.chip');
+      if(!btn) return;
+      const key = btn.getAttribute('data-k');
+      const on = !btn.classList.contains('active');
+      if(/^SMA(20|50|200)$/.test(key))      return void setSMAVisibility(key, on);
+      if(key==='RSI')    return void setRSI(on);
+      if(key==='MACD')   return void setMACD(on);
+      if(key==='VOL')    return void setVOL(on);
+      if(key==='ICHI')   return void setICHI(on);
+      if(key==='AUTOFIB')return void setAutoFib(on);
+    });
 
     async function plot(ticker, { resetChips=false } = {}){
       state.rows = await fetchRows(ticker, state.range, state.interval);
