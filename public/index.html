@@ -470,36 +470,39 @@
 
     // --- Live quote (independent of chart) ---
     function parseQuotePayload(j){
-      const r = j?.quoteResponse?.result?.[0];
+      // Support both quoteResponse (v7) and quoteSummary.price (v10 modules=price)
+      const rr = j?.quoteResponse?.result?.[0];
+      const pr = j?.quoteSummary?.result?.[0]?.price;
+      const r = rr || pr;
       if (!r) return null;
 
-      const prevClose = Number(r.regularMarketPreviousClose);
+      const get = (v)=> (v && typeof v === 'object' && 'raw' in v ? v.raw : v);
+      const num = (v)=>{ const x=get(v); return Number.isFinite(+x) ? +x : null; };
 
-      // Build candidates with timestamps (fallback to 0 if missing)
+      const prevClose = num(r.regularMarketPreviousClose);
+
       const cand = [];
-      if (Number.isFinite(+r.postMarketPrice))    cand.push({p:+r.postMarketPrice,  t:+(r.postMarketTime||0),  d:+r.postMarketChange,  pct:+r.postMarketChangePercent});
-      if (Number.isFinite(+r.preMarketPrice))     cand.push({p:+r.preMarketPrice,   t:+(r.preMarketTime||0),   d:+r.preMarketChange,   pct:+r.preMarketChangePercent});
-      if (Number.isFinite(+r.regularMarketPrice)) cand.push({p:+r.regularMarketPrice,t:+(r.regularMarketTime||0),d:+r.regularMarketChange,pct:+r.regularMarketChangePercent});
+      const pushPrice = (p, t, d, pct)=>{
+        const P = num(p); if(P==null) return; cand.push({ p:P, t: +(get(t)||0), d: num(d), pct: num(pct) });
+      };
+      pushPrice(r.postMarketPrice,    r.postMarketTime,    r.postMarketChange,    r.postMarketChangePercent);
+      pushPrice(r.preMarketPrice,     r.preMarketTime,     r.preMarketChange,     r.preMarketChangePercent);
+      pushPrice(r.regularMarketPrice, r.regularMarketTime, r.regularMarketChange, r.regularMarketChangePercent);
 
-      if (!cand.length) return { price:null, change:null, changePct:null, prevClose, name: r.shortName || r.longName || '', currency: r.currency || 'USD' };
+      const name = get(r.shortName) || get(r.longName) || '';
+      const exchange = get(r.fullExchangeName) || get(r.exchangeName) || '';
+      const marketState = get(r.marketState) || '';
+      const currency = get(r.currency) || 'USD';
 
-      // Choose the most recent by timestamp
-      cand.sort((a,b) => (b.t||0)-(a.t||0));
+      if (!cand.length) return { price:null, change:null, changePct:null, prevClose, name, currency, exchange, marketState };
+
+      cand.sort((a,b)=> (b.t||0)-(a.t||0));
       const best = cand[0];
-
-      // If Yahoo didn't give change/pct for that session, compute from prevClose
-      let price  = best.p;
-      let change = Number.isFinite(best.d)   ? best.d   : (Number.isFinite(prevClose) ? price - prevClose : null);
+      const price = best.p;
+      let change = Number.isFinite(best.d) ? best.d : (Number.isFinite(prevClose) ? price - prevClose : null);
       let pct    = Number.isFinite(best.pct) ? best.pct : (Number.isFinite(prevClose) ? (price - prevClose)/prevClose*100 : null);
 
-      return {
-        price,
-        change,
-        changePct: pct,
-        prevClose,
-        name: r.shortName || r.longName || '',
-        currency: r.currency || 'USD'
-      };
+      return { price, change, changePct:pct, prevClose, name, currency, exchange, marketState };
     }
 
     async function refreshQuoteOnce(){
@@ -508,6 +511,16 @@
         if(!r.ok) throw new Error('quote '+r.status);
         const j = await r.json();
         const q = parseQuotePayload(j) || {};
+
+        // Headline: Company (TICKER) • Exchange • Currency • MarketState
+        if (els.headline) {
+          const bits = [];
+          if (q.exchange) bits.push(q.exchange);
+          if (q.currency) bits.push(q.currency);
+          if (q.marketState) bits.push(String(q.marketState));
+          const namePart = q.name ? `${q.name} ` : '';
+          els.headline.textContent = `${namePart}(${state.ticker})${bits.length ? ' • '+bits.join(' • ') : ''}`;
+        }
 
         // Fallbacks using chart data when fields are missing or invalid
         let price = Number.isFinite(+q.price) ? +q.price : null;
