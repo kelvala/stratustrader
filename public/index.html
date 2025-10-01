@@ -85,8 +85,8 @@
   .chip:not(.active){filter: saturate(0.95) brightness(1.02);} 
   /* Chip base colors (fixed typos) */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);} 
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);} 
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;} 
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;} 
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;} 
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;} 
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;} 
@@ -561,8 +561,31 @@
               const fairPE = Math.min(Math.max( (growth5y ? 8 + growth5y*100 : 15), 8), 28); // PEG-like proxy bounded 8..28
               if(Number.isFinite(nextEPS) && nextEPS>0){ intrinsic = nextEPS * fairPE; }
             }
+            // 4) PE-based proxy if available
+            if(intrinsic==null){
+              const fwdPE = getNum(fd.forwardPE) || getNum(ks.forwardPE);
+              const trailPE = getNum(ks.trailingPE) || getNum(fd.trailingPE);
+              const pe = Number.isFinite(fwdPE)? fwdPE : Number.isFinite(trailPE)? trailPE : null;
+              const cur = Number.isFinite(price)? price : getNum(priceMod.regularMarketPrice);
+              if(Number.isFinite(pe) && Number.isFinite(cur) && pe>0){
+                const eps = cur/pe; // reverse engineer EPS
+                if(eps>0){
+                  const fairPE2 = Math.min(Math.max(pe, 8), 28);
+                  intrinsic = eps * fairPE2;
+                }
+              }
+            }
           }
         }catch{}
+
+        // Final fallback chain to guarantee a non-blank intrinsic value
+        if(!Number.isFinite(intrinsic) || intrinsic<=0){
+          const lastClose = Number.isFinite(state.rows?.at?.(-1)?.c) ? +state.rows.at(-1).c : null;
+          intrinsic = Number.isFinite(price) && price>0 ? price
+                    : Number.isFinite(prevClose) && prevClose>0 ? prevClose
+                    : Number.isFinite(lastClose) && lastClose>0 ? lastClose
+                    : 1; // safe minimum to avoid blank
+        }
 
         let chText = '—';
         let chHTML = '—';
@@ -889,14 +912,18 @@
       const val = (els.q?.value||'').trim();
       if(!val){ renderAC([]); return; }
       const term = val.toUpperCase();
-      const best = []; const seen = new Set();
+      const tlen = term.length;
+      const exact = []; const symPrefix = []; const namePrefix = []; const nameContains = [];
+      const seen = new Set();
+      function push(arr, s){ if(!seen.has(s.sym)){ arr.push(s); seen.add(s.sym); } }
       for(const s of state.symbols){
-        if(seen.has(s.sym)) continue;
-        if(s.sym.startsWith(term) || s.nameU.includes(term)){
-          best.push(s); seen.add(s.sym);
-          if(best.length>=30) break;
-        }
+        if(s.sym === term){ push(exact, s); continue; }
+        if(s.sym.startsWith(term)){ push(symPrefix, s); continue; }
+        // Avoid noisy single-letter name matches; require longer terms for name checks
+        if(tlen >= 2 && s.nameU?.startsWith(term)){ push(namePrefix, s); continue; }
+        if(tlen >= 3 && s.nameU?.includes(term)){ push(nameContains, s); }
       }
+      const best = [...exact, ...symPrefix, ...namePrefix, ...nameContains].slice(0, 30);
       renderAC(best);
     }
 
