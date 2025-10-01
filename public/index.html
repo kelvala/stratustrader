@@ -474,25 +474,23 @@
       if (!r) return null;
 
       const prevClose = Number(r.regularMarketPreviousClose);
-      const state = r.marketState; // e.g., "REGULAR", "PRE", "POST", "POSTPOST"
 
-      // default to regular session
-      let price  = Number(r.regularMarketPrice);
-      let change = Number(r.regularMarketChange);
-      let pct    = Number(r.regularMarketChangePercent);
+      // Build candidates with timestamps (fallback to 0 if missing)
+      const cand = [];
+      if (Number.isFinite(+r.postMarketPrice))    cand.push({p:+r.postMarketPrice,  t:+(r.postMarketTime||0),  d:+r.postMarketChange,  pct:+r.postMarketChangePercent});
+      if (Number.isFinite(+r.preMarketPrice))     cand.push({p:+r.preMarketPrice,   t:+(r.preMarketTime||0),   d:+r.preMarketChange,   pct:+r.preMarketChangePercent});
+      if (Number.isFinite(+r.regularMarketPrice)) cand.push({p:+r.regularMarketPrice,t:+(r.regularMarketTime||0),d:+r.regularMarketChange,pct:+r.regularMarketChangePercent});
 
-      // prefer pre/post prices when available
-      if ((state === 'PRE' || state === 'PREPRE') && Number.isFinite(+r.preMarketPrice)) {
-        price = Number(r.preMarketPrice);
-        change = Number.isFinite(+r.preMarketChange) ? Number(r.preMarketChange) : (prevClose ? price - prevClose : null);
-        pct = Number.isFinite(+r.preMarketChangePercent) ? Number(r.preMarketChangePercent)
-            : (prevClose ? (price - prevClose) / prevClose * 100 : null);
-      } else if ((state === 'POST' || state === 'POSTPOST') && Number.isFinite(+r.postMarketPrice)) {
-        price = Number(r.postMarketPrice);
-        change = Number.isFinite(+r.postMarketChange) ? Number(r.postMarketChange) : (prevClose ? price - prevClose : null);
-        pct = Number.isFinite(+r.postMarketChangePercent) ? Number(r.postMarketChangePercent)
-            : (prevClose ? (price - prevClose) / prevClose * 100 : null);
-      }
+      if (!cand.length) return { price:null, change:null, changePct:null, prevClose, name: r.shortName || r.longName || '', currency: r.currency || 'USD' };
+
+      // Choose the most recent by timestamp
+      cand.sort((a,b) => (b.t||0)-(a.t||0));
+      const best = cand[0];
+
+      // If Yahoo didn't give change/pct for that session, compute from prevClose
+      let price  = best.p;
+      let change = Number.isFinite(best.d)   ? best.d   : (Number.isFinite(prevClose) ? price - prevClose : null);
+      let pct    = Number.isFinite(best.pct) ? best.pct : (Number.isFinite(prevClose) ? (price - prevClose)/prevClose*100 : null);
 
       return {
         price,
