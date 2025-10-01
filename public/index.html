@@ -471,21 +471,37 @@
     // --- Live quote (independent of chart) ---
     function parseQuotePayload(j){
       const r = j?.quoteResponse?.result?.[0];
-      if(r){
-        return {
-          price: +r.regularMarketPrice,
-          change: +r.regularMarketChange,
-          changePct: +r.regularMarketChangePercent,
-          prevClose: +r.regularMarketPreviousClose,
-          name: r.shortName || r.longName || '',
-          currency: r.currency || 'USD'
-        };
+      if (!r) return null;
+
+      const prevClose = Number(r.regularMarketPreviousClose);
+      const state = r.marketState; // e.g., "REGULAR", "PRE", "POST", "POSTPOST"
+
+      // default to regular session
+      let price  = Number(r.regularMarketPrice);
+      let change = Number(r.regularMarketChange);
+      let pct    = Number(r.regularMarketChangePercent);
+
+      // prefer pre/post prices when available
+      if ((state === 'PRE' || state === 'PREPRE') && Number.isFinite(+r.preMarketPrice)) {
+        price = Number(r.preMarketPrice);
+        change = Number.isFinite(+r.preMarketChange) ? Number(r.preMarketChange) : (prevClose ? price - prevClose : null);
+        pct = Number.isFinite(+r.preMarketChangePercent) ? Number(r.preMarketChangePercent)
+            : (prevClose ? (price - prevClose) / prevClose * 100 : null);
+      } else if ((state === 'POST' || state === 'POSTPOST') && Number.isFinite(+r.postMarketPrice)) {
+        price = Number(r.postMarketPrice);
+        change = Number.isFinite(+r.postMarketChange) ? Number(r.postMarketChange) : (prevClose ? price - prevClose : null);
+        pct = Number.isFinite(+r.postMarketChangePercent) ? Number(r.postMarketChangePercent)
+            : (prevClose ? (price - prevClose) / prevClose * 100 : null);
       }
-      // fallback shape from /api/quote
-      if(j && Number.isFinite(+j.price)){
-        return { price:+j.price, change:null, changePct:null, prevClose:null, name:'', currency:'USD' };
-      }
-      return null;
+
+      return {
+        price,
+        change,
+        changePct: pct,
+        prevClose,
+        name: r.shortName || r.longName || '',
+        currency: r.currency || 'USD'
+      };
     }
 
     async function refreshQuoteOnce(){
