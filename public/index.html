@@ -87,8 +87,8 @@
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);} 
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);} 
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);} 
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;} 
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip[data-k="SESS"]{border-color:#93c5fd;color:#93c5fd}
@@ -370,6 +370,9 @@
     const fmtPx = v => (Number.isFinite(+v) ? `$${fmt.format(+v)}` : '—');
     const fmtPxPos = v => (Number.isFinite(+v) && +v > 0 ? `$${fmt.format(+v)}` : '—');
     const fmtPct = v => (Number.isFinite(+v) ? `${(+v).toFixed(2)}%` : '—');
+    // Avoid displaying -0 or +0
+    const clampZero = (v, eps = 1e-6) => (Number.isFinite(v) && Math.abs(v) < eps ? 0 : v);
+
     function SMA(values, w, fullWidth = true){
       const out = new Array(values.length).fill(null);
       let sum = 0; let q = [];
@@ -507,27 +510,49 @@
           }
         }
         if(price==null && state.rows?.length){ const last = state.rows.at(-1)?.c; if(Number.isFinite(+last)) price = +last; }
-        let change = Number.isFinite(+q.change) ? +q.change : null;
-        let changePct = Number.isFinite(+q.changePct) ? +q.changePct : null;
-        if((change==null || changePct==null) && Number.isFinite(price) && Number.isFinite(prevClose) && prevClose>0){ change = price - prevClose; changePct = (change / prevClose) * 100; }
+        // Always compute change from price vs prevClose for consistency
+        let change = (Number.isFinite(price) && Number.isFinite(prevClose) && prevClose>0)
+          ? (price - prevClose) : null;
+        let changePct = (change!=null && prevClose>0) ? (change / prevClose) * 100 : null;
 
-        // Intrinsic value via analyst targets with fallbacks
-        let intrinsic = null;
+        // Clean up tiny rounding artifacts
+        if(change!=null) change = clampZero(change);
+        if(changePct!=null) changePct = clampZero(changePct);
+ 
+         // Intrinsic value via analyst targets with fallbacks
+         let intrinsic = null;
         try{
           const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=financialData,defaultKeyStatistics,earningsTrend`, { cache:'no-store' });
           if(sr.ok){
             const sj = await sr.json();
-            const fd = sj?.quoteSummary?.result?.[0]?.financialData || {};
+            const root = sj?.quoteSummary?.result?.[0] || {};
+            const fd = root.financialData || {};
             const getNum = v => (v&&typeof v==='object'&&'raw' in v)? v.raw : v;
-            const candidates = [getNum(fd.targetMeanPrice), getNum(fd.targetMedianPrice), getNum(fd.targetHighPrice), getNum(fd.targetLowPrice)];
-            intrinsic = candidates.find(v=>Number.isFinite(+v)) ?? null;
+            const et = root.earningsTrend || {};
+            const trends = Array.isArray(et.trend)? et.trend : [];
+            const trendTargets = trends
+              .map(t => getNum(t?.targetMeanPrice))
+              .filter(v => Number.isFinite(+v) && +v>0);
+            const candidates = [
+              getNum(fd.targetMeanPrice), getNum(fd.targetMedianPrice),
+              getNum(fd.targetHighPrice), getNum(fd.targetLowPrice),
+              ...trendTargets
+            ];
+            intrinsic = candidates.find(v=>Number.isFinite(+v) && +v>0) ?? null;
           }
         }catch{}
 
-        const chText = (Number.isFinite(change) && Number.isFinite(changePct))
-          ? `${change>=0?'+':''}${fmt.format(change)} (${changePct>=0?'+':''}${Math.abs(changePct).toFixed(2)}%)`
-          : '—';
-        els.lastLine.textContent = `Last: ${fmtPx(price)} · Change: ${chText}`;
+        let chText = '—';
+        let chHTML = '—';
+        if(Number.isFinite(change) && Number.isFinite(changePct)){
+          const sign = change>0?'+': (change<0?'-':'');
+          const absCh = Math.abs(change);
+          const absPct = Math.abs(changePct);
+          chText = `${sign}${fmt.format(absCh)} (${sign}${absPct.toFixed(2)}%)`;
+          const col = change>0 ? css('--c-up') : change<0 ? css('--c-down') : css('--muted');
+           chHTML = `<span style=\"color:${col};font-weight:800\">${chText}</span>`;
+         }
+        els.lastLine.innerHTML = `Last: ${fmtPx(price)} · Change: ${chHTML}`;
         els.prevCloseLine.textContent = `Yesterday’s Close: ${fmtPxPos(prevClose)}`;
         els.ivLine.textContent = `Intrinsic Value: ${fmtPxPos(intrinsic)}`;
         if(els.headline){ els.headline.textContent = `${state.ticker}${q.name? ' — '+q.name:''}`; }
