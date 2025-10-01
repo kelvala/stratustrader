@@ -81,11 +81,12 @@
   .control label{display:block;font-size:13px;font-weight:800;margin-bottom:6px;color:#cbd5ff}
   .control select{width:100%;background:var(--field-bg);color:var(--field-text);border:1px solid var(--border);border-radius:10px;padding:10px}
   .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
-  .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:700;opacity:.95;user-select:none;transition:background .15s,color .15s,border-color .15s; -webkit-text-fill-color: currentColor; color: currentColor;}
+  .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:800;opacity:.98;user-select:none;transition:background .15s,color .15s,border-color .15s; -webkit-text-fill-color: currentColor; color: currentColor; background: color-mix(in srgb, var(--panel), #ffffff 3%);} 
+  .chip:not(.active){filter: saturate(0.95) brightness(1.02);} 
   /* Chip base colors (fixed typos) */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);} 
   .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);} 
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;} 
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;} 
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;} 
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;} 
@@ -519,26 +520,47 @@
         if(change!=null) change = clampZero(change);
         if(changePct!=null) changePct = clampZero(changePct);
  
-         // Intrinsic value via analyst targets with fallbacks
-         let intrinsic = null;
+        // Intrinsic value calculation with multiple fallbacks
+        let intrinsic = null;
         try{
-          const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=financialData,defaultKeyStatistics,earningsTrend`, { cache:'no-store' });
+          const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=price,financialData,defaultKeyStatistics,earningsTrend`, { cache:'no-store' });
           if(sr.ok){
             const sj = await sr.json();
             const root = sj?.quoteSummary?.result?.[0] || {};
             const fd = root.financialData || {};
+            const ks = root.defaultKeyStatistics || {};
+            const priceMod = root.price || {};
             const getNum = v => (v&&typeof v==='object'&&'raw' in v)? v.raw : v;
-            const et = root.earningsTrend || {};
-            const trends = Array.isArray(et.trend)? et.trend : [];
-            const trendTargets = trends
-              .map(t => getNum(t?.targetMeanPrice))
-              .filter(v => Number.isFinite(+v) && +v>0);
-            const candidates = [
-              getNum(fd.targetMeanPrice), getNum(fd.targetMedianPrice),
-              getNum(fd.targetHighPrice), getNum(fd.targetLowPrice),
-              ...trendTargets
-            ];
-            intrinsic = candidates.find(v=>Number.isFinite(+v) && +v>0) ?? null;
+            const analystTargets = [getNum(fd.targetMeanPrice), getNum(fd.targetMedianPrice), getNum(fd.targetHighPrice), getNum(fd.targetLowPrice)].filter(v=>Number.isFinite(+v) && +v>0);
+            // 1) If analyst target available, prefer the median of valid targets
+            if(analystTargets.length){
+              const sorted = analystTargets.map(Number).sort((a,b)=>a-b); const mid = Math.floor(sorted.length/2);
+              intrinsic = sorted.length%2? sorted[mid] : (sorted[mid-1]+sorted[mid])/2;
+            }
+            // 2) Gordon Growth Model for dividend payers: P = D1 / (r - g)
+            if(intrinsic==null){
+              const divYield = getNum(fd.dividendYield) || getNum(priceMod.trailingAnnualDividendYield);
+              const dividendRate = getNum(fd.dividendRate) || getNum(priceMod.trailingAnnualDividendRate);
+              const g = Math.min(Math.max(getNum(fd.growthEstimates?.longTermGrowthRate) || 0.04, -0.02), 0.12); // clamp -2%..12%
+              const r = 0.09; // hurdle rate 9%
+              if(Number.isFinite(dividendRate) && dividendRate>0){
+                const d1 = dividendRate * (1 + Math.max(g, 0));
+                const denom = r - Math.max(g, -0.01);
+                if(denom>0) intrinsic = d1/denom;
+              } else if(Number.isFinite(divYield) && Number.isFinite(price) && divYield>0){
+                const d0 = price * divYield; const d1 = d0 * (1 + Math.max(g, 0)); const denom = r - Math.max(g, -0.01);
+                if(denom>0) intrinsic = d1/denom;
+              }
+            }
+            // 3) DCF-lite via next-year EPS * fair P/E
+            if(intrinsic==null){
+              const et = root.earningsTrend || {}; const trends = Array.isArray(et.trend)? et.trend : [];
+              const nextYear = trends.find(t=> (t?.period||'').toLowerCase().includes('next year'));
+              const nextEPS = getNum(nextYear?.earningsEstimate?.avg);
+              const growth5y = getNum(nextYear?.growth?.avg) || getNum(fd.growthEstimates?.longTermGrowthRate);
+              const fairPE = Math.min(Math.max( (growth5y ? 8 + growth5y*100 : 15), 8), 28); // PEG-like proxy bounded 8..28
+              if(Number.isFinite(nextEPS) && nextEPS>0){ intrinsic = nextEPS * fairPE; }
+            }
           }
         }catch{}
 
