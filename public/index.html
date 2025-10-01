@@ -522,58 +522,21 @@
  
         // Intrinsic value calculation with multiple fallbacks
         let intrinsic = null;
+        let valuation = null;
         try{
-          const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=price,financialData,defaultKeyStatistics,earningsTrend`, { cache:'no-store' });
+          const modules = 'price,financialData,defaultKeyStatistics,earningsTrend,cashflowStatementHistory,incomeStatementHistory,balanceSheetHistory,summaryDetail';
+          const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=${encodeURIComponent(modules)}`, { cache:'no-store' });
           if(sr.ok){
             const sj = await sr.json();
             const root = sj?.quoteSummary?.result?.[0] || {};
-            const fd = root.financialData || {};
-            const ks = root.defaultKeyStatistics || {};
-            const priceMod = root.price || {};
-            const getNum = v => (v&&typeof v==='object'&&'raw' in v)? v.raw : v;
-            const analystTargets = [getNum(fd.targetMeanPrice), getNum(fd.targetMedianPrice), getNum(fd.targetHighPrice), getNum(fd.targetLowPrice)].filter(v=>Number.isFinite(+v) && +v>0);
-            // 1) If analyst target available, prefer the median of valid targets
-            if(analystTargets.length){
-              const sorted = analystTargets.map(Number).sort((a,b)=>a-b); const mid = Math.floor(sorted.length/2);
-              intrinsic = sorted.length%2? sorted[mid] : (sorted[mid-1]+sorted[mid])/2;
-            }
-            // 2) Gordon Growth Model for dividend payers: P = D1 / (r - g)
-            if(intrinsic==null){
-              const divYield = getNum(fd.dividendYield) || getNum(priceMod.trailingAnnualDividendYield);
-              const dividendRate = getNum(fd.dividendRate) || getNum(priceMod.trailingAnnualDividendRate);
-              const g = Math.min(Math.max(getNum(fd.growthEstimates?.longTermGrowthRate) || 0.04, -0.02), 0.12); // clamp -2%..12%
-              const r = 0.09; // hurdle rate 9%
-              if(Number.isFinite(dividendRate) && dividendRate>0){
-                const d1 = dividendRate * (1 + Math.max(g, 0));
-                const denom = r - Math.max(g, -0.01);
-                if(denom>0) intrinsic = d1/denom;
-              } else if(Number.isFinite(divYield) && Number.isFinite(price) && divYield>0){
-                const d0 = price * divYield; const d1 = d0 * (1 + Math.max(g, 0)); const denom = r - Math.max(g, -0.01);
-                if(denom>0) intrinsic = d1/denom;
-              }
-            }
-            // 3) DCF-lite via next-year EPS * fair P/E
-            if(intrinsic==null){
-              const et = root.earningsTrend || {}; const trends = Array.isArray(et.trend)? et.trend : [];
-              const nextYear = trends.find(t=> (t?.period||'').toLowerCase().includes('next year'));
-              const nextEPS = getNum(nextYear?.earningsEstimate?.avg);
-              const growth5y = getNum(nextYear?.growth?.avg) || getNum(fd.growthEstimates?.longTermGrowthRate);
-              const fairPE = Math.min(Math.max( (growth5y ? 8 + growth5y*100 : 15), 8), 28); // PEG-like proxy bounded 8..28
-              if(Number.isFinite(nextEPS) && nextEPS>0){ intrinsic = nextEPS * fairPE; }
-            }
-            // 4) PE-based proxy if available
-            if(intrinsic==null){
-              const fwdPE = getNum(fd.forwardPE) || getNum(ks.forwardPE);
-              const trailPE = getNum(ks.trailingPE) || getNum(fd.trailingPE);
-              const pe = Number.isFinite(fwdPE)? fwdPE : Number.isFinite(trailPE)? trailPE : null;
-              const cur = Number.isFinite(price)? price : getNum(priceMod.regularMarketPrice);
-              if(Number.isFinite(pe) && Number.isFinite(cur) && pe>0){
-                const eps = cur/pe; // reverse engineer EPS
-                if(eps>0){
-                  const fairPE2 = Math.min(Math.max(pe, 8), 28);
-                  intrinsic = eps * fairPE2;
-                }
-              }
+            valuation = buildValuationFromYahoo(root, price);
+            if(Number.isFinite(valuation?.perShare) && valuation.perShare>0){ intrinsic = valuation.perShare; }
+            // Keep previous heuristic methods as sanity backup only if still missing
+            if(!Number.isFinite(intrinsic) || intrinsic<=0){
+              const fd = root.financialData || {}; const priceMod = root.price || {};
+              const getNum = v => (v&&typeof v==='object'&&'raw' in v)? v.raw : v;
+              const analystTargets = [getNum(fd.targetMeanPrice), getNum(fd.targetMedianPrice), getNum(fd.targetHighPrice), getNum(fd.targetLowPrice)].filter(v=>Number.isFinite(+v) && +v>0);
+              if(analystTargets.length){ intrinsic = median(analystTargets.map(Number)); }
             }
           }
         }catch{}
@@ -584,7 +547,7 @@
           intrinsic = Number.isFinite(price) && price>0 ? price
                     : Number.isFinite(prevClose) && prevClose>0 ? prevClose
                     : Number.isFinite(lastClose) && lastClose>0 ? lastClose
-                    : 1; // safe minimum to avoid blank
+                    : 1; // safe minimum
         }
 
         let chText = '—';
@@ -600,7 +563,7 @@
         els.lastLine.innerHTML = `Last: ${fmtPx(price)} · Change: ${chHTML}`;
         els.prevCloseLine.textContent = `Yesterday’s Close: ${fmtPxPos(prevClose)}`;
         els.ivLine.textContent = `Intrinsic Value: ${fmtPxPos(intrinsic)}`;
-        if(els.headline){ els.headline.textContent = `${state.ticker}${q.name? ' — '+q.name:''}`; }
+        if(valuation){ els.ivLine.title = valuation.summary; state.lastValuation = valuation; try{ console.debug('DCF valuation', valuation.json); }catch{} }
       }catch(err){ /* silent */ }
     }
 
