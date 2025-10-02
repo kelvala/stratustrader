@@ -265,7 +265,7 @@
         <button class="chip" data-k="VOL" type="button" aria-pressed="false">Volume</button>
         <button class="chip" id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
         <button class="chip" data-k="ICHI" type="button" aria-pressed="false">Ichimoku</button>
-        <button class="chip" data-k="SESS" type="button" aria-pressed="false" title="Toggle pre/post-market bands">Pre/Post</button>
+        <button class="chip" data-k="SESS" type="button" aria-pressed="true" title="Toggle pre/post-market bands">Pre/Post</button>
       </div>
 
       <div id="chart"></div>
@@ -358,7 +358,7 @@
       ivLine: document.getElementById('ivLine'),
       headline: document.getElementById('headline')
     };
-    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null, fibOn:false, fibShapes:[], sessionsOn:false };
+    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null, fibOn:false, fibShapes:[], sessionsOn:true };
     const isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 
     // Cache timeframe selects
@@ -977,7 +977,7 @@
       const shapes = on ? [...others, ...fibs] : [...others];
       Plotly.relayout(els.chart, { shapes });
       setChip('AUTOFIB', on);
-                                                                                                                                    }
+                                                                                                                                                                 }
        function setSessions(on){
       state.sessionsOn = !!on;
       const intraday = isIntraday(state.interval);
@@ -1193,7 +1193,59 @@
 
     // Toolbar buttons -> sheets
     document.getElementById('toolGPTs')?.addEventListener('click', ()=> openSheet('sheetGPTs'));
-    document.getElementById('toolScreeners')?.addEventListener('click', ()=> openSheet('sheetScreeners'));
+
+    // Finviz screeners presets
+    const DEFAULT_SCREENERS = [
+      { title:'Top Gainers', desc:'Daily top gainers on high momentum', lvl:'Beginner', url:'https://finviz.com/screener.ashx?v=111&s=ta_topgainers' },
+      { title:'Top Losers', desc:'Daily top losers for dip scans', lvl:'Beginner', url:'https://finviz.com/screener.ashx?v=111&s=ta_toplosers' },
+      { title:'Most Active', desc:'Highest share turnover today', lvl:'Beginner', url:'https://finviz.com/screener.ashx?v=111&s=ta_mostactive' },
+      { title:'Unusual Volume', desc:'Volume surges vs. average', lvl:'Intermediate', url:'https://finviz.com/screener.ashx?v=111&s=ta_unusualvolume' },
+      { title:'New Highs', desc:'Breaking or making 52‑week highs', lvl:'Intermediate', url:'https://finviz.com/screener.ashx?v=111&s=ta_newhi' },
+      { title:'New Lows', desc:'Fresh 52‑week lows', lvl:'Intermediate', url:'https://finviz.com/screener.ashx?v=111&s=ta_newlo' }
+    ];
+    function getStoredScreeners(){
+      try{
+        const keys = ['screeners','finviz_screeners','userScreeners'];
+        for(const k of keys){
+          const raw = localStorage.getItem(k);
+          if(!raw) continue;
+          const parsed = JSON.parse(raw);
+          if(Array.isArray(parsed)){
+            return parsed.filter(x=>x && x.url).map(x=>({
+              title: String(x.title||'Custom'),
+              desc: String(x.desc||''),
+              lvl:  String(x.lvl||'Beginner'),
+              url:  String(x.url)
+            }));
+          }
+        }
+      }catch{}
+      return null;
+    }
+    function renderScreeners(list){
+      const wrap = document.getElementById('scrList');
+      if(!wrap) return;
+      if(wrap.childElementCount>0) return; // already rendered
+      const items = Array.isArray(list) && list.length ? list : (getStoredScreeners() || DEFAULT_SCREENERS);
+      wrap.innerHTML = (items||[]).map(s=>
+        `<div class="scr-item" data-lvl="${s.lvl||'Beginner'}">
+           <div style="flex:1;min-width:0">
+             <div class="title">${s.title||''}</div>
+             <div class="desc">${s.desc||''}</div>
+           </div>
+           <div style="display:flex;align-items:center;gap:8px">
+             <span class="badge">Finviz</span>
+             <a class="open-btn" href="${s.url}" target="_blank" rel="noopener">Open</a>
+           </div>
+         </div>`
+      ).join('');
+    }
+
+    document.getElementById('toolScreeners')?.addEventListener('click', ()=> { renderScreeners(); openSheet('sheetScreeners'); });
+
+    // Bottom nav shortcuts
+    document.querySelector('button[data-tab="screeners"]')?.addEventListener('click', (e)=>{ e.preventDefault(); renderScreeners(); openSheet('sheetScreeners'); });
+    document.querySelector('button[data-tab="gpts"]')?.addEventListener('click', (e)=>{ e.preventDefault(); openSheet('sheetGPTs'); });
 
     // Close buttons inside sheets
     document.addEventListener('click', (e)=>{
