@@ -500,8 +500,8 @@
       })();
       const minAbs = Math.max((hi - lo) * 0.0015, 0.01);
       let pad = Math.max((hi - lo) * padPct, minAbs);
-      // Apply user preference (make candles taller by shrinking pad)
-      if (intraday && els.heightSel) {
+      // Apply user preference (make candles taller by shrinking pad) — apply to all ranges
+      if (els.heightSel) {
         const scale = padScaleFromTight(state.candleTight ?? 75);
         pad *= scale;
       }
@@ -957,6 +957,7 @@
         }catch{ els.subInfo.textContent=''; }
 
         // Fallbacks using chart data when fields are missing or invalid
+       
         let price = Number.isFinite(+q.price) ? +q.price : null;
         let prevClose = Number.isFinite(+q.prevClose) && +q.prevClose > 0 ? +q.prevClose : null;
         if(!prevClose){
@@ -1192,13 +1193,19 @@
           els.heightLabel.textContent = v>=80? 'Taller' : v<=20? 'Shorter' : 'Balanced';
         };
         setLabel();
-        els.heightSel.addEventListener('input', ()=>{
+        let rafId = 0;
+        const applyHeight = ()=>{
           state.candleTight = +els.heightSel.value;
           localStorage.setItem('candleTight', String(state.candleTight));
           setLabel();
-          // Only refit Y to respect new setting
-          fitPriceAxisToCandlesStrict();
+          // Re-render chart so ranges/overlays respect new height, then y-fit will run
+          try { renderChart(); } catch(_) { try { fitPriceAxisToCandlesStrict(); } catch(_) {} }
+        };
+        els.heightSel.addEventListener('input', ()=>{
+          if (rafId) cancelAnimationFrame(rafId);
+          rafId = requestAnimationFrame(applyHeight);
         });
+        els.heightSel.addEventListener('change', applyHeight);
       }
     })();
 
