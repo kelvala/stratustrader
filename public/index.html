@@ -977,7 +977,7 @@
       const shapes = on ? [...others, ...fibs] : [...others];
       Plotly.relayout(els.chart, { shapes });
       setChip('AUTOFIB', on);
-                         }
+                                                 }
        function setSessions(on){
       state.sessionsOn = !!on;
       const intraday = isIntraday(state.interval);
@@ -1185,6 +1185,27 @@
       const txt = document.querySelector('#maxBtn .tool-txt');
       if(txt) txt.textContent = makeMax ? 'Exit' : 'Max';
       setTimeout(()=>{ if(els.chart) Plotly.Plots.resize(els.chart); }, 60);
+    });
+
+    // Sheets open/close
+    function openSheet(id){ const el = document.getElementById(id); if(el) el.hidden = false; }
+    function closeSheet(id){ const el = document.getElementById(id); if(el) el.hidden = true; }
+
+    // Toolbar buttons -> sheets
+    document.getElementById('toolGPTs')?.addEventListener('click', ()=> openSheet('sheetGPTs'));
+    document.getElementById('toolScreeners')?.addEventListener('click', ()=> openSheet('sheetScreeners'));
+
+    // Close buttons inside sheets
+    document.addEventListener('click', (e)=>{
+      const btn = e.target.closest('[data-close]');
+      if(!btn) return;
+      const id = btn.getAttribute('data-close');
+      if(id) closeSheet(id);
+    });
+
+    // Click outside sheet content to close
+    document.querySelectorAll('.sheet').forEach(s=>{
+      s.addEventListener('mousedown', (e)=>{ if(e.target === s) s.hidden = true; });
     });
 
     // Initial setup
