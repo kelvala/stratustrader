@@ -398,18 +398,106 @@
       return beforePipe.trim().toUpperCase();
     }
 
+    // --- Fit y-axis strictly to visible candlestick highs/lows ------------------
+    const fitPriceAxisToCandlesStrict = async () => {
+      if (!els.chart) return;
+      const d = els.chart.data || [];
+      const c = d.find(t => t && t.type === 'candlestick');
+      if (!c || !c.x || !c.high || !c.low || !c.x.length) return;
+
+      const toMs = (v) => new Date(v).getTime();
+
+      // Determine current visible x window
+      const L  = els.chart._fullLayout || els.chart.layout || {};
+      const xa = L.xaxis || {};
+      let x0ms, x1ms;
+      if (Array.isArray(xa.range) && xa.autorange === false) {
+        x0ms = toMs(xa.range[0]);
+        x1ms = toMs(xa.range[1]);
+      } else {
+        x0ms = toMs(c.x[0]);
+        x1ms = toMs(c.x[c.x.length - 1]);
+      }
+
+      // Visible indices
+      const cxms = c.x.map(toMs);
+      let i0 = 0;
+      while (i0 < cxms.length && cxms[i0] < x0ms) i0++;
+      let i1 = cxms.length - 1;
+      while (i1 > i0 && cxms[i1] > x1ms) i1--;
+
+      if (i1 <= i0) return;
+
+      // Compute hi/lo strictly from visible candles
+      let hi = -Infinity, lo = Infinity;
+      for (let i = i0; i <= i1; i++) {
+        const h = c.high[i], l = c.low[i];
+        if (Number.isFinite(h)) hi = Math.max(hi, h);
+        if (Number.isFinite(l)) lo = Math.min(lo, l);
+      }
+      if (!Number.isFinite(hi) || !Number.isFinite(lo)) return;
+      if (hi === lo) { hi += 1; lo -= 1; }
+
+      // Dynamic padding based on time/frequency (taller candles on intraday)
+      const time = els.timeSel?.value || '6mo';
+      const freq = els.freqSel?.value || '1d';
+      const padPct = (() => {
+        if (['1m','5m','15m','60m'].includes(freq)) {
+          if (/^(1|2|5|10)d$/.test(time)) return 0.015; // very tight for 1-10 day views
+          if (/mo$/.test(time)) return 0.025;           // slightly wider on multi-month intraday
+          return 0.03;
+        }
+        if (time === '1mo' || time === '2mo') return 0.04;
+        if (time === '3mo' || time === '6mo' || time === 'ytd') return 0.06;
+        if (time === '1y' || time === '2y') return 0.07;
+        return 0.09; // long ranges
+      })();
+
+      const pad = Math.max((hi - lo) * padPct, 0.1);
+      const payload = {
+        'yaxis.autorange': false,
+        'yaxis.rangemode': 'normal',
+        'yaxis.range': [lo - pad, hi + pad]
+      };
+      try {
+        if (typeof relayoutPreserve === 'function') {
+          await relayoutPreserve(payload);
+        } else {
+          await Plotly.relayout(els.chart, payload);
+        }
+      } catch (_) {}
+    };
+
     // === Indicators & helpers ===
     function isIntraday(interval){ return /m|h/i.test(String(interval||'')); }
 
     function candleTrace(rows){
       const x = rows.map(r=>new Date(r.t));
-      return {
-        type:'candlestick', name: state.ticker,
-        x, open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c),
-        increasing: { line:{ color: css('--c-up') } },
-        decreasing: { line:{ color: css('--c-down') } },
-        hovertemplate: '%{x|%b %d, %Y %H:%M}<br>O %{open:.2f} H %{high:.2f} L %{low:.2f} C %{close:.2f}<extra></extra>'
+      const open = rows.map(r=>r.o);
+      const high = rows.map(r=>r.h);
+      const low = rows.map(r=>r.l);
+      const close = rows.map(r=>r.c);
+      const ticker = state.ticker;
+
+      const trCandles = {
+        type: 'candlestick',
+        x: x,
+        open: open,
+        high: high,
+        low: low,
+        close: close,
+        name: ticker,
+        yaxis: 'y',
+        increasing: { line: { color: css('--c-up') || '#16a34a', width: 2.2 }, fillcolor: (css('--c-up')||'#16a34a') },
+        decreasing: { line: { color: css('--c-down') || '#dc2626', width: 2.2 }, fillcolor: (css('--c-down')||'#dc2626') },
+        whiskerwidth: 0.45,
+        opacity: 0.95,
+        showlegend: false,
+        hovertemplate: 'Date: %{x|%Y-%m-%d %H:%M}<br>O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>',
+        visible: true // Always show candles
       };
+
+      return trCandles;
     }
     function sma(arr, p){ if(!Array.isArray(arr)||!arr.length||!p) return []; const out=Array(arr.length).fill(null); let sum=0; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(Number.isFinite(v)) sum+=v; if(i>=p){ const w=+arr[i-p]; if(Number.isFinite(w)) sum-=w; } if(i>=p-1) out[i]=sum/p; } return out; }
     function ema(arr, p){ const out=Array(arr.length).fill(null); const k=2/(p+1); let prev=null; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(!Number.isFinite(v)) { out[i]=prev; continue; } prev = prev==null? v : (v - prev)*k + prev; out[i]=prev; } return out; }
