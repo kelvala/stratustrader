@@ -412,7 +412,7 @@
     }
     function sma(arr, p){ if(!Array.isArray(arr)||!arr.length||!p) return []; const out=Array(arr.length).fill(null); let sum=0; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(Number.isFinite(v)) sum+=v; if(i>=p){ const w=+arr[i-p]; if(Number.isFinite(w)) sum-=w; } if(i>=p-1) out[i]=sum/p; } return out; }
     function ema(arr, p){ const out=Array(arr.length).fill(null); const k=2/(p+1); let prev=null; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(!Number.isFinite(v)) { out[i]=prev; continue; } prev = prev==null? v : (v - prev)*k + prev; out[i]=prev; } return out; }
-    function smaTrace(rows, p, color, name){ const c = rows.map(r=>r.c); const y=sma(c,p); return { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y, name, line:{color, width:1.8}, hoverinfo:'skip', yaxis:'y' }; }
+    function smaTrace(rows, p, color, name){ const c = rows.map(r=>r.c); const y=sma(c,p); const last = y.filter(Number.isFinite).at(-1); return { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y, name, line:{color, width:1.8}, hoverinfo:'skip', yaxis:'y', __last:last }; }
     function volTrace(rows){ return { type:'bar', x: rows.map(r=>new Date(r.t)), y: rows.map(r=>r.v||0), name:'Volume', marker:{ color: css('--c-vol'), opacity:0.35 }, yaxis:'y2' }; }
     function rsiTrace(rows, period=14){ const c=rows.map(r=>r.c); const gains=[],losses=[]; for(let i=1;i<c.length;i++){ const d=c[i]-c[i-1]; gains.push(Math.max(0,d)); losses.push(Math.max(0,-d)); }
       const avgG=ema(gains,period); const avgL=ema(losses,period); const rsi=Array(c.length).fill(null); for(let i=0;i<c.length;i++){ if(i===0) continue; const gi=avgG[i-1], li=avgL[i-1]; if(Number.isFinite(gi) && Number.isFinite(li)){ const rs = li===0? 100 : gi/li; const val = 100 - (100/(1+rs)); rsi[i]=val; } }
@@ -656,6 +656,11 @@
       const ichi = ichiTraces(rows); const ichiOn = isChipOn('ICHI'); ichi.forEach(tr=>tr.visible=ichiOn); traces.push(...ichi);
       if(isChipOn('AUTOFIB')){ state.fibShapes = makeFibShapes(rows); } else { state.fibShapes = []; }
       const layout = buildLayout({ rows, interval: state.interval });
+      // Extend SMA lines horizontally to full chart width at last value
+      const addH = (y, col)=> ({ type:'line', xref:'paper', x0:0, x1:1, yref:'y', y0:y, y1:y, line:{ color: col, width:1, dash:'dot' }, layer:'below', opacity:0.7 });
+      if(isChipOn('SMA20') && Number.isFinite(tSMA20.__last)) layout.shapes.push(addH(tSMA20.__last, css('--c-sma20')));
+      if(isChipOn('SMA50') && Number.isFinite(tSMA50.__last)) layout.shapes.push(addH(tSMA50.__last, css('--c-sma50')));
+      if(isChipOn('SMA200') && Number.isFinite(tSMA200.__last)) layout.shapes.push(addH(tSMA200.__last, css('--c-sma200')));
       Plotly.react(els.chart, traces, layout, {responsive:true, displayModeBar:false});
     }
 
