@@ -433,16 +433,27 @@
       const avg=(a,b)=> (a+b)/2;
       function rollingMid(h,l,p){ const out=Array(h.length).fill(null); for(let i=0;i<h.length;i++){ const s=Math.max(0,i-p+1); let hi=-Infinity, lo=Infinity; for(let j=s;j<=i;j++){ if(Number.isFinite(h[j])) hi=Math.max(hi,h[j]); if(Number.isFinite(l[j])) lo=Math.min(lo,l[j]); } if(hi>-Infinity&&lo<Infinity) out[i]=avg(hi,lo); } return out; }
       const tenkan=rollingMid(high,low,9); const kijun=rollingMid(high,low,26); const spanA=tenkan.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(kijun[i]))? (v+kijun[i])/2 : null); const spanB=rollingMid(high,low,52);
-      // shift spans forward by 26
-      const shift=26; const spanAShift = Array(shift).fill(null).concat(spanA); spanAShift.length = x.length; const spanBShift = Array(shift).fill(null).concat(spanB); spanBShift.length = x.length;
-      const chikou = close.slice().map(v=>v); chikou.splice(0,0,...Array(shift).fill(null)); chikou.length = x.length; // lagging by 26
-      return [
-        { type:'scatter', mode:'lines', x, y:tenkan, name:'Tenkan', line:{color:css('--c-ichi-tenkan'), width:1.2}, hoverinfo:'skip' },
-        { type:'scatter', mode:'lines', x, y:kijun, name:'Kijun', line:{color:css('--c-ichi-kijun'), width:1.2}, hoverinfo:'skip' },
-        { type:'scatter', mode:'lines', x, y:spanAShift, name:'Span A', line:{color:'rgba(34,197,94,0.7)', width:1.2}, hoverinfo:'skip', fill:'tonexty', fillcolor:css('--c-ichi-up') },
-        { type:'scatter', mode:'lines', x, y:spanBShift, name:'Span B', line:{color:'rgba(239,68,68,0.7)', width:1.2}, hoverinfo:'skip', fill:'none', fillcolor:css('--c-ichi-down') },
-        { type:'scatter', mode:'lines', x, y:chikou, name:'Chikou', line:{color:css('--c-ichi-chikou'), width:1.2, dash:'dot'}, hoverinfo:'skip' },
-      ];
+      const shift=26;
+      const spanAShift = Array(shift).fill(null).concat(spanA); spanAShift.length = x.length;
+      const spanBShift = Array(shift).fill(null).concat(spanB); spanBShift.length = x.length;
+      // Build cloud: green where A>B, red where B>A
+      const top = spanAShift.map((a,i)=>{ const b=spanBShift[i]; if(Number.isFinite(a)&&Number.isFinite(b)) return Math.max(a,b); return null; });
+      const bot = spanAShift.map((a,i)=>{ const b=spanBShift[i]; if(Number.isFinite(a)&&Number.isFinite(b)) return Math.min(a,b); return null; });
+      const lowerUp   = bot.map((v,i)=>{ const a=spanAShift[i], b=spanBShift[i]; return (Number.isFinite(a)&&Number.isFinite(b) && a>=b)? v : null; });
+      const lowerDown = bot.map((v,i)=>{ const a=spanAShift[i], b=spanBShift[i]; return (Number.isFinite(a)&&Number.isFinite(b) && a<b) ? v : null; });
+
+      const cloudTop1 = { type:'scatter', mode:'lines', x, y:top, name:'Cloud Top', line:{width:0}, hoverinfo:'skip', showlegend:false };
+      const cloudUp   = { type:'scatter', mode:'lines', x, y:lowerUp,   name:'Cloud Up',   line:{width:0}, hoverinfo:'skip', fill:'tonexty', fillcolor:css('--c-ichi-up'), showlegend:false };
+      const cloudTop2 = { type:'scatter', mode:'lines', x, y:top, name:'Cloud Top', line:{width:0}, hoverinfo:'skip', showlegend:false };
+      const cloudDown = { type:'scatter', mode:'lines', x, y:lowerDown, name:'Cloud Down', line:{width:0}, hoverinfo:'skip', fill:'tonexty', fillcolor:css('--c-ichi-down'), showlegend:false };
+
+      // Chikou (lagging) and lines
+      const chikou = close.slice(); chikou.splice(0,0,...Array(shift).fill(null)); chikou.length = x.length;
+      const ten = { type:'scatter', mode:'lines', x, y:tenkan, name:'Tenkan', line:{color:css('--c-ichi-tenkan'), width:1.2}, hoverinfo:'skip' };
+      const kij = { type:'scatter', mode:'lines', x, y:kijun,  name:'Kijun',  line:{color:css('--c-ichi-kijun'), width:1.2}, hoverinfo:'skip' };
+      const chi = { type:'scatter', mode:'lines', x, y:chikou, name:'Chikou', line:{color:css('--c-ichi-chikou'), width:1.2, dash:'dot'}, hoverinfo:'skip' };
+
+      return [cloudTop1, cloudUp, cloudTop2, cloudDown, ten, kij, chi];
     }
     function makeFibShapes(rows){
       const n = rows.length; if(n<20) return [];
