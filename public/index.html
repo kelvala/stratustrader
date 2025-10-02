@@ -361,7 +361,12 @@
       container: document.querySelector('.container'),
       wideBtn: document.getElementById('wideBtn'),
       maxBtn: document.getElementById('maxBtn'),
-      refreshBtn: document.getElementById('refreshBtn')
+      refreshBtn: document.getElementById('refreshBtn'),
+      sheetGPTs: document.getElementById('sheetGPTs'),
+      sheetScreeners: document.getElementById('sheetScreeners'),
+      toolGPTs: document.getElementById('toolGPTs'),
+      toolScreeners: document.getElementById('toolScreeners'),
+      btmNav: document.getElementById('btmNav')
     };
     const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null, fibOn:false, fibShapes:[], sessionsOn:false };
     const isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
@@ -392,6 +397,144 @@
       return beforePipe.trim().toUpperCase();
     }
 
+    // === Indicators & helpers ===
+    function isIntraday(interval){ return /m|h/i.test(String(interval||'')); }
+
+    function candleTrace(rows){
+      const x = rows.map(r=>new Date(r.t));
+      return {
+        type:'candlestick', name: state.ticker,
+        x, open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c),
+        increasing: { line:{ color: css('--c-up') } },
+        decreasing: { line:{ color: css('--c-down') } },
+        hovertemplate: '%{x|%b %d, %Y %H:%M}<br>O %{open:.2f} H %{high:.2f} L %{low:.2f} C %{close:.2f}<extra></extra>'
+      };
+    }
+    function sma(arr, p){ if(!Array.isArray(arr)||!arr.length||!p) return []; const out=Array(arr.length).fill(null); let sum=0; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(Number.isFinite(v)) sum+=v; if(i>=p){ const w=+arr[i-p]; if(Number.isFinite(w)) sum-=w; } if(i>=p-1) out[i]=sum/p; } return out; }
+    function ema(arr, p){ const out=Array(arr.length).fill(null); const k=2/(p+1); let prev=null; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(!Number.isFinite(v)) { out[i]=prev; continue; } prev = prev==null? v : (v - prev)*k + prev; out[i]=prev; } return out; }
+    function smaTrace(rows, p, color, name){ const c = rows.map(r=>r.c); const y=sma(c,p); return { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y, name, line:{color, width:1.8}, hoverinfo:'skip', yaxis:'y' }; }
+    function volTrace(rows){ return { type:'bar', x: rows.map(r=>new Date(r.t)), y: rows.map(r=>r.v||0), name:'Volume', marker:{ color: css('--c-vol'), opacity:0.35 }, yaxis:'y2' }; }
+    function rsiTrace(rows, period=14){ const c=rows.map(r=>r.c); const gains=[],losses=[]; for(let i=1;i<c.length;i++){ const d=c[i]-c[i-1]; gains.push(Math.max(0,d)); losses.push(Math.max(0,-d)); }
+      const avgG=ema(gains,period); const avgL=ema(losses,period); const rsi=Array(c.length).fill(null); for(let i=0;i<c.length;i++){ if(i===0) continue; const gi=avgG[i-1], li=avgL[i-1]; if(Number.isFinite(gi) && Number.isFinite(li)){ const rs = li===0? 100 : gi/li; const val = 100 - (100/(1+rs)); rsi[i]=val; } }
+      return { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y:rsi, name:'RSI', line:{color:css('--c-rsi'), width:1.6}, yaxis:'y3', hoverinfo:'skip' };
+    }
+    function macdTraces(rows){ const c=rows.map(r=>r.c); const e12=ema(c,12), e26=ema(c,26); const macd=e12.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(e26[i]))? v-e26[i] : null); const signal=ema(macd,9); const hist=macd.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(signal[i]))? v-signal[i]: null);
+      const x=rows.map(r=>new Date(r.t));
+      const colors = hist.map(v=> v==null? 'rgba(0,0,0,0)' : (v>=0? 'rgba(34,197,94,0.35)':'rgba(239,68,68,0.35)'));
+      return [
+        { type:'scatter', mode:'lines', x, y:macd, name:'MACD', line:{color:css('--c-macd'), width:1.6}, yaxis:'y4', hoverinfo:'skip' },
+        { type:'scatter', mode:'lines', x, y:signal, name:'Signal', line:{color:'rgba(148,163,184,0.9)', width:1.2, dash:'dot'}, yaxis:'y4', hoverinfo:'skip' },
+        { type:'bar', x, y:hist, name:'Histogram', marker:{ color:colors }, yaxis:'y4', hoverinfo:'skip' }
+      ];
+    }
+    function ichiTraces(rows){
+      const high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c), x=rows.map(r=>new Date(r.t));
+      const avg=(a,b)=> (a+b)/2;
+      function rollingMid(h,l,p){ const out=Array(h.length).fill(null); for(let i=0;i<h.length;i++){ const s=Math.max(0,i-p+1); let hi=-Infinity, lo=Infinity; for(let j=s;j<=i;j++){ if(Number.isFinite(h[j])) hi=Math.max(hi,h[j]); if(Number.isFinite(l[j])) lo=Math.min(lo,l[j]); } if(hi>-Infinity&&lo<Infinity) out[i]=avg(hi,lo); } return out; }
+      const tenkan=rollingMid(high,low,9); const kijun=rollingMid(high,low,26); const spanA=tenkan.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(kijun[i]))? (v+kijun[i])/2 : null); const spanB=rollingMid(high,low,52);
+      // shift spans forward by 26
+      const shift=26; const spanAShift = Array(shift).fill(null).concat(spanA); spanAShift.length = x.length; const spanBShift = Array(shift).fill(null).concat(spanB); spanBShift.length = x.length;
+      const chikou = close.slice().map(v=>v); chikou.splice(0,0,...Array(shift).fill(null)); chikou.length = x.length; // lagging by 26
+      return [
+        { type:'scatter', mode:'lines', x, y:tenkan, name:'Tenkan', line:{color:css('--c-ichi-tenkan'), width:1.2}, hoverinfo:'skip' },
+        { type:'scatter', mode:'lines', x, y:kijun, name:'Kijun', line:{color:css('--c-ichi-kijun'), width:1.2}, hoverinfo:'skip' },
+        { type:'scatter', mode:'lines', x, y:spanAShift, name:'Span A', line:{color:'rgba(34,197,94,0.7)', width:1.2}, hoverinfo:'skip', fill:'tonexty', fillcolor:css('--c-ichi-up') },
+        { type:'scatter', mode:'lines', x, y:spanBShift, name:'Span B', line:{color:'rgba(239,68,68,0.7)', width:1.2}, hoverinfo:'skip', fill:'none', fillcolor:css('--c-ichi-down') },
+        { type:'scatter', mode:'lines', x, y:chikou, name:'Chikou', line:{color:css('--c-ichi-chikou'), width:1.2, dash:'dot'}, hoverinfo:'skip' },
+      ];
+    }
+    function makeFibShapes(rows){
+      const n = rows.length; if(n<20) return [];
+      const look = Math.min(150, n);
+      const sub = rows.slice(n-look);
+      let hi = -Infinity, lo = Infinity; for(const r of sub){ if(Number.isFinite(r.h)) hi = Math.max(hi, r.h); if(Number.isFinite(r.l)) lo = Math.min(lo, r.l); }
+      if(!(hi>lo && isFinite(hi) && isFinite(lo))) return [];
+      const levels = [0,0.236,0.382,0.5,0.618,0.786,1];
+      const x0 = new Date(sub[0].t), x1 = new Date(sub[sub.length-1].t);
+      const color = '#8b5cf6';
+      const shapes = levels.map(l=>{
+        const y = lo + (hi-lo)*l; return { type:'line', xref:'x', yref:'y', x0, x1, y0:y, y1:y, line:{ color, width:1, dash: l===0.5? 'dash':'dot' } };
+      });
+      return shapes;
+    }
+    function makeSessionDecor(rows){
+      const shapes=[]; const annotations=[]; if(!rows||!rows.length) return {shapes, annotations};
+      const dayMs = 86400000; // ms/day
+      // iterate days present in data
+      const byDay = new Map();
+      for(const r of rows){ const d = new Date(r.t); const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); byDay.set(key, true); }
+      const mk = (d, h, m)=> new Date(new Date(d).setHours(h, m||0, 0, 0));
+      for(const key of byDay.keys()){
+        const pre0 = mk(key, 4, 0), pre1 = mk(key, 9, 30);
+        const post0 = mk(key, 16, 0), post1 = mk(key, 20, 0);
+        shapes.push({ type:'rect', xref:'x', yref:'paper', x0: pre0, x1: pre1, y0:0, y1:1, fillcolor:'rgba(147,197,253,0.08)', line:{width:0} });
+        shapes.push({ type:'rect', xref:'x', yref:'paper', x0: post0, x1: post1, y0:0, y1:1, fillcolor:'rgba(147,197,253,0.08)', line:{width:0} });
+      }
+      return { shapes, annotations };
+    }
+
+    // Anchor model (chart-only)
+    function anchorPerShare(rows){
+      if(!rows||rows.length===0) return NaN;
+      const closes = rows.map(r=> +r.c).filter(Number.isFinite);
+      if(!closes.length) return NaN;
+      const last = closes[closes.length-1];
+      const s50 = sma(closes, 50).at(-1);
+      const s200 = sma(closes, 200).at(-1);
+      let val = NaN;
+      if(Number.isFinite(s200)) val = 0.5*last + 0.3*(s50||last) + 0.2*s200;
+      else if(Number.isFinite(s50)) val = 0.6*last + 0.4*s50;
+      else val = median(closes);
+      return Number.isFinite(val) && val>0 ? val : NaN;
+    }
+
+    // Weighted intrinsic value from multiple models
+    function intrinsicWeighted(fund, rows, opts){
+      const parts = [];
+      // Anchor (always available with chart)
+      const anc = anchorPerShare(rows||[]); if(Number.isFinite(anc) && anc>0) parts.push({model:'ANCHOR', value:anc, weight:0.15});
+
+      // DCF
+      (function(){
+        const {shares, cash, debt, fcf, gDCF, wacc} = fund||{};
+        if(!(Number.isFinite(shares)&&shares>0 && Number.isFinite(fcf)&&fcf>0 && Number.isFinite(wacc)&&wacc>0)) return;
+        let g = Number.isFinite(gDCF)? Math.max(-0.02, Math.min(0.12, gDCF)) : 0.03;
+        const n=5, gt = Math.min(0.03, wacc-0.01);
+        let f = fcf, pv=0; for(let i=1;i<=n;i++){ f *= (1+g); pv += f/Math.pow(1+wacc, i); }
+        const tv = (f*(1+gt))/(wacc-gt);
+        let equity = pv + tv/Math.pow(1+wacc,n);
+        if(Number.isFinite(fund.cash)) equity += fund.cash; if(Number.isFinite(fund.debt)) equity -= fund.debt;
+        const per = equity/shares; if(Number.isFinite(per)&&per>0) parts.push({model:'DCF', value:per, weight:0.45});
+      })();
+
+      // DDM (Gordon)
+      (function(){
+        const { dividendNext, divGrowth, wacc } = fund||{};
+        if(!(Number.isFinite(dividendNext)&&dividendNext>0 && Number.isFinite(wacc) && wacc>0)) return;
+        const g = Math.max(0, Math.min(0.08, Number.isFinite(divGrowth)? divGrowth : 0.03));
+        if(wacc<=g) return;
+        const per = dividendNext/(wacc-g); if(Number.isFinite(per)&&per>0) parts.push({model:'DDM', value:per, weight:0.20});
+      })();
+
+      // Graham Growth formula (modernized)
+      (function(){
+        const { epsTTM, gDCF, aaaYield } = fund||{};
+        if(!(Number.isFinite(epsTTM)&&epsTTM>0)) return;
+        const g = Math.max(0, Math.min(0.15, Number.isFinite(gDCF)? gDCF : 0.05))*100; // convert to %
+        const Y = Math.max(3.0, Number.isFinite(aaaYield)? aaaYield : 5.0); // current AAA yield approx
+        const per = epsTTM * (8.5 + 2*g) * (4.4 / Y);
+        if(Number.isFinite(per) && per>0) parts.push({model:'GRAHAM', value:per, weight:0.20});
+      })();
+
+      const usable = parts.filter(p=>Number.isFinite(p.value) && p.value>0);
+      if(!usable.length) return { perShare: NaN, parts: [] };
+      // renormalize weights to 1.0
+      const wsum = usable.reduce((s,p)=>s+p.weight,0) || 1;
+      const per = usable.reduce((s,p)=> s + p.value * (p.weight/wsum), 0);
+      const norm = usable.map(p=>({...p, weight: +(p.weight/wsum).toFixed(2)}));
+      return { perShare: per, parts: norm };
+    }
+
     // === Symbol list + Autocomplete ===
     async function loadSymbols(){
       if(state.symbols?.length) return state.symbols;
@@ -402,13 +545,13 @@
         const lines = text.split(/\r?\n/).filter(Boolean);
         const out=[]; let start=0;
         const header = lines[0] || '';
-        const delim = header.includes('|') ? '|' : ',';
         if(/^\s*symbol\s*(\||,)/i.test(header)) start=1; // skip header if present
         for(let i=start;i<lines.length;i++){
           const line = lines[i];
+          const delim = line.includes('|') ? '|' : ',';
           const parts = line.split(delim);
           const sym = (parts[0]||'').trim().toUpperCase(); if(!sym) continue;
-          const name = parts.slice(1).join(delim).trim();
+          const name = parts.slice(1).join(' ').replace(/\s*\|\s*/g,' ').trim();
           out.push({ t:sym, n:name });
         }
         state.symbols = out;
@@ -640,9 +783,18 @@
         if(change!=null) change = clampZero(change);
         if(changePct!=null) changePct = clampZero(changePct);
  
-        // Intrinsic value calculation: weighted models with robust fallbacks
+        // Intrinsic value calculation: make ANCHOR available even without fundamentals
         let intrinsic = NaN;
         let ivParts = [];
+        // Preload rows for anchor
+        let rowsForAnchor = state.rows;
+        if(!rowsForAnchor || rowsForAnchor.length < 30){
+          try{ rowsForAnchor = await fetchRows(state.ticker, '6mo', '1d'); }catch{}
+        }
+        const vAnchorOnly = anchorPerShare(rowsForAnchor||[]);
+        if(Number.isFinite(vAnchorOnly) && vAnchorOnly>0){ intrinsic = vAnchorOnly; ivParts = [{ model:'ANCHOR', value:vAnchorOnly, weight:1 }]; }
+
+        // Try fundamentals for weighted model
         try{
           const modules = 'price,financialData,defaultKeyStatistics,earningsTrend,cashflowStatementHistory,incomeStatementHistory,balanceSheetHistory,summaryDetail';
           const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=${encodeURIComponent(modules)}`, { cache:'no-store' });
@@ -679,7 +831,7 @@
             let wacc = 0.085 + (beta - 1) * 0.02; wacc = Math.max(0.07, Math.min(0.12, wacc));
             // Graham
             const epsTTM = num(root?.defaultKeyStatistics?.trailingEps) || num(root?.price?.epsTrailingTwelveMonths);
-            const aaaYield = 5.0; // % current AAA proxy; fallback
+            const aaaYield = 5.0; // % proxy
             // DDM
             const divRateFwd = num(root?.summaryDetail?.dividendRate);
             const divRateTra = num(root?.summaryDetail?.trailingAnnualDividendRate);
@@ -687,23 +839,14 @@
             let divGrowth = Math.max(0, Math.min(0.08, gDCF));
             const D1 = Number.isFinite(divBase) ? divBase * (1 + divGrowth) : NaN;
 
-            // rows for anchor model
-            let rowsForAnchor = state.rows;
-            if(!rowsForAnchor || rowsForAnchor.length < 30){
-              try{ rowsForAnchor = await fetchRows(state.ticker, '6mo', '1d'); }catch{}
-            }
-
             const fund = { shares, cash, debt, fcf, gDCF, wacc, epsTTM, aaaYield, dividendNext:D1, divGrowth };
-            const ivw = intrinsicWeighted(fund, rowsForAnchor, {});
-            if(Number.isFinite(ivw?.perShare) && ivw.perShare>0){
-              intrinsic = ivw.perShare; ivParts = ivw.parts||[];
-            } else {
-              // Try pure DCF per Yahoo build
+            const ivw = intrinsicWeighted(fund, rowsForAnchor||[], {});
+            if(Number.isFinite(ivw?.perShare) && ivw.perShare>0){ intrinsic = ivw.perShare; ivParts = ivw.parts||[]; }
+            else {
               const valuation = buildValuationFromYahoo(root);
               if(Number.isFinite(valuation?.perShare) && valuation.perShare>0){ intrinsic = valuation.perShare; ivParts = [{model:'DCF', value:valuation.perShare, weight:1}]; }
             }
 
-            // Final fallback: analyst targets median
             if(!Number.isFinite(intrinsic) || intrinsic<=0){
               const candidates = [];
               for (const modName of ['financialData', 'summaryDetail', 'price']){
@@ -797,7 +940,8 @@
     }
 
     els.searchBtn?.addEventListener('click', ()=> setTicker(els.q.value));
-    els.q?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ setTicker(els.q.value); } });
+    // Removed duplicate Enter handler; handled above in AC keydown
+    // els.q?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ setTicker(els.q.value); } });
 
     // Timeframe + interval changes
     els.timeSel?.addEventListener('change', ()=>{ state.range = els.timeSel.value; loadAndRender(); });
@@ -837,8 +981,52 @@
       }
     })();
 
-    // ===== Sheets wiring (GPTs/Screeners) and Screeners config remain =====
-    // ...existing code...
+    // ===== Sheets wiring (GPTs/Screeners) and Screeners config =====
+    function openSheet(id){ const el = document.getElementById(id); if(el){ el.hidden=false; el.querySelector('.sheet-inner')?.focus?.(); } }
+    function closeSheet(id){ const el = document.getElementById(id); if(el){ el.hidden=true; } }
+    document.body.addEventListener('click', (e)=>{
+      const btnClose = e.target.closest('[data-close]'); if(btnClose){ closeSheet(btnClose.getAttribute('data-close')); }
+    });
+    els.toolGPTs?.addEventListener('click', ()=> openSheet('sheetGPTs'));
+    els.toolScreeners?.addEventListener('click', ()=> openSheet('sheetScreeners'));
+
+    // Bottom nav wiring (optional)
+    els.btmNav?.addEventListener('click', (e)=>{
+      const tab = e.target.closest('.tab'); if(!tab) return; const t = tab.dataset.tab;
+      $all('.btmnav .tab').forEach(b=>b.classList.toggle('active', b===tab));
+      if(t==='screeners') openSheet('sheetScreeners'); else if(t==='gpts') openSheet('sheetGPTs');
+    });
+
+    // Finviz Screeners presets with localStorage override
+    const defaultScreeners = [
+      { id:'beg-top-div', level:'Beginner', title:'High Dividend Yield', desc:'Dividend yield above 4%, larger caps.', url:'https://finviz.com/screener.ashx?v=111&f=cap_large,fa_div_pos,fa_div_o5' },
+      { id:'beg-growth', level:'Beginner', title:'Steady Revenue Growth', desc:'Positive sales and EPS growth YoY.', url:'https://finviz.com/screener.ashx?v=111&f=fa_epsyoy_pos,fa_salesqoq_pos' },
+      { id:'int-quality', level:'Intermediate', title:'Quality + Profitability', desc:'High gross margin, ROE, low debt.', url:'https://finviz.com/screener.ashx?v=111&f=fa_grossm_pos,fa_debteq_low,fa_roe_pos' },
+      { id:'int-value', level:'Intermediate', title:'Value Candidates', desc:'Low P/E and P/FCF filters.', url:'https://finviz.com/screener.ashx?v=111&f=fa_pe_u20,fa_fcf_pos' },
+      { id:'adv-momo', level:'Advanced', title:'Momentum Scan', desc:'Price above 50/200 SMA, near 52W high.', url:'https://finviz.com/screener.ashx?v=111&f=ta_sma50_pb,ta_sma200_pb,sh_price_o5,ta_highlow52w_a30' },
+      { id:'adv-reversal', level:'Advanced', title:'Oversold Reversal', desc:'RSI oversold with bounce setup.', url:'https://finviz.com/screener.ashx?v=111&f=ta_rsi_os,ta_sma20_pa' }
+    ];
+    function getScreeners(){
+      try{ const raw = localStorage.getItem('screeners.custom'); if(raw){ const arr = JSON.parse(raw); if(Array.isArray(arr) && arr.length) return arr; } }catch{}
+      return defaultScreeners;
+    }
+    function renderScreeners(){
+      const arr = getScreeners(); const root = els.scrList; if(!root) return; root.innerHTML='';
+      for(const s of arr){
+        const item = document.createElement('div'); item.className='scr-item'; item.dataset.lvl = s.level||'Beginner';
+        item.innerHTML = `
+          <div style="flex:1;min-width:0">
+            <div class="title">${s.title||''}</div>
+            <div class="desc">${s.desc||''}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="badge">${s.level||''}</span>
+            <a class="open-btn" href="${s.url}" target="_blank" rel="noopener">Open</a>
+          </div>`;
+        root.appendChild(item);
+      }
+    }
+    renderScreeners();
 
     // Start
     loadSymbols().finally(()=>{
@@ -848,3 +1036,5 @@
     });
   })();
   </script>
+</body>
+</html>
