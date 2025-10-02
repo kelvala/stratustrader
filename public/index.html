@@ -567,6 +567,8 @@
         if(!r.ok) throw new Error('quote '+r.status);
         const j = await r.json();
         const q = parseQuotePayload(j) || {};
+        // NEW: set headline text
+        els.headline.textContent = q?.name ? `${state.ticker} — ${q.name}` : state.ticker;
 
         // Fallbacks using chart data when fields are missing or invalid
         let price = Number.isFinite(+q.price) ? +q.price : null;
@@ -605,11 +607,17 @@
             valuation = buildValuationFromYahoo(root);
             if(Number.isFinite(valuation?.perShare) && valuation.perShare>0){ intrinsic = valuation.perShare; }
             // Keep previous heuristic methods as sanity backup only if still missing
-            if(!Number.isFinite(intrinsic) || intrinsic<=0){
-              const fd = root.financialData || {}; const priceMod = root.price || {};
-              const getNum = v => (v&&typeof v==='object'&&'raw' in v)? v.raw : v;
-              const analystTargets = [getNum(fd.targetMeanPrice), getNum(fd.targetMedianPrice), getNum(fd.targetHighPrice), getNum(fd.targetLowPrice)].filter(v=>Number.isFinite(+v) && +v>0);
-              if(analystTargets.length){ intrinsic = median(analystTargets.map(Number)); }
+            if(!Number.isFinite(intrinsic) || intrinsic <= 0){
+              const getNum = v => (v && typeof v === 'object' && 'raw' in v) ? v.raw : Number(v);
+              const candidates = [];
+              for (const modName of ['financialData', 'summaryDetail', 'price']){
+                const mod = (root && root[modName]) || {};
+                for (const k of ['targetMedianPrice','targetMeanPrice','targetHighPrice','targetLowPrice']){
+                  const val = getNum(mod[k]);
+                  if (Number.isFinite(val) && val > 0) candidates.push(+val);
+                }
+              }
+              if (candidates.length) intrinsic = median(candidates);
             }
           }
         }catch{}
