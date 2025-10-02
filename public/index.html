@@ -542,7 +542,18 @@
     }
     function sma(arr, p){ if(!Array.isArray(arr)||!arr.length||!p) return []; const out=Array(arr.length).fill(null); let sum=0; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(Number.isFinite(v)) sum+=v; if(i>=p){ const w=+arr[i-p]; if(Number.isFinite(w)) sum-=w; } if(i>=p-1) out[i]=sum/p; } return out; }
     function ema(arr, p){ const out=Array(arr.length).fill(null); const k=2/(p+1); let prev=null; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(!Number.isFinite(v)) { out[i]=prev; continue; } prev = prev==null? v : (v - prev)*k + prev; out[i]=prev; } return out; }
-    function smaTrace(rows, p, color, name){ const c = rows.map(r=>r.c); const y=sma(c,p); const last = y.filter(Number.isFinite).at(-1); return { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y, name, line:{color, width:1.8}, hoverinfo:'skip', yaxis:'y', __last:last }; }
+    function smaTrace(rows, p, color, name){
+      const c = rows.map(r=>r.c);
+      // Build SMA and extend it across the full width by back/forward filling
+      let y = sma(c,p);
+      // Use helper fillers if available to extend line across entire series
+      try {
+        if (typeof fillBackward === 'function') y = fillBackward(y);
+        if (typeof fillForward === 'function') y = fillForward(y);
+      } catch(_){}
+      const last = (y||[]).filter(Number.isFinite).at(-1);
+      return { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y, name, line:{color, width:1.8}, hoverinfo:'skip', yaxis:'y', __last:last };
+    }
     function volTrace(rows){
       const x = rows.map(r=>new Date(r.t));
       const y = rows.map(r=>r.v||0);
@@ -878,6 +889,12 @@
         yaxis3: { overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
         yaxis4: { overlaying:'y', side:'right', showgrid:false, showticklabels:false },
         font: { color: css('--text') },
+        // Dark tooltip to match theme
+        hoverlabel: {
+          bgcolor: getComputedStyle(els.chartCard).backgroundColor,
+          bordercolor: css('--grid'),
+          font: { color: css('--text') }
+        },
         shapes: [...(sessDecor.shapes||[]), ...(state.fibShapes||[])], annotations: [...(sessDecor.annotations||[])],
         uirevision: `${state.ticker}|${state.range}|${state.interval}`
       };
@@ -950,6 +967,7 @@
         // Sub-info line: Exchange • Currency • Session • Range · Interval • As of
         try{
           const fmtTime = (ms)=>{ const d=new Date(ms); return d.toLocaleString('en-US',{ timeZone:'America/New_York', hour:'2-digit', minute:'2-digit' }); };
+
           const sess = (q.session||'REG').toUpperCase();
           const sessText = sess==='PRE'?'Pre‑Market': sess==='POST'?'After‑Hours':'Regular';
           els.subInfo.textContent = [q.exchange||'', q.currency||'USD', `Session: ${sessText}`, `${state.range} · ${state.interval}`, `As of ${fmtTime(q.asOf||Date.now())} ET`]
