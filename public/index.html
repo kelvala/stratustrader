@@ -386,6 +386,11 @@
     const clampZero = (v, eps = 1e-6) => (Number.isFinite(v) && Math.abs(v) < eps ? 0 : v);
     const getChip = k => document.querySelector(`.chip[data-k="${k}"]`);
     const isChipOn = k => !!getChip(k)?.classList.contains('active');
+    function sanitizeTicker(s){
+      const raw = String(s||'').trim();
+      const beforePipe = raw.split('|')[0];
+      return beforePipe.trim().toUpperCase();
+    }
 
     // === Symbol list + Autocomplete ===
     async function loadSymbols(){
@@ -396,13 +401,14 @@
         const text = await r.text();
         const lines = text.split(/\r?\n/).filter(Boolean);
         const out=[]; let start=0;
-        if(/symbol/i.test(lines[0])) start=1; // skip header
+        const header = lines[0] || '';
+        const delim = header.includes('|') ? '|' : ',';
+        if(/^\s*symbol\s*(\||,)/i.test(header)) start=1; // skip header if present
         for(let i=start;i<lines.length;i++){
           const line = lines[i];
-          // naive CSV split; ok for simple (symbol,name,...) where name may not include commas; fall back to first two fields
-          const parts = line.split(',');
+          const parts = line.split(delim);
           const sym = (parts[0]||'').trim().toUpperCase(); if(!sym) continue;
-          const name = (parts[1]||'').trim();
+          const name = parts.slice(1).join(delim).trim();
           out.push({ t:sym, n:name });
         }
         state.symbols = out;
@@ -439,7 +445,8 @@
     }
     function acChoose(idx){
       const m = state.acMatches[idx]; if(!m) return;
-      els.q.value = m.t; hideAC(); setTicker(m.t);
+      const sym = sanitizeTicker(m.t);
+      els.q.value = sym; hideAC(); setTicker(sym);
     }
     function hideAC(){ els.ac.classList.remove('show'); state.acMatches=[]; state.acIndex=-1; }
 
@@ -447,15 +454,21 @@
       await loadSymbols();
       const v = els.q.value;
       state.acMatches = acFilter(v);
-      state.acIndex = state.acMatches.length? 0 : -1;
+      state.acIndex = -1; // do not preselect; Enter should use typed ticker
       acRender();
     });
     els.q.addEventListener('keydown', (e)=>{
-      if(!els.ac.classList.contains('show')) return;
-      if(e.key==='ArrowDown'){ e.preventDefault(); if(state.acMatches.length){ state.acIndex=(state.acIndex+1)%state.acMatches.length; acRender(); } }
-      else if(e.key==='ArrowUp'){ e.preventDefault(); if(state.acMatches.length){ state.acIndex=(state.acIndex-1+state.acMatches.length)%state.acMatches.length; acRender(); } }
-      else if(e.key==='Enter'){ if(state.acIndex>=0){ e.preventDefault(); acChoose(state.acIndex); } }
-      else if(e.key==='Escape'){ hideAC(); }
+      if(e.key==='ArrowDown'){
+        if(state.acMatches.length){ e.preventDefault(); state.acIndex = (state.acIndex+1+state.acMatches.length)%state.acMatches.length; acRender(); }
+      } else if(e.key==='ArrowUp'){
+        if(state.acMatches.length){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; acRender(); }
+      } else if(e.key==='Enter'){
+        e.preventDefault();
+        if(els.ac.classList.contains('show') && state.acIndex>=0){ acChoose(state.acIndex); }
+        else { setTicker(els.q.value); }
+      } else if(e.key==='Escape'){
+        hideAC();
+      }
     });
     els.q.addEventListener('blur', ()=> setTimeout(hideAC, 120));
 
@@ -598,7 +611,9 @@
         const j = await r.json();
         const q = parseQuotePayload(j) || {};
         // NEW: set headline text
-        els.headline.textContent = q?.name ? `${state.ticker} — ${q.name}` : state.ticker;
+        els.headline.innerHTML = q?.name
+          ? `<span style="color:${css('--accent')};font-weight:900;letter-spacing:.3px">${state.ticker}</span> <span style="opacity:.9">— ${q.name}</span>`
+          : `<span style="color:${css('--accent')};font-weight:900;letter-spacing:.3px">${state.ticker}</span>`;
 
         // Fallbacks using chart data when fields are missing or invalid
         let price = Number.isFinite(+q.price) ? +q.price : null;
@@ -773,7 +788,7 @@
       refreshQuoteOnce();
     }
     function setTicker(t){
-      const sym = String(t||'').trim().toUpperCase();
+      const sym = sanitizeTicker(t);
       if(!sym) return;
       state.ticker = sym;
       els.q.value = sym;
