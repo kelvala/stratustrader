@@ -265,7 +265,7 @@
         <button class="chip" data-k="VOL" type="button" aria-pressed="false">Volume</button>
         <button class="chip" id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
         <button class="chip" data-k="ICHI" type="button" aria-pressed="false">Ichimoku</button>
-        <button class="chip" data-k="SESS" type="button" aria-pressed="true" title="Toggle pre/post-market bands">Pre/Post</button>
+        <button class="chip" data-k="SESS" type="button" aria-pressed="false" title="Toggle pre/post-market bands">Pre/Post</button>
       </div>
 
       <div id="chart"></div>
@@ -358,7 +358,7 @@
       ivLine: document.getElementById('ivLine'),
       headline: document.getElementById('headline')
     };
-    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null, fibOn:false, fibShapes:[], sessionsOn:true };
+    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null, fibOn:false, fibShapes:[], sessionsOn:false };
     const isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
 
     // Cache timeframe selects
@@ -977,7 +977,7 @@
       const shapes = on ? [...others, ...fibs] : [...others];
       Plotly.relayout(els.chart, { shapes });
       setChip('AUTOFIB', on);
-                                                                                                                                                                 }
+                                                                                                                                    }
        function setSessions(on){
       state.sessionsOn = !!on;
       const intraday = isIntraday(state.interval);
