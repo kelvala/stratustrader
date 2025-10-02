@@ -108,9 +108,10 @@
   /* Bright glow for active chips only (already present; keep it)
      This guarantees inactive chips have NO glow. */
   .chip{position:relative}
-  .chip.active{border-width:2px;box-shadow:0 0 0 1px currentColor,0 0 14px 3px currentColor}
-  .chip.active::after{content:"";position:absolute;inset:-8px;border-radius:999px;background:currentColor;opacity:.4;filter:blur(10px);pointer-events:none}
-  .light .chip.active::after{opacity:.5;filter:blur(12px)}
+  /* Make active chip glow subtle to match button color */
+  .chip.active{border-width:2px; box-shadow:0 0 0 1px currentColor;}
+  .chip.active::after{display:none}
+  .light .chip.active::after{display:none}
   .chip:focus-visible{outline:2px solid currentColor;outline-offset:3px}
   .section-sep{margin:20px -16px 16px;padding:0 16px}
   .section-sep .rule{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.9}
@@ -656,12 +657,30 @@
       const ichi = ichiTraces(rows); const ichiOn = isChipOn('ICHI'); ichi.forEach(tr=>tr.visible=ichiOn); traces.push(...ichi);
       if(isChipOn('AUTOFIB')){ state.fibShapes = makeFibShapes(rows); } else { state.fibShapes = []; }
       const layout = buildLayout({ rows, interval: state.interval });
-      // Extend SMA lines horizontally to full chart width at last value
-      const addH = (y, col)=> ({ type:'line', xref:'paper', x0:0, x1:1, yref:'y', y0:y, y1:y, line:{ color: col, width:1, dash:'dot' }, layer:'below', opacity:0.7 });
-      if(isChipOn('SMA20') && Number.isFinite(tSMA20.__last)) layout.shapes.push(addH(tSMA20.__last, css('--c-sma20')));
-      if(isChipOn('SMA50') && Number.isFinite(tSMA50.__last)) layout.shapes.push(addH(tSMA50.__last, css('--c-sma50')));
-      if(isChipOn('SMA200') && Number.isFinite(tSMA200.__last)) layout.shapes.push(addH(tSMA200.__last, css('--c-sma200')));
+      // Extend SMA lines horizontally to full chart width at last value (subtle)
+      const addH = (y, col)=> ({ type:'line', xref:'paper', x0:0, x1:1, yref:'y', y0:y, y1:y, line:{ color: col, width:1, dash:'dot' }, layer:'below', opacity:0.35 });
+      const last20 = Number.isFinite(state.smaLast?.[20]) ? state.smaLast[20] : tSMA20.__last;
+      const last50 = Number.isFinite(state.smaLast?.[50]) ? state.smaLast[50] : tSMA50.__last;
+      const last200 = Number.isFinite(state.smaLast?.[200]) ? state.smaLast[200] : tSMA200.__last;
+      if(isChipOn('SMA20') && Number.isFinite(last20)) layout.shapes.push(addH(last20, css('--c-sma20')));
+      if(isChipOn('SMA50') && Number.isFinite(last50)) layout.shapes.push(addH(last50, css('--c-sma50')));
+      if(isChipOn('SMA200') && Number.isFinite(last200)) layout.shapes.push(addH(last200, css('--c-sma200')));
       Plotly.react(els.chart, traces, layout, {responsive:true, displayModeBar:false});
+    }
+
+    // Compute robust last SMA values (fetch longer history when needed)
+    async function updateSMALasts(){
+      const rows = state.rows||[]; const closes = rows.map(r=>r.c);
+      const lastVal = (p)=>{ const y=sma(closes,p).filter(Number.isFinite); return y.length? y.at(-1): NaN; };
+      let v20 = lastVal(20), v50 = lastVal(50), v200 = lastVal(200);
+      if(!Number.isFinite(v200) && state.interval==='1d'){
+        try{
+          const extra = await fetchRows(state.ticker, '2y', '1d');
+          const c2 = extra.map(r=>r.c); const y2 = sma(c2,200).filter(Number.isFinite);
+          if(y2.length) v200 = y2.at(-1);
+        }catch{}
+      }
+      state.smaLast = { 20:v20, 50:v50, 200:v200 };
     }
 
     // --- Live quote (independent of chart) ---
@@ -931,6 +950,7 @@
       try{
         const rows = await fetchRows(state.ticker, state.range, state.interval);
         state.rows = rows || [];
+        await updateSMALasts();
         renderChart();
       }catch(e){ /* ignore */ }
       refreshQuoteOnce();
