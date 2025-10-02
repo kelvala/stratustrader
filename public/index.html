@@ -85,10 +85,10 @@
   .chip:not(.active){filter: saturate(0.95) brightness(1.02);} 
   /* Chip base colors (fixed typos) */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);} 
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;} 
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;} 
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;} 
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;} 
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);} 
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);} 
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
@@ -473,6 +473,108 @@
       return { shapes, annotations };
     }
 
+    // ---------- Intrinsic Value models (self-contained) ----------
+    // small utils
+    function _isNum(x){ return Number.isFinite(+x); }
+    function ivMedian(arr){
+      const a = (arr||[]).map(Number).filter(Number.isFinite).sort((x,y)=>x-y);
+      if (!a.length) return NaN; const m = Math.floor(a.length/2);
+      return a.length%2 ? a[m] : (a[m-1]+a[m])/2;
+    }
+    function ema(arr, len){
+      let e=null, k=2/(len+1);
+      for (const v of arr){ const n=+v; if (!Number.isFinite(n)) continue; e = e==null ? n : e + k*(n-e); }
+      return e;
+    }
+    function vwapRows(rows){ let num=0, den=0;
+      for (const r of rows||[]){ const v=+r.v||0; if (!v) continue;
+        const tp=((+r.h||0)+(+r.l||0)+(+r.c||0))/3; if (!Number.isFinite(tp)) continue;
+        num += tp*v; den += v;
+      }
+      return den>0 ? num/den : NaN;
+    }
+    function vwma(close, vol, len){
+      let num=0, den=0, n=close.length, s=Math.max(0,n-len);
+      for (let i=s;i<n;i++){ const c=+close[i], v=+vol[i]||0; if (!_isNum(c)||!v) continue; num+=c*v; den+=v; }
+      return den>0 ? num/den : NaN;
+    }
+    // --- 1) DCF (per share)
+    function dcfPerShare({ fcf, g, r, years=5, gt=Math.min(0.03, r-0.01), cash=0, debt=0, shares }){
+      if (!_isNum(fcf) || !_isNum(g) || !_isNum(r) || !_isNum(shares) || shares<=0) return NaN;
+      const clamp = (x, a, b)=>Math.max(a, Math.min(b, x));
+      g = clamp(g, -0.02, 0.12); r = clamp(r, 0.07, 0.12); gt = Math.min(0.03, r-0.01);
+      let f = fcf, pvSum = 0;
+      for (let i=1;i<=years;i++){ f *= (1+g); pvSum += f / Math.pow(1+r, i); }
+      const tv = (f * (1+gt)) / (r - gt);
+      let equity = pvSum + tv / Math.pow(1+r, years);
+      if (_isNum(cash)) equity += cash;
+      if (_isNum(debt)) equity -= debt;
+      const per = equity / shares;
+      return _isNum(per) && per>0 ? per : NaN;
+    }
+    // --- 2) DDM (Gordon)
+    function ddmPerShare({ D1, r, g }){
+      if (!_isNum(D1) || !_isNum(r) || !_isNum(g) || r<=g) return NaN;
+      const p0 = D1 / (r - g);
+      return p0>0 ? p0 : NaN;
+    }
+    // --- 3) Benjamin Graham (revised)
+    function grahamPerShare({ eps, g, aaaYield }){
+      if (!_isNum(eps) || !_isNum(g) || !_isNum(aaaYield) || aaaYield<=0) return NaN;
+      return eps * (8.5 + 2*g) * 4.4 / aaaYield;
+    }
+    // --- 4) Price/volume "anchor" (no fundamentals)
+    function anchorPerShare(rows){
+      if (!rows || !rows.length) return NaN;
+      const c = rows.map(r=>+r.c), v = rows.map(r=>+r.v||0);
+      const vwapAll = vwapRows(rows);
+      const vwma50  = vwma(c, v, 50);
+      const ema50   = ema(c, 50);
+      const med100  = ivMedian(c.slice(-100));
+      const parts=[];
+      if (_isNum(vwapAll)) parts.push({w:.50, v:vwapAll});
+      if (_isNum(vwma50))  parts.push({w:.30, v:vwma50});
+      if (_isNum(ema50))   parts.push({w:.15, v:ema50});
+      if (_isNum(med100))  parts.push({w:.05, v:med100});
+      if (!parts.length) return NaN;
+      const W = parts.reduce((a,p)=>a+p.w,0);
+      return parts.reduce((a,p)=>a+p.v*(p.w/W), 0);
+    }
+    /**
+     * Weighted Intrinsic Value
+     * @param {Object} fund  fundamentals (per company)
+     *   { fcf, gDCF, wacc, years, gt, cash, debt, shares,
+     *     dividendNext, divGrowth, reqReturn,
+     *     epsTTM, growthEPS, aaaYield }
+     * @param {Array} rows   visible OHLCV rows (for anchor)
+     * @param {Object} w     weights (defaults if omitted)
+     *   { DCF:0.5, DDM:0.2, GRAHAM:0.2, ANCHOR:0.1 }
+     */
+    function intrinsicWeighted(fund={}, rows=[], w={}){
+      const W = { DCF:.50, DDM:.20, GRAHAM:.20, ANCHOR:.10, ...w };
+      const vals = [];
+      // DCF
+      const vDCF = dcfPerShare({
+        fcf: fund.fcf, g: fund.gDCF, r: fund.wacc,
+        years: fund.years ?? 5, gt: fund.gt, cash: fund.cash, debt: fund.debt, shares: fund.shares
+      });
+      if (_isNum(vDCF)) vals.push({k:'DCF', v:vDCF, w:W.DCF});
+      // DDM
+      const vDDM = ddmPerShare({ D1: fund.dividendNext, r: fund.reqReturn ?? fund.wacc, g: fund.divGrowth });
+      if (_isNum(vDDM)) vals.push({k:'DDM', v:vDDM, w:W.DDM});
+      // Graham
+      const vGR = grahamPerShare({ eps: fund.epsTTM, g: (fund.growthEPS ?? fund.gDCF), aaaYield: fund.aaaYield });
+      if (_isNum(vGR)) vals.push({k:'GRAHAM', v:vGR, w:W.GRAHAM});
+      // Price/volume anchor
+      const vAN = anchorPerShare(rows);
+      if (_isNum(vAN)) vals.push({k:'ANCHOR', v:vAN, w:W.ANCHOR});
+      if (!vals.length) return { perShare: NaN, parts: [] };
+      // Normalize to only the models that produced values
+      const wsum = vals.reduce((a,p)=>a+p.w,0);
+      const perShare = vals.reduce((a,p)=> a + p.v * (p.w/wsum), 0);
+      return { perShare, parts: vals.map(p=>({ model:p.k, value:p.v, weight:p.w/wsum })) };
+    }
+
     // --- Live quote (independent of chart) ---
     
     // Conservative 5y DCF from Yahoo summary modules
@@ -595,7 +697,7 @@
         if(change!=null) change = clampZero(change);
         if(changePct!=null) changePct = clampZero(changePct);
  
-        // Intrinsic value calculation with multiple fallbacks
+        // Intrinsic value calculation with multiple models + weighted aggregator
         let intrinsic = null;
         let valuation = null;
         try{
@@ -604,9 +706,70 @@
           if(sr.ok){
             const sj = await sr.json();
             const root = sj?.quoteSummary?.result?.[0] || {};
-            valuation = buildValuationFromYahoo(root);
-            if(Number.isFinite(valuation?.perShare) && valuation.perShare>0){ intrinsic = valuation.perShare; }
-            // Keep previous heuristic methods as sanity backup only if still missing
+
+            // Build FUND mapping from Yahoo root
+            const num = v => (v && typeof v==='object' && 'raw' in v) ? v.raw : (Number.isFinite(+v) ? +v : NaN);
+            let shares = num(root?.defaultKeyStatistics?.sharesOutstanding) || num(root?.price?.sharesOutstanding);
+            const cash = num(root?.financialData?.totalCash);
+            const debt = num(root?.financialData?.totalDebt);
+            // FCF prefer freeCashflow, fallback to cashflow stmt, 70% OCF, 70% NI
+            let fcf = num(root?.financialData?.freeCashflow)
+                  || num(root?.cashflowStatementHistory?.cashflowStatements?.[0]?.freeCashFlow);
+            if(!Number.isFinite(fcf)){
+              const ocf = num(root?.financialData?.operatingCashflow);
+              if(Number.isFinite(ocf)) fcf = ocf * 0.70;
+            }
+            if(!Number.isFinite(fcf) || fcf<=0){
+              const ni = num(root?.financialData?.netIncomeToCommon);
+              if(Number.isFinite(ni) && ni>0) fcf = ni * 0.70;
+            }
+            // Growth estimate
+            let gEst = NaN; const trend = root?.earningsTrend?.trend || [];
+            for(const t of trend){ const gv = num(t?.growth); if(Number.isFinite(gv)) { gEst = gv; break; } }
+            if(!Number.isFinite(gEst)){
+              const rG = num(root?.financialData?.revenueGrowth);
+              const eG = num(root?.financialData?.earningsGrowth);
+              gEst = Number.isFinite(rG) ? rG : Number.isFinite(eG) ? eG : 0.03;
+            }
+            gEst = Math.max(-0.02, Math.min(0.12, gEst));
+            // WACC from beta
+            let beta = num(root?.defaultKeyStatistics?.beta); if(!Number.isFinite(beta)) beta = 1;
+            let wacc = 0.085 + (beta - 1) * 0.02; wacc = Math.max(0.07, Math.min(0.12, wacc));
+            // Dividends
+            let divRate = num(root?.summaryDetail?.dividendRate);
+            if(!Number.isFinite(divRate)) divRate = num(root?.defaultKeyStatistics?.trailingAnnualDividendRate);
+            let divG = Number.isFinite(num(root?.financialData?.dividendGrowthRate)) ? num(root?.financialData?.dividendGrowthRate) : (gEst>0? Math.min(0.05, gEst*0.5) : 0.02);
+            // EPS and EPS growth
+            let eps = num(root?.defaultKeyStatistics?.trailingEps);
+            if(!Number.isFinite(eps)) eps = num(root?.price?.epsTrailingTwelveMonths);
+            if(!Number.isFinite(eps)) eps = num(root?.financialData?.epsTrailingTwelveMonths);
+            let gEPS = Number.isFinite(num(root?.financialData?.earningsGrowth)) ? num(root?.financialData?.earningsGrowth) : gEst;
+
+            const FUND = {
+              fcf, gDCF: gEst, wacc, years: 5, gt: Math.min(0.03, wacc-0.01),
+              cash, debt, shares,
+              dividendNext: Number.isFinite(divRate) && Number.isFinite(divG) ? divRate*(1+divG) : divRate,
+              divGrowth: divG,
+              reqReturn: wacc,
+              epsTTM: eps,
+              growthEPS: gEPS,
+              aaaYield: 0.055
+            };
+
+            const rowsForIV = state.rows || [];
+            const weights = { DCF:.55, DDM:.15, GRAHAM:.15, ANCHOR:.15 };
+            const iv = intrinsicWeighted(FUND, rowsForIV, weights);
+            if(Number.isFinite(iv?.perShare) && iv.perShare>0){
+              intrinsic = iv.perShare;
+              valuation = {
+                perShare: iv.perShare,
+                summary: (iv.parts&&iv.parts.length) ? iv.parts.map(p=>`${p.model}: ${fmtPx(p.value)} (${Math.round(p.weight*100)}%)`).join(' · ') : 'Weighted IV',
+                json: { parts: iv.parts, FUND }
+              };
+              try{ console.debug('IV breakdown', iv.parts); }catch{}
+            }
+
+            // Fallback to analyst target median if still unavailable
             if(!Number.isFinite(intrinsic) || intrinsic <= 0){
               const getNum = v => (v && typeof v === 'object' && 'raw' in v) ? v.raw : Number(v);
               const candidates = [];
@@ -617,7 +780,10 @@
                   if (Number.isFinite(val) && val > 0) candidates.push(+val);
                 }
               }
-              if (candidates.length) intrinsic = median(candidates);
+              if (candidates.length){
+                intrinsic = median(candidates);
+                valuation = { perShare: intrinsic, summary: 'Analyst targets median', json: { source:'analystTargets', candidates } };
+              }
             }
           }
         }catch{}
@@ -811,8 +977,8 @@
       const shapes = on ? [...others, ...fibs] : [...others];
       Plotly.relayout(els.chart, { shapes });
       setChip('AUTOFIB', on);
-    }
-    function setSessions(on){
+                         }
+       function setSessions(on){
       state.sessionsOn = !!on;
       const intraday = isIntraday(state.interval);
       const decor = intraday && state.sessionsOn ? makeSessionDecor(state.rows) : { shapes:[], annotations:[] };
@@ -929,7 +1095,7 @@
             .replace(/\s*-\s*ADR.*$/i,'')
             .replace(/\b(COMMON|PREFERRED)\s+STOCK.*$/i,'')
             .replace(/\b(ORDINARY\s+SHARES|CLASS\s+[A-Z]).*$/i,'')
-            .replace(/^\|+/,'')
+            .replace(/^\|+/, '')
             .trim();
           if(!map.has(sym)) map.set(sym, { sym, name, nameU: (name||'').toUpperCase() });
         }
