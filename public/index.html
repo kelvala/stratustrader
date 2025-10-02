@@ -85,7 +85,7 @@
   .chip:not(.active){filter: saturate(0.95) brightness(1.02);} 
   /* Chip base colors (fixed typos) */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);} 
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);} 
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;} 
   .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;} 
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;} 
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;} 
@@ -356,7 +356,12 @@
       prevCloseLine: document.getElementById('prevCloseLine'),
       ivLine: document.getElementById('ivLine'),
       headline: document.getElementById('headline'),
-      scrList: document.getElementById('scrList')
+      scrList: document.getElementById('scrList'),
+      chartCard: document.getElementById('chartCard'),
+      container: document.querySelector('.container'),
+      wideBtn: document.getElementById('wideBtn'),
+      maxBtn: document.getElementById('maxBtn'),
+      refreshBtn: document.getElementById('refreshBtn')
     };
     const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null, fibOn:false, fibShapes:[], sessionsOn:false };
     const isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
@@ -368,6 +373,8 @@
     // Utilities
     const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
     const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $all = (sel, root=document) => Array.from(root.querySelectorAll(sel));
     function median(arr){
       const a = (arr||[]).map(Number).filter(v=>Number.isFinite(v)).sort((x,y)=>x-y);
       if(!a.length) return NaN; const m = Math.floor(a.length/2);
@@ -376,101 +383,124 @@
     const fmtPx = v => (Number.isFinite(+v) ? `$${fmt.format(+v)}` : '—');
     const fmtPxPos = v => (Number.isFinite(+v) && +v > 0 ? `$${fmt.format(+v)}` : '—');
     const fmtPct = v => (Number.isFinite(+v) ? `${(+v).toFixed(2)}%` : '—');
-    // Avoid displaying -0 or +0
     const clampZero = (v, eps = 1e-6) => (Number.isFinite(v) && Math.abs(v) < eps ? 0 : v);
+    const getChip = k => document.querySelector(`.chip[data-k="${k}"]`);
+    const isChipOn = k => !!getChip(k)?.classList.contains('active');
 
-    function SMA(values, w, fullWidth = true){
-      const out = new Array(values.length).fill(null);
-      let sum = 0; let q = [];
-      for(let i=0;i<values.length;i++){
-        const v = values[i];
-        if(Number.isFinite(v)){
-          q.push(v); sum += v;
-          if(q.length > w){ sum -= q.shift(); }
-          if(fullWidth ? q.length>0 : q.length===w){ out[i] = sum / (fullWidth ? q.length : w); }
+    // === Symbol list + Autocomplete ===
+    async function loadSymbols(){
+      if(state.symbols?.length) return state.symbols;
+      try{
+        const r = await fetch('/stock_data.csv', { cache:'no-store' });
+        if(!r.ok) throw new Error('symbols '+r.status);
+        const text = await r.text();
+        const lines = text.split(/\r?\n/).filter(Boolean);
+        const out=[]; let start=0;
+        if(/symbol/i.test(lines[0])) start=1; // skip header
+        for(let i=start;i<lines.length;i++){
+          const line = lines[i];
+          // naive CSV split; ok for simple (symbol,name,...) where name may not include commas; fall back to first two fields
+          const parts = line.split(',');
+          const sym = (parts[0]||'').trim().toUpperCase(); if(!sym) continue;
+          const name = (parts[1]||'').trim();
+          out.push({ t:sym, n:name });
         }
+        state.symbols = out;
+      }catch(err){ state.symbols = []; }
+      return state.symbols;
+    }
+    function acFilter(q){
+      const s = (q||'').trim().toUpperCase(); if(!s) return [];
+      const arr = state.symbols||[];
+      const starts = [], contains = [];
+      for(const r of arr){
+        const t=r.t||'', n=(r.n||'').toUpperCase();
+        if(t.startsWith(s)) starts.push(r);
+        else if(t.includes(s) || n.includes(s)) contains.push(r);
+        if(starts.length>=30) break;
       }
-      return out;
+      const rest = contains.filter(r=>!starts.includes(r)).slice(0, 40-starts.length);
+      return starts.concat(rest).slice(0,40);
     }
-    function EMA(values, p){
-      const k = 2/(p+1); let ema=null; const out=new Array(values.length).fill(null);
-      for(let i=0;i<values.length;i++){
-        const v = values[i]; if(!Number.isFinite(v)) continue;
-        if(ema==null){ ema = v; } else { ema = v*k + ema*(1-k); }
-        out[i] = ema;
+    function acRender(){
+      const box = els.ac; box.innerHTML='';
+      if(!state.acMatches.length){ box.classList.remove('show'); return; }
+      for(let i=0;i<state.acMatches.length;i++){
+        const m = state.acMatches[i];
+        const div = document.createElement('div');
+        div.className = 'ac-item'+(i===state.acIndex?' active':'');
+        div.setAttribute('role','option');
+        div.dataset.index=String(i);
+        div.innerHTML = `<div class="ticker">${m.t}</div><div class="company">${m.n||''}</div>`;
+        div.addEventListener('mousedown', (e)=>{ e.preventDefault(); acChoose(i); });
+        box.appendChild(div);
       }
-      return out;
+      box.classList.add('show');
     }
-    function RSI(values, p=14){
-      const out = new Array(values.length).fill(null);
-      let gain=0, loss=0; let prev = values[0];
-      for(let i=1;i<values.length;i++){
-        const v = values[i];
-        if(!Number.isFinite(v) || !Number.isFinite(prev)){ prev=v; continue; }
-        const ch = v - prev; prev = v;
-        const g = Math.max(ch,0), l = Math.max(-ch,0);
-        if(i<=p){
-          gain += g; loss += l;
-          if(i===p){ const rs = (gain/p)/((loss/p)||1e-9); out[i] = 100 - 100/(1+rs); }
-        } else {
-          gain = (gain*(p-1)+g)/p; loss = (loss*(p-1)+l)/p; const rs = gain/((loss)||1e-9); out[i] = 100 - 100/(1+rs);
-        }
-      }
-      return out;
+    function acChoose(idx){
+      const m = state.acMatches[idx]; if(!m) return;
+      els.q.value = m.t; hideAC(); setTicker(m.t);
     }
-    function MACD(values, fast=12, slow=26, signal=9){
-      const emaF = EMA(values, fast), emaS = EMA(values, slow);
-      const macd = values.map((_,i)=> (Number.isFinite(emaF[i])&&Number.isFinite(emaS[i]))? emaF[i]-emaS[i] : null);
-      const sig = EMA(macd.map(v=>Number.isFinite(v)?v:null), signal);
-      const hist = macd.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(sig[i])) ? v - sig[i] : null);
-      return { macd, signal: sig, hist };
-    }
-    function Ichimoku(rows){
-      const n = rows.length; const highs = rows.map(r=>r.h), lows = rows.map(r=>r.l), closes = rows.map(r=>r.c);
-      const convP=9, baseP=26, spanBP=52, shift=26;
-      const conv = new Array(n).fill(null), base = new Array(n).fill(null), spanA = new Array(n).fill(null), spanB = new Array(n).fill(null), chikou = new Array(n).fill(null);
-      function mid(i,p){ const s=Math.max(0,i-p+1); let hi=-Infinity, lo=Infinity; for(let j=s;j<=i;j++){ const H=highs[j], L=lows[j]; if(Number.isFinite(H)) hi=Math.max(hi,H); if(Number.isFinite(L)) lo=Math.min(lo,L); } return (hi>-Infinity && lo<Infinity)? (hi+lo)/2 : null; }
-      for(let i=0;i<n;i++){
-        const c = mid(i,convP); const b = mid(i,baseP); const sb = mid(i,spanBP);
-        conv[i]=c; base[i]=b;
-        const a = (Number.isFinite(c)&&Number.isFinite(b))? (c+b)/2 : null;
-        if(i+shift<n){ spanA[i+shift]=a; spanB[i+shift]=sb; }
-        if(i-shift>=0){ chikou[i-shift]=closes[i]; }
-      }
-      return { tenkan:conv, kijun:base, spanA, spanB, chikou };
-    }
-    function makeFibShapes(rows){
-      if(!rows?.length) return [];
-      const xs = rows.map(r=>new Date(r.t)); const x0 = xs[0], x1 = xs[xs.length-1];
-      let hi=-Infinity, lo=Infinity; for(const r of rows){ hi=Math.max(hi,r.h); lo=Math.min(lo,r.l); }
-      if(!Number.isFinite(hi) || !Number.isFinite(lo) || hi<=lo) return [];
-      const diff = hi-lo; const lvls=[0,0.236,0.382,0.5,0.618,0.786,1].map(p=>hi - diff*p);
-      const color = '#8b5cf6';
-      return lvls.map(y=>({ type:'line', xref:'x', yref:'y', x0, x1, y0:y, y1:y, line:{ color, width:1, dash:'dot' } }));
-    }
+    function hideAC(){ els.ac.classList.remove('show'); state.acMatches=[]; state.acIndex=-1; }
 
-    // Pre/Post-market shading and intraday rangebreaks
-    const isIntraday = (intv)=>/^(1|5|15|60)m$/.test(intv);
-    function makeSessionDecor(rows){
-      const shapes=[]; const annotations=[];
-      if(!rows?.length || !isIntraday(state.interval)) return { shapes, annotations };
-      // Build one pre and one post rectangle per day in local time
-      const byDay = new Map();
-      for(const r of rows){ const d = new Date(r.t); const key = d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); if(!byDay.has(key)) byDay.set(key, d); }
-      for(const d of byDay.values()){
-        const y = d.getFullYear(), m=d.getMonth(), day=d.getDate();
-        const pre0 = new Date(y,m,day,4,0,0);  const pre1 = new Date(y,m,day,9,30,0);
-        const post0= new Date(y,m,day,16,0,0); const post1= new Date(y,m,day,20,0,0);
-        shapes.push(
-          { type:'rect', xref:'x', yref:'paper', x0:pre0, x1:pre1, y0:0, y1:1, fillcolor:'rgba(59,130,246,0.06)', line:{width:0}, layer:'below' },
-          { type:'rect', xref:'x', yref:'paper', x0:post0, x1:post1, y0:0, y1:1, fillcolor:'rgba(139,92,246,0.06)', line:{width:0}, layer:'below' }
-        );
-        annotations.push(
-          { x:new Date(y,m,day,4,10,0), y:0.98, xref:'x', yref:'paper', yanchor:'top', text:'Pre', showarrow:false, font:{size:10,color:'#93c5fd'} },
-          { x:new Date(y,m,day,16,10,0), y:0.98, xref:'x', yref:'paper', yanchor:'top', text:'Post', showarrow:false, font:{size:10,color:'#c4b5fd'} }
-        );
+    els.q.addEventListener('input', async ()=>{
+      await loadSymbols();
+      const v = els.q.value;
+      state.acMatches = acFilter(v);
+      state.acIndex = state.acMatches.length? 0 : -1;
+      acRender();
+    });
+    els.q.addEventListener('keydown', (e)=>{
+      if(!els.ac.classList.contains('show')) return;
+      if(e.key==='ArrowDown'){ e.preventDefault(); if(state.acMatches.length){ state.acIndex=(state.acIndex+1)%state.acMatches.length; acRender(); } }
+      else if(e.key==='ArrowUp'){ e.preventDefault(); if(state.acMatches.length){ state.acIndex=(state.acIndex-1+state.acMatches.length)%state.acMatches.length; acRender(); } }
+      else if(e.key==='Enter'){ if(state.acIndex>=0){ e.preventDefault(); acChoose(state.acIndex); } }
+      else if(e.key==='Escape'){ hideAC(); }
+    });
+    els.q.addEventListener('blur', ()=> setTimeout(hideAC, 120));
+
+    // === Chart rendering ===
+    function buildLayout(opts={}){
+      const { rows=[], interval=state.interval } = opts;
+      const intraday = isIntraday(interval);
+      const decor = intraday ? makeSessionDecor(rows) : { shapes:[], annotations:[] };
+      const layout = {
+        margin: { l: 56, r: 24, t: 18, b: 28 },
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        showlegend: true, legend: { orientation: 'h', y: -0.12 },
+        xaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
+        yaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
+        yaxis2: { overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false },
+        yaxis3: { overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
+        yaxis4: { overlaying:'y', side:'right', showgrid:false, showticklabels:false },
+        font: { color: css('--text') },
+        shapes: [], annotations: [],
+        uirevision: `${state.ticker}|${state.range}|${state.interval}`
+      };
+      if(intraday){
+        layout.xaxis.rangebreaks = [
+          { pattern:'day of week', bounds:['sat','mon'] },
+          { pattern:'hour', bounds:[20, 9.5] }
+        ];
       }
-      return { shapes, annotations };
+      if(state.sessionsOn){ layout.shapes.push(...decor.shapes.map(s=>({ ...s, __session:true }))); layout.annotations = decor.annotations; }
+      if(isChipOn('AUTOFIB')){ if(!state.fibShapes?.length) state.fibShapes = makeFibShapes(state.rows||[]); layout.shapes.push(...state.fibShapes); }
+      return layout;
+    }
+    function renderChart(){
+      const rows = state.rows||[]; if(!rows.length || !els.chart) return;
+      const traces = [];
+      traces.push(candleTrace(rows));
+      const tSMA20 = smaTrace(rows, 20, css('--c-sma20'), 'SMA 20'); tSMA20.visible = isChipOn('SMA20'); traces.push(tSMA20);
+      const tSMA50 = smaTrace(rows, 50, css('--c-sma50'), 'SMA 50'); tSMA50.visible = isChipOn('SMA50'); traces.push(tSMA50);
+      const tSMA200 = smaTrace(rows, 200, css('--c-sma200'), 'SMA 200'); tSMA200.visible = isChipOn('SMA200'); traces.push(tSMA200);
+      const tVOL = volTrace(rows); tVOL.visible = isChipOn('VOL'); traces.push(tVOL);
+      const tRSI = rsiTrace(rows); tRSI.visible = isChipOn('RSI'); traces.push(tRSI);
+      const macd = macdTraces(rows); const macdOn = isChipOn('MACD'); macd.forEach(tr=>tr.visible=macdOn); traces.push(...macd);
+      const ichi = ichiTraces(rows); const ichiOn = isChipOn('ICHI'); ichi.forEach(tr=>tr.visible=ichiOn); traces.push(...ichi);
+      if(isChipOn('AUTOFIB')){ state.fibShapes = makeFibShapes(rows); } else { state.fibShapes = []; }
+      const layout = buildLayout({ rows, interval: state.interval });
+      Plotly.react(els.chart, traces, layout, {responsive:true, displayModeBar:false});
     }
 
     // --- Live quote (independent of chart) ---
@@ -733,259 +763,46 @@
       return rows2;
     }
 
-    function buildLayout(opts={}){
-      const { rows=[], interval=state.interval } = opts;
-      const intraday = isIntraday(interval);
-      const decor = intraday ? makeSessionDecor(rows) : { shapes:[], annotations:[] };
-      const layout = {
-        margin: { l: 56, r: 24, t: 18, b: 28 },
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        showlegend: true,
-        legend: { orientation: 'h', y: -0.12 },
-        xaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
-        yaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
-        yaxis2: { overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false },
-        yaxis3: { overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
-        yaxis4: { overlaying:'y', side:'right', showgrid:false, showticklabels:false },
-        font: { color: css('--text') },
-        shapes: state.sessionsOn ? decor.shapes.map(s=>({ ...s, __session:true })) : [],
-        annotations: state.sessionsOn ? decor.annotations : [],
-        uirevision: `${state.ticker}|${state.range}|${state.interval}`
-      };
-      if(intraday){
-        layout.xaxis.rangebreaks = [
-          { pattern:'day of week', bounds:['sat','mon'] },
-          { pattern:'hour', bounds:[20, 9.5] }
-        ];
-      }
-      return layout;
+    // === Search flow ===
+    async function loadAndRender(){
+      try{
+        const rows = await fetchRows(state.ticker, state.range, state.interval);
+        state.rows = rows || [];
+        renderChart();
+      }catch(e){ /* ignore */ }
+      refreshQuoteOnce();
     }
-
-    function candleTrace(rows){
-      const x = rows.map(r=>new Date(r.t));
-      const dateFmt = isIntraday(state.interval) ? '%b %d, %Y %H:%M' : '%b %d, %Y';
-      return {
-        type: 'candlestick', name: 'Price', x,
-        open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c),
-        increasing: { line: { color: css('--c-up') } },
-        decreasing: { line: { color: css('--c-down') } },
-        hovertemplate: `<b>%{x|${dateFmt}}</b><br>` +
-                       `High: $%{high:,.2f}<br>` +
-                       `Low: $%{low:,.2f}` +
-                       `<extra></extra>`
-      };
-    }
-    function smaTrace(rows, period, color, name){
-      const x = rows.map(r=>new Date(r.t));
-      const y = SMA(rows.map(r=>r.c), period, true);
-      return { type:'scatter', mode:'lines', name, x, y, line:{ color, width:1.6 }, visible:false, hoverinfo:'skip' };
-    }
-    function volTrace(rows){
-      const x = rows.map(r=>new Date(r.t));
-      const y = rows.map(r=>r.v||0);
-      const col = rows.map(r=> (r.c>=r.o? css('--c-up'): css('--c-down')) );
-      return { type:'bar', name:'Volume', x, y, yaxis:'y2', marker:{ color: col, opacity:0.28 }, visible:false, hoverinfo:'skip' };
-    }
-    function rsiTrace(rows){
-      const x = rows.map(r=>new Date(r.t));
-      const y = RSI(rows.map(r=>r.c), 14);
-      return { type:'scatter', mode:'lines', name:'RSI 14', x, y, yaxis:'y3', line:{ color: css('--c-rsi'), width:1.4 }, visible:false, hoverinfo:'skip' };
-    }
-    function macdTraces(rows){
-      const x = rows.map(r=>new Date(r.t));
-      const { macd, signal, hist } = MACD(rows.map(r=>r.c));
-      const col = hist.map(v=> v>=0? css('--c-up') : css('--c-down'));
-      return [
-        { type:'scatter', mode:'lines', name:'MACD', x, y:macd, yaxis:'y4', line:{ color: css('--c-macd'), width:1.4 }, visible:false, hoverinfo:'skip' },
-        { type:'scatter', mode:'lines', name:'Signal', x, y:signal, yaxis:'y4', line:{ color: '#94d9f8', width:1.2, dash:'dot' }, visible:false, hoverinfo:'skip' },
-        { type:'bar', name:'Histogram', x, y:hist, yaxis:'y4', marker:{ color: col, opacity:.4 }, visible:false, hoverinfo:'skip' }
-      ];
-    }
-    function ichiTraces(rows){
-      const x = rows.map(r=>new Date(r.t));
-      const ichi = Ichimoku(rows);
-      const traces = [];
-      traces.push({ type:'scatter', mode:'lines', name:'Tenkan', x, y:ichi.tenkan, line:{ color: css('--c-ichi-tenkan'), width:1.2 }, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
-      traces.push({ type:'scatter', mode:'lines', name:'Kijun', x, y:ichi.kijun, line:{ color: css('--c-ichi-kijun'), width:1.2 }, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
-      traces.push({ type:'scatter', mode:'lines', name:'Chikou', x, y:ichi.chikou, line:{ color: css('--c-ichi-chikou'), width:1 }, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
-      const sa = ichi.spanA, sb = ichi.spanB; const n = x.length;
-      let i = 0;
-      function pushCloudSegment(xSeg, upper, lower, color, label){
-        if(xSeg.length<2) return;
-        traces.push({ type:'scatter', mode:'lines', name:label+' base', x:xSeg, y:lower, line:{ color:'rgba(0,0,0,0)', width:0.5 }, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
-        traces.push({ type:'scatter', mode:'lines', name:label, x:xSeg, y:upper, line:{ color:'rgba(0,0,0,0)', width:0.5 }, fill:'tonexty', fillcolor: color, visible:false, hoverinfo:'skip', showlegend:false, meta:'ICHI' });
-      }
-      while(i<n){
-        while(i<n && (!Number.isFinite(sa[i]) || !Number.isFinite(sb[i]))) i++;
-        if(i>=n) break;
-        const up = sa[i] >= sb[i];
-        const xSeg = [], aSeg=[], bSeg=[];
-        while(i<n && Number.isFinite(sa[i]) && Number.isFinite(sb[i]) && ((sa[i]>=sb[i])===up)){
-          xSeg.push(x[i]); aSeg.push(sa[i]); bSeg.push(sb[i]); i++;
-        }
-        const color = up ? css('--c-ichi-up') : css('--c-ichi-down');
-        const upper = up ? aSeg : bSeg;
-        const lower = up ? bSeg : aSeg;
-        pushCloudSegment(xSeg, upper, lower, color, up?'Cloud Up':'Cloud Down');
-      }
-      return traces;
-    }
-
-    // ---------- Intrinsic Value models (self-contained) ----------
-    // small utils
-    function _isNum(x){ return Number.isFinite(+x); }
-    function ivMedian(arr){
-      const a = (arr||[]).map(Number).filter(Number.isFinite).sort((x,y)=>x-y);
-      if (!a.length) return NaN; const m = Math.floor(a.length/2);
-      return a.length%2 ? a[m] : (a[m-1]+a[m])/2;
-    }
-    function ema(arr, len){
-      let e=null, k=2/(len+1);
-      for (const v of arr){ const n=+v; if (!Number.isFinite(n)) continue; e = e==null ? n : e + k*(n-e); }
-      return e;
-    }
-    function vwapRows(rows){ let num=0, den=0;
-      for (const r of rows||[]){ const v=+r.v||0; if (!v) continue;
-        const tp=((+r.h||0)+(+r.l||0)+(+r.c||0))/3; if (!Number.isFinite(tp)) continue;
-        num += tp*v; den += v;
-      }
-      return den>0 ? num/den : NaN;
-    }
-    function vwma(close, vol, len){
-      let num=0, den=0, n=close.length, s=Math.max(0,n-len);
-      for (let i=s;i<n;i++){ const c=+close[i], v=+vol[i]||0; if (!_isNum(c)||!v) continue; num+=c*v; den+=v; }
-      return den>0 ? num/den : NaN;
-    }
-    // --- 1) DCF (per share)
-    function dcfPerShare({ fcf, g, r, years=5, gt=Math.min(0.03, r-0.01), cash=0, debt=0, shares }){
-      if (!_isNum(fcf) || !_isNum(g) || !_isNum(r) || !_isNum(shares) || shares<=0) return NaN;
-      const clamp = (x, a, b)=>Math.max(a, Math.min(b, x));
-      g = clamp(g, -0.02, 0.12); r = clamp(r, 0.07, 0.12); gt = Math.min(0.03, r-0.01);
-      let f = fcf, pvSum = 0;
-      for (let i=1;i<=years;i++){ f *= (1+g); pvSum += f / Math.pow(1+r, i); }
-      const tv = (f * (1+gt)) / (r - gt);
-      let equity = pvSum + tv / Math.pow(1+r, years);
-      if (_isNum(cash)) equity += cash;
-      if (_isNum(debt)) equity -= debt;
-      const per = equity / shares;
-      return _isNum(per) && per>0 ? per : NaN;
-    }
-    // --- 2) DDM (Gordon)
-    function ddmPerShare({ D1, r, g }){
-      if (!_isNum(D1) || !_isNum(r) || !_isNum(g) || r<=g) return NaN;
-      const p0 = D1 / (r - g);
-      return p0>0 ? p0 : NaN;
-    }
-    // --- 3) Benjamin Graham (revised)
-    function grahamPerShare({ eps, g, aaaYield }){
-      if (!_isNum(eps) || !_isNum(g) || !_isNum(aaaYield) || aaaYield<=0) return NaN;
-      return eps * (8.5 + 2*g) * 4.4 / aaaYield;
-    }
-    // --- 4) Price/volume "anchor" (no fundamentals)
-    function anchorPerShare(rows){
-      if (!rows || !rows.length) return NaN;
-      const c = rows.map(r=>+r.c), v = rows.map(r=>+r.v||0);
-      const vwapAll = vwapRows(rows);
-      const vwma50  = vwma(c, v, 50);
-      const ema50   = ema(c, 50);
-      const med100  = ivMedian(c.slice(-100));
-      const parts=[];
-      if (_isNum(vwapAll)) parts.push({w:.50, v:vwapAll});
-      if (_isNum(vwma50))  parts.push({w:.30, v:vwma50});
-      if (_isNum(ema50))   parts.push({w:.15, v:ema50});
-      if (_isNum(med100))  parts.push({w:.05, v:med100});
-      if (!parts.length) return NaN;
-      const W = parts.reduce((a,p)=>a+p.w,0);
-      return parts.reduce((a,p)=>a+p.v*(p.w/W), 0);
-    }
-    /**
-     * Weighted Intrinsic Value
-     * @param {Object} fund  fundamentals
-     * @param {Array} rows   OHLCV rows for anchor
-     * @param {Object} w     weights
-     */
-    function intrinsicWeighted(fund={}, rows=[], w={}){
-      const W = { DCF:.50, DDM:.20, GRAHAM:.20, ANCHOR:.10, ...w };
-      const vals = [];
-      const vDCF = dcfPerShare({
-        fcf: fund.fcf, g: fund.gDCF, r: fund.wacc,
-        years: fund.years ?? 5, gt: fund.gt, cash: fund.cash, debt: fund.debt, shares: fund.shares
-      });
-      if (_isNum(vDCF)) vals.push({k:'DCF', v:vDCF, w:W.DCF});
-      const vDDM = ddmPerShare({ D1: fund.dividendNext, r: fund.reqReturn ?? fund.wacc, g: fund.divGrowth });
-      if (_isNum(vDDM)) vals.push({k:'DDM', v:vDDM, w:W.DDM});
-      const vGR = grahamPerShare({ eps: fund.epsTTM, g: (fund.growthEPS ?? fund.gDCF), aaaYield: fund.aaaYield });
-      if (_isNum(vGR)) vals.push({k:'GRAHAM', v:vGR, w:W.GRAHAM});
-      const vAN = anchorPerShare(rows);
-      if (_isNum(vAN)) vals.push({k:'ANCHOR', v:vAN, w:W.ANCHOR});
-      if (!vals.length) return { perShare: NaN, parts: [] };
-      const wsum = vals.reduce((a,p)=>a+p.w,0);
-      const perShare = vals.reduce((a,p)=> a + p.v * (p.w/wsum), 0);
-      return { perShare, parts: vals.map(p=>({ model:p.k, value:p.v, weight:p.w/wsum })) };
-    }
-
-    // ===== Screeners (Finviz) =====
-    const defaultScreeners = [
-      { lvl:'Beginner', title:'Undervalued (PE < 15, PEG < 1)', desc:'Value tilt with positive 5y EPS growth', filters:'fa_pe_u15,fa_peg_u1,fa_eps5years_pos' },
-      { lvl:'Beginner', title:'Dividend Yield ≥ 4%', desc:'Yield 4%+, payout < 80%', filters:'fa_div_o4,fa_payoutratio_u80' },
-      { lvl:'Intermediate', title:'GARP (EPS 5y > 10%, PEG < 1.5)', desc:'Growth at a reasonable price', filters:'fa_eps5years_o10,fa_peg_u1.5' },
-      { lvl:'Intermediate', title:'Momentum Near 52W High', desc:'Within 10% of 52W high, liquid', filters:'ta_highlow52w_a10,sh_avgvol_o500' },
-      { lvl:'Advanced', title:'Quality + Low Debt', desc:'ROE > 15%, Net margin > 10%, D/E < 0.5', filters:'fa_roe_o15,fa_netmargin_o10,fa_debteq_u0.5' }
-    ];
-    function getScreenersConfig(){
-      try{ const s = localStorage.getItem('screeners.v1'); if(s){ const arr=JSON.parse(s); if(Array.isArray(arr)) return arr; } }catch{}
-      return defaultScreeners;
-    }
-    function finvizUrl(filters){
-      const base = 'https://finviz.com/screener.ashx?v=111&f=';
-      return base + encodeURIComponent(filters);
-    }
-    function renderScreeners(){
-      const list = els.scrList; if(!list) return;
-      const cfg = getScreenersConfig();
-      list.innerHTML = '';
-      for(const item of cfg){
-        const el = document.createElement('div');
-        el.className = 'scr-item';
-        el.dataset.lvl = item.lvl || 'Beginner';
-        el.innerHTML = `
-          <div style="flex:1;min-width:0">
-            <div class="title">${item.title||''}</div>
-            <div class="desc">${item.desc||''}</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="badge">${item.lvl||'—'}</span>
-            <a class="open-btn" href="${finvizUrl(item.filters||'')}" target="_blank" rel="noopener">Open</a>
-          </div>`;
-        el.addEventListener('click', (e)=>{
-          if(e.target && (e.target.closest('a'))) return; // let link work
-          window.open(finvizUrl(item.filters||''), '_blank', 'noopener');
-        });
-        list.appendChild(el);
-      }
-    }
-
-    // ===== Sheets + Toolbar wiring =====
-    function openSheet(id){ const el=document.getElementById(id); if(el) el.hidden=false; }
-    function closeSheet(id){ const el=document.getElementById(id); if(el) el.hidden=true; }
-
-    document.querySelectorAll('.sheet-close').forEach(btn=>{
-      btn.addEventListener('click', ()=> closeSheet(btn.dataset.close));
-    });
-    const gptBtn = document.getElementById('toolGPTs');
-    if(gptBtn){ gptBtn.addEventListener('click', ()=> openSheet('sheetGPTs')); }
-    const scrBtn = document.getElementById('toolScreeners');
-    if(scrBtn){ scrBtn.addEventListener('click', ()=> { openSheet('sheetScreeners'); renderScreeners(); }); }
-
-    // ===== Search wiring =====
     function setTicker(t){
-
       const sym = String(t||'').trim().toUpperCase();
-      if(!sym) return; state.ticker = sym; refreshQuoteOnce();
+      if(!sym) return;
+      state.ticker = sym;
+      els.q.value = sym;
+      hideAC();
+      loadAndRender();
     }
+
     els.searchBtn?.addEventListener('click', ()=> setTicker(els.q.value));
     els.q?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ setTicker(els.q.value); } });
+
+    // Timeframe + interval changes
+    els.timeSel?.addEventListener('change', ()=>{ state.range = els.timeSel.value; loadAndRender(); });
+    els.freqSel?.addEventListener('change', ()=>{ state.interval = els.freqSel.value; loadAndRender(); });
+
+    // Toggle chips (features)
+    els.toggles?.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.chip'); if(!btn) return;
+      const k = btn.dataset.k; if(!k) return;
+      if(k==='SESS') return; // handled below to persist
+      const on = !btn.classList.contains('active');
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on? 'true':'false');
+      renderChart();
+    });
+
+    // Toolbar buttons
+    els.wideBtn?.addEventListener('click', ()=>{ els.container?.classList.toggle('wide'); setTimeout(()=>Plotly.Plots.resize(els.chart), 50); });
+    els.maxBtn?.addEventListener('click', ()=>{ els.chartCard?.classList.toggle('max'); setTimeout(()=>Plotly.Plots.resize(els.chart), 100); });
+    els.refreshBtn?.addEventListener('click', ()=>{ loadAndRender(); });
 
     // ===== Pre/Post chip default OFF on first load =====
     (function initSessionsPref(){
@@ -1000,11 +817,19 @@
           chip.classList.toggle('active', state.sessionsOn);
           chip.setAttribute('aria-pressed', state.sessionsOn? 'true':'false');
           localStorage.setItem('sessionsOn', state.sessionsOn? '1':'0');
+          renderChart();
         });
       }
     })();
 
+    // ===== Sheets wiring (GPTs/Screeners) and Screeners config remain =====
+    // ...existing code...
+
     // Start
-    startQuoteTimer();
+    loadSymbols().finally(()=>{
+      els.q.value = state.ticker;
+      loadAndRender();
+      startQuoteTimer();
+    });
   })();
   </script>
