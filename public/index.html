@@ -474,6 +474,43 @@
       return { shapes, annotations };
     }
 
+    // Helpers to align extended SMA onto visible rows
+    const fillForward = (arr)=>{
+      let last=null; return arr.map(v=>{ if(Number.isFinite(v)) { last=v; return v; } return Number.isFinite(last)? last : null; });
+    };
+    function mapByTs(rows, values){ const m=new Map(); for(let i=0;i<rows.length;i++){ const t=rows[i]?.t; if(Number.isFinite(values[i])) m.set(t, values[i]); } return m; }
+
+    // Build SMA series aligned to the visible viewport (so 200-day spans fully)
+    async function buildSMAAlignedSeries(){
+      state.smaSeries = state.smaSeries || {};
+      const rows = state.rows||[]; if(!rows.length) { state.smaSeries[200]=null; return; }
+      // Only enhance for Daily; otherwise fall back to on-screen SMA
+      if(state.interval!=='1d'){ state.smaSeries[200]=null; return; }
+      const closes = rows.map(r=>r.c);
+      const yVis200 = sma(closes,200);
+      const haveFull = yVis200.some(Number.isFinite);
+      if(haveFull && rows.length>=200){
+        state.smaSeries[200] = yVis200; state.smaLast = Object.assign({}, state.smaLast, {200: yVis200.filter(Number.isFinite).at(-1)}); return;
+      }
+      // Fetch extended history to compute 200-day at each visible date
+      try{
+        const ext = await fetchRows(state.ticker, '3y', '1d');
+        if(Array.isArray(ext) && ext.length){
+          const yExt200 = sma(ext.map(r=>r.c), 200);
+          const map200 = mapByTs(ext, yExt200);
+          const aligned = rows.map(r=> map200.get(r.t) ?? null);
+          const filled = fillForward(aligned);
+          state.smaSeries[200] = filled;
+          const last = filled.filter(Number.isFinite).at(-1);
+          state.smaLast = Object.assign({}, state.smaLast, {200:last});
+          return;
+        }
+      }catch{}
+      // Fallback to visible SMA if extended fetch fails
+      state.smaSeries[200] = yVis200;
+      state.smaLast = Object.assign({}, state.smaLast, {200: yVis200.filter(Number.isFinite).at(-1)});
+    }
+
     // Anchor model (chart-only)
     function anchorPerShare(rows){
       if(!rows||rows.length===0) return NaN;
@@ -650,14 +687,19 @@
       traces.push(candleTrace(rows));
       const tSMA20 = smaTrace(rows, 20, css('--c-sma20'), 'SMA 20'); tSMA20.visible = isChipOn('SMA20'); traces.push(tSMA20);
       const tSMA50 = smaTrace(rows, 50, css('--c-sma50'), 'SMA 50'); tSMA50.visible = isChipOn('SMA50'); traces.push(tSMA50);
-      const tSMA200 = smaTrace(rows, 200, css('--c-sma200'), 'SMA 200'); tSMA200.visible = isChipOn('SMA200'); traces.push(tSMA200);
+      let tSMA200;
+      if(state.smaSeries?.[200]){
+        tSMA200 = { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y: state.smaSeries[200], name:'SMA 200', line:{color:css('--c-sma200'), width:1.8}, hoverinfo:'skip', yaxis:'y', __last: (state.smaLast?.[200]) };
+      } else {
+        tSMA200 = smaTrace(rows, 200, css('--c-sma200'), 'SMA 200');
+      }
+      tSMA200.visible = isChipOn('SMA200'); traces.push(tSMA200);
       const tVOL = volTrace(rows); tVOL.visible = isChipOn('VOL'); traces.push(tVOL);
       const tRSI = rsiTrace(rows); tRSI.visible = isChipOn('RSI'); traces.push(tRSI);
       const macd = macdTraces(rows); const macdOn = isChipOn('MACD'); macd.forEach(tr=>tr.visible=macdOn); traces.push(...macd);
       const ichi = ichiTraces(rows); const ichiOn = isChipOn('ICHI'); ichi.forEach(tr=>tr.visible=ichiOn); traces.push(...ichi);
       if(isChipOn('AUTOFIB')){ state.fibShapes = makeFibShapes(rows); } else { state.fibShapes = []; }
       const layout = buildLayout({ rows, interval: state.interval });
-      // Extend SMA lines horizontally to full chart width at last value (subtle)
       const addH = (y, col)=> ({ type:'line', xref:'paper', x0:0, x1:1, yref:'y', y0:y, y1:y, line:{ color: col, width:1, dash:'dot' }, layer:'below', opacity:0.35 });
       const last20 = Number.isFinite(state.smaLast?.[20]) ? state.smaLast[20] : tSMA20.__last;
       const last50 = Number.isFinite(state.smaLast?.[50]) ? state.smaLast[50] : tSMA50.__last;
@@ -951,6 +993,7 @@
         const rows = await fetchRows(state.ticker, state.range, state.interval);
         state.rows = rows || [];
         await updateSMALasts();
+        await buildSMAAlignedSeries();
         renderChart();
       }catch(e){ /* ignore */ }
       refreshQuoteOnce();
