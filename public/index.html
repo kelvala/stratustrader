@@ -256,6 +256,12 @@
               <option value="1y">Yearly</option>
             </select>
           </div>
+          <!-- Candle height control -->
+          <div class="control" style="grid-column:1 / -1">
+            <label for="heightSel">Candle height</label>
+            <input id="heightSel" type="range" min="0" max="100" step="1" />
+            <div id="heightLabel" style="font-size:12px;color:var(--muted)"></div>
+          </div>
         </div>
       </div>
 
@@ -379,6 +385,8 @@
     // Cache timeframe selects
     els.timeSel = document.getElementById('timeSel');
     els.freqSel = document.getElementById('freqSel');
+    els.heightSel = document.getElementById('heightSel');
+    els.heightLabel = document.getElementById('heightLabel');
 
     // Utilities
     const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
@@ -401,6 +409,27 @@
       const beforePipe = raw.split('|')[0];
       return beforePipe.trim().toUpperCase();
     }
+
+    // Helper: Regular session time in America/New_York (09:30–16:00, Mon–Fri)
+    const dtfET = new Intl.DateTimeFormat('en-US', { timeZone:'America/New_York', hour12:false, hour:'2-digit', minute:'2-digit', weekday:'short' });
+    function isRegularSessionET(ms){
+      const parts = dtfET.formatToParts(new Date(ms));
+      const getNum = (t)=> +((parts.find(p=>p.type===t)?.value)||'0');
+      const wd = (parts.find(p=>p.type==='weekday')?.value)||'';
+      if (/Sat|Sun/i.test(wd)) return false;
+      const hm = getNum('hour') + getNum('minute')/60;
+      return hm >= 9.5 && hm <= 16.0; // 09:30–16:00 ET
+    }
+
+    const quantile = (arr, q)=>{
+      const a = (arr||[]).filter(Number.isFinite).sort((x,y)=>x-y);
+      if(!a.length) return NaN;
+      const idx = (a.length - 1) * q;
+      const lo = Math.floor(idx), hi = Math.ceil(idx);
+      const w = idx - lo;
+      return hi===lo ? a[lo] : a[lo]*(1-w) + a[hi]*w;
+    };
+    const padScaleFromTight = (t)=>{ t = Math.max(0, Math.min(100, +t||0)); return 1.4 - (t/100)*1.1; };
 
     // --- Fit y-axis strictly to visible candlestick highs/lows ------------------
     const fitPriceAxisToCandlesStrict = async () => {
@@ -432,21 +461,34 @@
 
       if (i1 <= i0) return;
 
-      // Compute hi/lo strictly from visible candles
-      let hi = -Infinity, lo = Infinity;
+      // Compute hi/lo strictly from visible candles (exclude AH when Pre/Post OFF)
+      const intraday = /m|h/i.test(String(state.interval||els.freqSel?.value||''));
+      const includeAH = isChipOn('SESS');
+      const hiArr = [], loArr = [];
       for (let i = i0; i <= i1; i++) {
+        const tms = cxms[i];
+        if (intraday && !includeAH && !isRegularSessionET(tms)) continue;
         const h = c.high[i], l = c.low[i];
-        if (Number.isFinite(h)) hi = Math.max(hi, h);
-        if (Number.isFinite(l)) lo = Math.min(lo, l);
+        if (Number.isFinite(h)) hiArr.push(h);
+        if (Number.isFinite(l)) loArr.push(l);
       }
-      if (!Number.isFinite(hi) || !Number.isFinite(lo)) return;
+      if (!hiArr.length || !loArr.length) return;
+
+      let hi = Math.max(...hiArr), lo = Math.min(...loArr);
+      // Trim extreme wicks on intraday to make candles visually taller
+      if (intraday) {
+        const hiQ = quantile(hiArr, 0.995);
+        const loQ = quantile(loArr, 0.005);
+        if (Number.isFinite(hiQ)) hi = hiQ;
+        if (Number.isFinite(loQ)) lo = loQ;
+      }
       if (hi === lo) { hi += 1; lo -= 1; }
 
       // Dynamic padding based on time/frequency (taller candles)
       const time = els.timeSel?.value || '6mo';
       const freq = els.freqSel?.value || '1d';
       const padPct = (() => {
-        if (['1m','5m','15m','60m'].includes(freq)) {
+        if (["1m","5m","15m","60m"].includes(freq)) {
           if (/^(1|2|5|10)d$/.test(time)) return 0.002; // very tight 1–10 day intraday
           if (/mo$/.test(time)) return 0.006;           // multi‑month intraday
           return 0.010;                                  // other intraday
@@ -457,7 +499,12 @@
         return 0.030; // long ranges
       })();
       const minAbs = Math.max((hi - lo) * 0.0015, 0.01);
-      const pad = Math.max((hi - lo) * padPct, minAbs);
+      let pad = Math.max((hi - lo) * padPct, minAbs);
+      // Apply user preference (make candles taller by shrinking pad)
+      if (intraday && els.heightSel) {
+        const scale = padScaleFromTight(state.candleTight ?? 75);
+        pad *= scale;
+      }
       const payload = { 'yaxis.autorange': false, 'yaxis.rangemode': 'normal', 'yaxis.range': [lo - pad, hi + pad] };
       try { await Plotly.relayout(els.chart, payload); } catch(_) {}
     };
@@ -482,10 +529,10 @@
         close: close,
         name: ticker,
         yaxis: 'y',
-        increasing: { line: { color: css('--c-up') || '#16a34a', width: 2.2 }, fillcolor: (css('--c-up')||'#16a34a') },
-        decreasing: { line: { color: css('--c-down') || '#dc2626', width: 2.2 }, fillcolor: (css('--c-down')||'#dc2626') },
-        whiskerwidth: 0.45,
-        opacity: 0.95,
+        increasing: { line: { color: css('--c-up') || '#16a34a', width: 2.6 }, fillcolor: (css('--c-up')||'#16a34a') },
+        decreasing: { line: { color: css('--c-down') || '#dc2626', width: 2.6 }, fillcolor: (css('--c-down')||'#dc2626') },
+        whiskerwidth: 0.7,
+        opacity: 0.98,
         showlegend: false,
         hovertemplate: 'Date: %{x|%Y-%m-%d %H:%M}<br>O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>',
         visible: true // Always show candles
@@ -783,11 +830,45 @@
     els.q.addEventListener('blur', ()=> setTimeout(hideAC, 120));
 
     // === Chart rendering ===
-    function buildLayout(opts={}){
-      const { rows=[], interval=state.interval } = opts;
-      const intraday = isIntraday(interval);
-      const decor = intraday ? makeSessionDecor(rows) : { shapes:[], annotations:[] };
-      const layout = {
+    // Build Plotly layout with conditional rangebreaks based on Pre/Post chip
+    function buildLayout(base){
+      const includeAH = isChipOn('SESS');
+      const intraday = /m|h/i.test(String(state.interval||''));
+      const rangebreaks = (!intraday || includeAH) ? [] : [
+        // Exclude after-hours in ET: 16:00 → 09:30 (wraps midnight)
+        { pattern: 'hour', bounds: [16, 9.5] },
+        // Weekends
+        { pattern: 'day of week', bounds: ['sat', 'mon'] }
+      ];
+      return Object.assign({}, base, {
+        xaxis: Object.assign({}, base?.xaxis, intraday ? { rangebreaks } : {}),
+        hovermode: 'x unified',
+        // Include SESS in uirevision so toggles apply without re-draw
+        uirevision: `${base?.uirevision||'chart'}|sess:${includeAH?1:0}`
+      });
+    }
+
+    async function renderChart(data){
+      const rows = state.rows||[]; if(!rows.length || !els.chart) return;
+      const includeAH = isChipOn('SESS');
+      const intraday = isIntraday(state.interval);
+      const rowsDisplay = (intraday && !includeAH) ? rows.filter(r=>isRegularSessionET(r.t)) : rows;
+      const traces = [];
+      traces.push(candleTrace(rowsDisplay));
+      // Use SMA computed from displayed rows to match session view
+      const tSMA20 = smaTrace(rowsDisplay, 20, css('--c-sma20'), 'SMA 20');
+      tSMA20.visible = isChipOn('SMA20'); traces.push(tSMA20);
+      const tSMA50 = smaTrace(rowsDisplay, 50, css('--c-sma50'), 'SMA 50');
+      tSMA50.visible = isChipOn('SMA50'); traces.push(tSMA50);
+      const tSMA200 = smaTrace(rowsDisplay, 200, css('--c-sma200'), 'SMA 200');
+      tSMA200.visible = isChipOn('SMA200'); traces.push(tSMA200);
+      const tVOL = volTrace(rowsDisplay); tVOL.visible = isChipOn('VOL'); traces.push(tVOL);
+      const tRSI = rsiTrace(rowsDisplay); tRSI.visible = isChipOn('RSI'); traces.push(tRSI);
+      const macd = macdTraces(rowsDisplay); const macdOn = isChipOn('MACD'); macd.forEach(tr=>tr.visible=macdOn); traces.push(...macd);
+      const ichi = ichiTraces(rowsDisplay); const ichiOn = isChipOn('ICHI'); ichi.forEach(tr=>tr.visible=ichiOn); traces.push(...ichi);
+      if(isChipOn('AUTOFIB')){ state.fibShapes = makeFibShapes(rowsDisplay); } else { state.fibShapes = []; }
+      const sessDecor = (includeAH && intraday) ? makeSessionDecor(rows) : { shapes: [], annotations: [] };
+      const baseLayout = {
         margin: { l: 56, r: 24, t: 18, b: 28 },
         paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
         showlegend: true, legend: { orientation: 'h', y: -0.12 },
@@ -797,68 +878,40 @@
         yaxis3: { overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
         yaxis4: { overlaying:'y', side:'right', showgrid:false, showticklabels:false },
         font: { color: css('--text') },
-        shapes: [], annotations: [],
+        shapes: [...(sessDecor.shapes||[]), ...(state.fibShapes||[])], annotations: [...(sessDecor.annotations||[])],
         uirevision: `${state.ticker}|${state.range}|${state.interval}`
       };
-      if(intraday){
-        layout.xaxis.rangebreaks = [
-          { pattern:'day of week', bounds:['sat','mon'] },
-          { pattern:'hour', bounds:[20, 9.5] }
-        ];
-      }
-      if(state.sessionsOn){ layout.shapes.push(...decor.shapes.map(s=>({ ...s, __session:true }))); layout.annotations = decor.annotations; }
-      if(isChipOn('AUTOFIB')){ if(!state.fibShapes?.length) state.fibShapes = makeFibShapes(state.rows||[]); layout.shapes.push(...state.fibShapes); }
-      return layout;
-    }
-    function renderChart(){
-      const rows = state.rows||[]; if(!rows.length || !els.chart) return;
-      const traces = [];
-      traces.push(candleTrace(rows));
-      // Use aligned SMA series when available to ensure full-width lines
-      const tSMA20 = state.smaSeries?.[20]
-        ? { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y: state.smaSeries[20], name:'SMA 20', line:{color:css('--c-sma20'), width:1.8}, hoverinfo:'skip', yaxis:'y', __last: state.smaLast?.[20] }
-        : smaTrace(rows, 20, css('--c-sma20'), 'SMA 20');
-      tSMA20.visible = isChipOn('SMA20'); traces.push(tSMA20);
-      const tSMA50 = state.smaSeries?.[50]
-        ? { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y: state.smaSeries[50], name:'SMA 50', line:{color:css('--c-sma50'), width:1.8}, hoverinfo:'skip', yaxis:'y', __last: state.smaLast?.[50] }
-        : smaTrace(rows, 50, css('--c-sma50'), 'SMA 50');
-      tSMA50.visible = isChipOn('SMA50'); traces.push(tSMA50);
-      const tSMA200 = state.smaSeries?.[200]
-        ? { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y: state.smaSeries[200], name:'SMA 200', line:{color:css('--c-sma200'), width:1.8}, hoverinfo:'skip', yaxis:'y', __last: state.smaLast?.[200] }
-        : smaTrace(rows, 200, css('--c-sma200'), 'SMA 200');
-      tSMA200.visible = isChipOn('SMA200'); traces.push(tSMA200);
-      const tVOL = volTrace(rows); tVOL.visible = isChipOn('VOL'); traces.push(tVOL);
-      const tRSI = rsiTrace(rows); tRSI.visible = isChipOn('RSI'); traces.push(tRSI);
-      const macd = macdTraces(rows); const macdOn = isChipOn('MACD'); macd.forEach(tr=>tr.visible=macdOn); traces.push(...macd);
-      const ichi = ichiTraces(rows); const ichiOn = isChipOn('ICHI'); ichi.forEach(tr=>tr.visible=ichiOn); traces.push(...ichi);
-      if(isChipOn('AUTOFIB')){ state.fibShapes = makeFibShapes(rows); } else { state.fibShapes = []; }
-      const layout = buildLayout({ rows, interval: state.interval });
-      const addH = (y, col)=> ({ type:'line', xref:'paper', x0:0, x1:1, yref:'y', y0:y, y1:y, line:{ color: col, width:1, dash:'dot' }, layer:'below', opacity:0.35 });
-      const last20 = Number.isFinite(state.smaLast?.[20]) ? state.smaLast[20] : tSMA20.__last;
-      const last50 = Number.isFinite(state.smaLast?.[50]) ? state.smaLast[50] : tSMA50.__last;
-      const last200 = Number.isFinite(state.smaLast?.[200]) ? state.smaLast[200] : tSMA200.__last;
-      if(isChipOn('SMA20') && Number.isFinite(last20)) layout.shapes.push(addH(last20, css('--c-sma20')));
-      if(isChipOn('SMA50') && Number.isFinite(last50)) layout.shapes.push(addH(last50, css('--c-sma50')));
-      if(isChipOn('SMA200') && Number.isFinite(last200)) layout.shapes.push(addH(last200, css('--c-sma200')));
-      Plotly.react(els.chart, traces, layout, {responsive:true, displayModeBar:false});
-      // After render, tighten y-axis so candles fill the pane
-      setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch(_){} }, 0);
+      const layout = buildLayout(baseLayout);
+      await Plotly.react(els.chart, traces, layout, { responsive:true, displayModeBar:false });
+      // After render, fit y-axis tightly to visible session candles
+      await fitPriceAxisToCandlesStrict();
     }
 
-    // Compute robust last SMA values (fetch longer history when needed)
-    async function updateSMALasts(){
-      const rows = state.rows||[]; const closes = rows.map(r=>r.c);
-      const lastVal = (p)=>{ const y=sma(closes,p).filter(Number.isFinite); return y.length? y.at(-1): NaN; };
-      let v20 = lastVal(20), v50 = lastVal(50), v200 = lastVal(200);
-      if(!Number.isFinite(v200) && state.interval==='1d'){
-        try{
-          const extra = await fetchRows(state.ticker, '2y', '1d');
-          const c2 = extra.map(r=>r.c); const y2 = sma(c2,200).filter(Number.isFinite);
-          if(y2.length) v200 = y2.at(-1);
-        }catch{}
+    // Refit y-axis on interactions without full re-draw
+    els.chart?.on?.('plotly_relayout', ev => {
+      if (ev && (ev['xaxis.range[0]'] || ev['xaxis.range[1]'] || ev['xaxis.autorange'] !== undefined)) {
+        setTimeout(fitPriceAxisToCandlesStrict, 0);
       }
-      state.smaLast = { 20:v20, 50:v50, 200:v200 };
-    }
+    });
+
+    // Removed duplicate Pre/Post listener (SESS chip already triggers renderChart)
+    // Hook Pre/Post chip toggle to update rangebreaks and y-fit via restyle/relayout
+    getChip('PREPOST')?.addEventListener('click', async () => {
+      const L = els.chart?.layout || {};
+      const includeAH = isChipOn('PREPOST');
+      const rangebreaks = includeAH ? [] : [
+        { bounds: [16, 24], pattern: 'hour' },
+        { bounds: [0, 9.5], pattern: 'hour' },
+        { pattern: 'day of week', bounds: [6, 1] }
+      ];
+      try {
+        await Plotly.relayout(els.chart, {
+          'xaxis.rangebreaks': rangebreaks,
+          'uirevision': `${(L.uirevision||'chart').split('|')[0]}|prepost:${includeAH?1:0}`
+        });
+      } catch(_) {}
+      setTimeout(fitPriceAxisToCandlesStrict, 0);
+    });
 
     // --- Live quote (independent of chart) ---
     function parseQuotePayload(j){
@@ -892,9 +945,9 @@
         const j = await r.json();
         const q = parseQuotePayload(j) || {};
         els.headline.innerHTML = q?.name
-          ? `<span style="color:${css('--accent')};font-weight:900;letter-spacing:.3px">${state.ticker}</span> <span style="opacity:.9">— ${q.name}</span>`
+          ? `<span style="color:${css('--accent')};font-weight:900;letter-spacing:.3px">${state.ticker}</span> <span class="text-muted">— ${q.name}</span>`
           : `<span style="color:${css('--accent')};font-weight:900;letter-spacing:.3px">${state.ticker}</span>`;
-        // New: sub-info line
+        // Sub-info line: Exchange • Currency • Session • Range · Interval • As of
         try{
           const fmtTime = (ms)=>{ const d=new Date(ms); return d.toLocaleString('en-US',{ timeZone:'America/New_York', hour:'2-digit', minute:'2-digit' }); };
           const sess = (q.session||'REG').toUpperCase();
@@ -908,7 +961,7 @@
         let prevClose = Number.isFinite(+q.prevClose) && +q.prevClose > 0 ? +q.prevClose : null;
         if(!prevClose){
           const rows = (state.rows||[]);
-          if(rows.length >= 2){
+                   if(rows.length >= 2){
             const p = rows[rows.length-2]?.c; if(Number.isFinite(+p) && +p>0) prevClose = +p;
           }
           if(!prevClose){
@@ -1124,6 +1177,27 @@
           chip.setAttribute('aria-pressed', state.sessionsOn? 'true':'false');
           localStorage.setItem('sessionsOn', state.sessionsOn? '1':'0');
           renderChart();
+        });
+      }
+    })();
+
+    // Candle height slider init
+    (function initCandleHeight(){
+      const saved = localStorage.getItem('candleTight');
+      state.candleTight = saved!=null ? +saved : 75; // 0..100 (higher = taller)
+      if (els.heightSel){
+        els.heightSel.value = String(state.candleTight);
+        const setLabel = ()=>{
+          const v = +els.heightSel.value;
+          els.heightLabel.textContent = v>=80? 'Taller' : v<=20? 'Shorter' : 'Balanced';
+        };
+        setLabel();
+        els.heightSel.addEventListener('input', ()=>{
+          state.candleTight = +els.heightSel.value;
+          localStorage.setItem('candleTight', String(state.candleTight));
+          setLabel();
+          // Only refit Y to respect new setting
+          fitPriceAxisToCandlesStrict();
         });
       }
     })();
