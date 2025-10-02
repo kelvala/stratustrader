@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.038</title>
+<title>Stock Analyzer v.040</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -478,37 +478,61 @@
     const fillForward = (arr)=>{
       let last=null; return arr.map(v=>{ if(Number.isFinite(v)) { last=v; return v; } return Number.isFinite(last)? last : null; });
     };
+    const fillBackward = (arr)=>{
+      const out = arr.slice();
+      let firstIdx = out.findIndex(Number.isFinite);
+      if(firstIdx>0){ const val = out[firstIdx]; for(let i=0;i<firstIdx;i++) out[i]=val; }
+      return out;
+    };
     function mapByTs(rows, values){ const m=new Map(); for(let i=0;i<rows.length;i++){ const t=rows[i]?.t; if(Number.isFinite(values[i])) m.set(t, values[i]); } return m; }
 
-    // Build SMA series aligned to the visible viewport (so 200-day spans fully)
+    // Build SMA series (20/50/200) aligned to the visible viewport so each line spans full width
     async function buildSMAAlignedSeries(){
-      state.smaSeries = state.smaSeries || {};
-      const rows = state.rows||[]; if(!rows.length) { state.smaSeries[200]=null; return; }
-      // Only enhance for Daily; otherwise fall back to on-screen SMA
-      if(state.interval!=='1d'){ state.smaSeries[200]=null; return; }
+      const rows = state.rows||[]; state.smaSeries = state.smaSeries || {}; state.smaLast = state.smaLast || {};
+      if(!rows.length){ state.smaSeries={}; state.smaLast={}; return; }
       const closes = rows.map(r=>r.c);
-      const yVis200 = sma(closes,200);
-      const haveFull = yVis200.some(Number.isFinite);
-      if(haveFull && rows.length>=200){
-        state.smaSeries[200] = yVis200; state.smaLast = Object.assign({}, state.smaLast, {200: yVis200.filter(Number.isFinite).at(-1)}); return;
-      }
-      // Fetch extended history to compute 200-day at each visible date
-      try{
-        const ext = await fetchRows(state.ticker, '3y', '1d');
-        if(Array.isArray(ext) && ext.length){
-          const yExt200 = sma(ext.map(r=>r.c), 200);
-          const map200 = mapByTs(ext, yExt200);
-          const aligned = rows.map(r=> map200.get(r.t) ?? null);
-          const filled = fillForward(aligned);
-          state.smaSeries[200] = filled;
-          const last = filled.filter(Number.isFinite).at(-1);
-          state.smaLast = Object.assign({}, state.smaLast, {200:last});
-          return;
+      const periods = [20,50,200];
+      const pickExtendedRange = (interval, p)=>{
+        switch(interval){
+          case '1m': return '5d';
+          case '5m': return '1mo';
+          case '15m': return '3mo';
+          case '60m': return '6mo';
+          case '1d': default: return p>=200? '3y':'1y';
+          case '1wk': return '10y';
+          case '1mo': return 'max';
+          case '3mo': return 'max';
+          case '1y':  return 'max';
         }
-      }catch{}
-      // Fallback to visible SMA if extended fetch fails
-      state.smaSeries[200] = yVis200;
-      state.smaLast = Object.assign({}, state.smaLast, {200: yVis200.filter(Number.isFinite).at(-1)});
+      };
+      async function alignFromExtended(p){
+        const extRange = pickExtendedRange(state.interval, p);
+        try{
+          const ext = await fetchRows(state.ticker, extRange, state.interval);
+          if(Array.isArray(ext) && ext.length){
+            const yExt = sma(ext.map(r=>r.c), p);
+            const mapP = mapByTs(ext, yExt);
+            const aligned = rows.map(r=> mapP.get(r.t) ?? null);
+            return fillBackward(fillForward(aligned));
+          }
+        }catch{}
+        return null;
+      }
+      for(const p of periods){
+        let y = sma(closes, p);
+        if(y.some(Number.isFinite)){
+          y = fillBackward(y);
+        } else {
+          const extAligned = await alignFromExtended(p);
+          if(extAligned){ y = extAligned; }
+          else {
+            const lastClose = closes.filter(Number.isFinite).at(-1) ?? null; y = Array(rows.length).fill(lastClose);
+          }
+        }
+        state.smaSeries[p] = y;
+        const last = y.filter(Number.isFinite).at(-1);
+        if(Number.isFinite(last)) state.smaLast[p] = last;
+      }
     }
 
     // Anchor model (chart-only)
@@ -685,14 +709,18 @@
       const rows = state.rows||[]; if(!rows.length || !els.chart) return;
       const traces = [];
       traces.push(candleTrace(rows));
-      const tSMA20 = smaTrace(rows, 20, css('--c-sma20'), 'SMA 20'); tSMA20.visible = isChipOn('SMA20'); traces.push(tSMA20);
-      const tSMA50 = smaTrace(rows, 50, css('--c-sma50'), 'SMA 50'); tSMA50.visible = isChipOn('SMA50'); traces.push(tSMA50);
-      let tSMA200;
-      if(state.smaSeries?.[200]){
-        tSMA200 = { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y: state.smaSeries[200], name:'SMA 200', line:{color:css('--c-sma200'), width:1.8}, hoverinfo:'skip', yaxis:'y', __last: (state.smaLast?.[200]) };
-      } else {
-        tSMA200 = smaTrace(rows, 200, css('--c-sma200'), 'SMA 200');
-      }
+      // Use aligned SMA series when available to ensure full-width lines
+      const tSMA20 = state.smaSeries?.[20]
+        ? { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y: state.smaSeries[20], name:'SMA 20', line:{color:css('--c-sma20'), width:1.8}, hoverinfo:'skip', yaxis:'y', __last: state.smaLast?.[20] }
+        : smaTrace(rows, 20, css('--c-sma20'), 'SMA 20');
+      tSMA20.visible = isChipOn('SMA20'); traces.push(tSMA20);
+      const tSMA50 = state.smaSeries?.[50]
+        ? { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y: state.smaSeries[50], name:'SMA 50', line:{color:css('--c-sma50'), width:1.8}, hoverinfo:'skip', yaxis:'y', __last: state.smaLast?.[50] }
+        : smaTrace(rows, 50, css('--c-sma50'), 'SMA 50');
+      tSMA50.visible = isChipOn('SMA50'); traces.push(tSMA50);
+      const tSMA200 = state.smaSeries?.[200]
+        ? { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y: state.smaSeries[200], name:'SMA 200', line:{color:css('--c-sma200'), width:1.8}, hoverinfo:'skip', yaxis:'y', __last: state.smaLast?.[200] }
+        : smaTrace(rows, 200, css('--c-sma200'), 'SMA 200');
       tSMA200.visible = isChipOn('SMA200'); traces.push(tSMA200);
       const tVOL = volTrace(rows); tVOL.visible = isChipOn('VOL'); traces.push(tVOL);
       const tRSI = rsiTrace(rows); tRSI.visible = isChipOn('RSI'); traces.push(tRSI);
@@ -992,7 +1020,6 @@
       try{
         const rows = await fetchRows(state.ticker, state.range, state.interval);
         state.rows = rows || [];
-        await updateSMALasts();
         await buildSMAAlignedSeries();
         renderChart();
       }catch(e){ /* ignore */ }
