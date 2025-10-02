@@ -368,6 +368,11 @@
     // Utilities
     const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
     const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+    function median(arr){
+      const a = (arr||[]).map(Number).filter(v=>Number.isFinite(v)).sort((x,y)=>x-y);
+      if(!a.length) return NaN; const m = Math.floor(a.length/2);
+      return a.length%2 ? a[m] : (a[m-1]+a[m])/2;
+    }
     const fmtPx = v => (Number.isFinite(+v) ? `$${fmt.format(+v)}` : '—');
     const fmtPxPos = v => (Number.isFinite(+v) && +v > 0 ? `$${fmt.format(+v)}` : '—');
     const fmtPct = v => (Number.isFinite(+v) ? `${(+v).toFixed(2)}%` : '—');
@@ -469,40 +474,91 @@
     }
 
     // --- Live quote (independent of chart) ---
+    
+    // Conservative 5y DCF from Yahoo summary modules
+    function buildValuationFromYahoo(root){
+      const num = v => (v && typeof v==='object' && 'raw' in v) ? v.raw : (Number.isFinite(+v) ? +v : NaN);
+
+      // Shares
+      let shares = num(root?.defaultKeyStatistics?.sharesOutstanding) || num(root?.price?.sharesOutstanding);
+      if(!Number.isFinite(shares) || shares <= 0) return null;
+
+      // Cash / Debt
+      const cash = num(root?.financialData?.totalCash);
+      const debt = num(root?.financialData?.totalDebt);
+
+      // Free cash flow (prefer FCF, then cashflow stmt, then 70% OCF, then 70% NI)
+      let fcf = num(root?.financialData?.freeCashflow)
+            || num(root?.cashflowStatementHistory?.cashflowStatements?.[0]?.freeCashFlow);
+      if(!Number.isFinite(fcf)){
+        const ocf = num(root?.financialData?.operatingCashflow);
+        if(Number.isFinite(ocf)) fcf = ocf * 0.70;
+      }
+      if(!Number.isFinite(fcf) || fcf <= 0){
+        const ni = num(root?.financialData?.netIncomeToCommon);
+        if(Number.isFinite(ni) && ni > 0) fcf = ni * 0.70;
+      }
+      if(!Number.isFinite(fcf) || fcf <= 0) return null;
+
+      // Growth (analyst trend → revenue/earnings growth → 3%), clamp −2%..12%
+      let g = NaN;
+      const trend = root?.earningsTrend?.trend || [];
+      for(const t of trend){ const gv = num(t?.growth); if(Number.isFinite(gv)) { g = gv; break; } }
+      if(!Number.isFinite(g)){
+        const rG = num(root?.financialData?.revenueGrowth);
+        const eG = num(root?.financialData?.earningsGrowth);
+        g = Number.isFinite(rG) ? rG : Number.isFinite(eG) ? eG : 0.03;
+      }
+      g = Math.max(-0.02, Math.min(0.12, g));
+
+      // Discount rate from beta (≈8.5% ±2%), clamp 7%..12%
+      let beta = num(root?.defaultKeyStatistics?.beta); if(!Number.isFinite(beta)) beta = 1;
+      let wacc = 0.085 + (beta - 1) * 0.02; wacc = Math.max(0.07, Math.min(0.12, wacc));
+
+      // 5y projection + terminal growth ≤ 3%
+      const n = 5, gt = Math.min(0.03, wacc - 0.01);
+      let f = fcf, pvSum = 0;
+      for(let i=1;i<=n;i++){ f *= (1+g); pvSum += f / Math.pow(1+wacc, i); }
+      const tv = (f * (1+gt)) / (wacc - gt);
+      let equity = pvSum + (tv / Math.pow(1+wacc, n));
+      if(Number.isFinite(cash)) equity += cash;
+      if(Number.isFinite(debt)) equity -= debt;
+
+      const perShare = equity / shares;
+      return Number.isFinite(perShare) && perShare > 0 ? { perShare } : null;
+    }
+    
     function parseQuotePayload(j){
-      // Support both quoteResponse (v7) and quoteSummary.price (v10 modules=price)
-      const rr = j?.quoteResponse?.result?.[0];
-      const pr = j?.quoteSummary?.result?.[0]?.price;
-      const r = rr || pr;
+      const r = j?.quoteResponse?.result?.[0];
       if (!r) return null;
 
-      const get = (v)=> (v && typeof v === 'object' && 'raw' in v ? v.raw : v);
-      const num = (v)=>{ const x=get(v); return Number.isFinite(+x) ? +x : null; };
+      const prevClose = Number(r.regularMarketPreviousClose);
 
-      const prevClose = num(r.regularMarketPreviousClose);
-
+      // Build candidates with timestamps (fallback to 0 if missing)
       const cand = [];
-      const pushPrice = (p, t, d, pct)=>{
-        const P = num(p); if(P==null) return; cand.push({ p:P, t: +(get(t)||0), d: num(d), pct: num(pct) });
-      };
-      pushPrice(r.postMarketPrice,    r.postMarketTime,    r.postMarketChange,    r.postMarketChangePercent);
-      pushPrice(r.preMarketPrice,     r.preMarketTime,     r.preMarketChange,     r.preMarketChangePercent);
-      pushPrice(r.regularMarketPrice, r.regularMarketTime, r.regularMarketChange, r.regularMarketChangePercent);
+      if (Number.isFinite(+r.postMarketPrice))    cand.push({p:+r.postMarketPrice,  t:+(r.postMarketTime||0),  d:+r.postMarketChange,  pct:+r.postMarketChangePercent});
+      if (Number.isFinite(+r.preMarketPrice))     cand.push({p:+r.preMarketPrice,   t:+(r.preMarketTime||0),   d:+r.preMarketChange,   pct:+r.preMarketChangePercent});
+      if (Number.isFinite(+r.regularMarketPrice)) cand.push({p:+r.regularMarketPrice,t:+(r.regularMarketTime||0),d:+r.regularMarketChange,pct:+r.regularMarketChangePercent});
 
-      const name = get(r.shortName) || get(r.longName) || '';
-      const exchange = get(r.fullExchangeName) || get(r.exchangeName) || '';
-      const marketState = get(r.marketState) || '';
-      const currency = get(r.currency) || 'USD';
+      if (!cand.length) return { price:null, change:null, changePct:null, prevClose, name: r.shortName || r.longName || '', currency: r.currency || 'USD' };
 
-      if (!cand.length) return { price:null, change:null, changePct:null, prevClose, name, currency, exchange, marketState };
-
-      cand.sort((a,b)=> (b.t||0)-(a.t||0));
+      // Choose the most recent by timestamp
+      cand.sort((a,b) => (b.t||0)-(a.t||0));
       const best = cand[0];
-      const price = best.p;
-      let change = Number.isFinite(best.d) ? best.d : (Number.isFinite(prevClose) ? price - prevClose : null);
+
+      // If Yahoo didn't give change/pct for that session, compute from prevClose
+      let price  = best.p;
+      let change = Number.isFinite(best.d)   ? best.d   : (Number.isFinite(prevClose) ? price - prevClose : null);
       let pct    = Number.isFinite(best.pct) ? best.pct : (Number.isFinite(prevClose) ? (price - prevClose)/prevClose*100 : null);
 
-      return { price, change, changePct:pct, prevClose, name, currency, exchange, marketState };
+      return {
+        price,
+        change,
+        changePct: pct,
+        prevClose,
+        name: r.shortName || r.longName || '',
+        currency: r.currency || 'USD'
+      };
     }
 
     async function refreshQuoteOnce(){
@@ -511,16 +567,6 @@
         if(!r.ok) throw new Error('quote '+r.status);
         const j = await r.json();
         const q = parseQuotePayload(j) || {};
-
-        // Headline: Company (TICKER) • Exchange • Currency • MarketState
-        if (els.headline) {
-          const bits = [];
-          if (q.exchange) bits.push(q.exchange);
-          if (q.currency) bits.push(q.currency);
-          if (q.marketState) bits.push(String(q.marketState));
-          const namePart = q.name ? `${q.name} ` : '';
-          els.headline.textContent = `${namePart}(${state.ticker})${bits.length ? ' • '+bits.join(' • ') : ''}`;
-        }
 
         // Fallbacks using chart data when fields are missing or invalid
         let price = Number.isFinite(+q.price) ? +q.price : null;
@@ -556,7 +602,7 @@
           if(sr.ok){
             const sj = await sr.json();
             const root = sj?.quoteSummary?.result?.[0] || {};
-            valuation = buildValuationFromYahoo(root, price);
+            valuation = buildValuationFromYahoo(root);
             if(Number.isFinite(valuation?.perShare) && valuation.perShare>0){ intrinsic = valuation.perShare; }
             // Keep previous heuristic methods as sanity backup only if still missing
             if(!Number.isFinite(intrinsic) || intrinsic<=0){
@@ -568,14 +614,8 @@
           }
         }catch{}
 
-        // Final fallback chain to guarantee a non-blank intrinsic value
-        if(!Number.isFinite(intrinsic) || intrinsic<=0){
-          const lastClose = Number.isFinite(state.rows?.at?.(-1)?.c) ? +state.rows.at(-1).c : null;
-          intrinsic = Number.isFinite(price) && price>0 ? price
-                    : Number.isFinite(prevClose) && prevClose>0 ? prevClose
-                    : Number.isFinite(lastClose) && lastClose>0 ? lastClose
-                    : 1; // safe minimum
-        }
+        // Final fallback: leave blank if no model/targets (do not echo market price)
+        if(!Number.isFinite(intrinsic) || intrinsic<=0){ intrinsic = NaN; }
 
         let chText = '—';
         let chHTML = '—';
@@ -590,7 +630,7 @@
         els.lastLine.innerHTML = `Last: ${fmtPx(price)} · Change: ${chHTML}`;
         els.prevCloseLine.textContent = `Yesterday’s Close: ${fmtPxPos(prevClose)}`;
         els.ivLine.textContent = `Intrinsic Value: ${fmtPxPos(intrinsic)}`;
-        if(valuation){ els.ivLine.title = valuation.summary; state.lastValuation = valuation; try{ console.debug('DCF valuation', valuation.json); }catch{} }
+        if(valuation){ state.lastValuation = valuation; els.ivLine.title = valuation.summary ? valuation.summary : ''; try{ if(valuation.json) console.debug('DCF valuation', valuation.json); }catch{} }
       }catch(err){ /* silent */ }
     }
 
