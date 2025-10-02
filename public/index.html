@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.040</title>
+<title>Stock Analyzer v.041</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -18,21 +18,21 @@
     --metric-bg:#1a1f2e;--metric-border:#2a2f3e;
     --field-bg:#0c0f16;--field-text:#e5e7eb;
     --c-up:#16a34a;--c-down:#dc2626;
-    --c-sma20:#22c55e;--c-sma50:#60a5fa;--c-sma200:#f59e0b;
+    --c-sma20:#22c55e;--c-sma50:#60a5fa;--c-sma200:#ef4444; /* Fidelity-like red for 200SMA */
     --c-rsi:#a78bfa;--c-macd:#38bdf8;--c-vol:#10b981;
     --grid:#283044;
     --lvl-beginner:#22c55e; --lvl-intermediate:#f59e0b; --lvl-advanced:#ef4444;
     --tf-bg:#1c1f35; --tf-head:#1a214e; --tf-glow:#3b82f6;
-    --c-ichi-tenkan:#f59e0b; --c-ichi-kijun:#60a5fa; --c-ichi-chikou:#93c5fd;
-    --c-ichi-up:rgba(34,197,94,.38);   /* stronger */
-    --c-ichi-down:rgba(239,68,68,.34); /* stronger */
+    --c-ichi-tenkan:#f59e0b; --c-ichi-kijun:#60a5fa; --c-ichi-chikou:#f472b6; /* pinkish chikou like Fidelity */
+    --c-ichi-up:rgba(34,197,94,.42);
+    --c-ichi-down:rgba(239,68,68,.38);
   }
   .light{
     --bg:#f8fafc;--panel:#fff;--text:#222;--muted:#64748b;
     --accent:#22c55e;--focus:#3b82f3;--border:#e2e8f0;--hover:#f1f5f9;
     --metric-bg:#f1f5f9;--metric-border:#e2e8f0;
     --c-up:#16a34a;--c-down:#dc2626;
-    --c-sma20:#22c55e;--c-sma50:#2563eb;--c-sma200:#f59e0b;
+    --c-sma20:#22c55e;--c-sma50:#2563eb;--c-sma200:#ef4444;
     --c-rsi:#7c3aed;--c-macd:#0ea5e9;--c-vol:#16a34a;
     --grid:#e5e7eb; --tf-bg:#eef2ff; --tf-head:#c7d2fe; --tf-glow:#6366f1;
     --field-bg:#ffffff; --field-text:#111827;
@@ -214,7 +214,10 @@
 
     <!-- Info bar -->
     <div id="info" class="info">
-      <h3 id="headline" style="margin:0 0 6px 0"></h3>
+      <h3 id="headline" style="margin:0 0 4px 0"></h3>
+      <div id="subInfo" style="margin:0 0 8px 0; font-size:12px; color:var(--muted)"> 
+        <!-- filled in by JS: Exchange • Currency • Session • Range · Interval · As of -->
+      </div>
       <div style="opacity:.9;font-size:14px;line-height:1.6">
         <div id="lastLine">Last: — · Change: —</div>
         <div id="prevCloseLine">Yesterday’s Close: —</div>
@@ -357,6 +360,7 @@
       prevCloseLine: document.getElementById('prevCloseLine'),
       ivLine: document.getElementById('ivLine'),
       headline: document.getElementById('headline'),
+      subInfo: document.getElementById('subInfo'),
       scrList: document.getElementById('scrList'),
       chartCard: document.getElementById('chartCard'),
       container: document.querySelector('.container'),
@@ -438,34 +442,24 @@
       if (!Number.isFinite(hi) || !Number.isFinite(lo)) return;
       if (hi === lo) { hi += 1; lo -= 1; }
 
-      // Dynamic padding based on time/frequency (taller candles on intraday)
+      // Dynamic padding based on time/frequency (taller candles)
       const time = els.timeSel?.value || '6mo';
       const freq = els.freqSel?.value || '1d';
       const padPct = (() => {
         if (['1m','5m','15m','60m'].includes(freq)) {
-          if (/^(1|2|5|10)d$/.test(time)) return 0.015; // very tight for 1-10 day views
-          if (/mo$/.test(time)) return 0.025;           // slightly wider on multi-month intraday
-          return 0.03;
+          if (/^(1|2|5|10)d$/.test(time)) return 0.002; // very tight 1–10 day intraday
+          if (/mo$/.test(time)) return 0.006;           // multi‑month intraday
+          return 0.010;                                  // other intraday
         }
-        if (time === '1mo' || time === '2mo') return 0.04;
-        if (time === '3mo' || time === '6mo' || time === 'ytd') return 0.06;
-        if (time === '1y' || time === '2y') return 0.07;
-        return 0.09; // long ranges
+        if (time === '1mo' || time === '2mo') return 0.015;
+        if (time === '3mo' || time === '6mo' || time === 'ytd') return 0.020;
+        if (time === '1y' || time === '2y') return 0.025;
+        return 0.030; // long ranges
       })();
-
-      const pad = Math.max((hi - lo) * padPct, 0.1);
-      const payload = {
-        'yaxis.autorange': false,
-        'yaxis.rangemode': 'normal',
-        'yaxis.range': [lo - pad, hi + pad]
-      };
-      try {
-        if (typeof relayoutPreserve === 'function') {
-          await relayoutPreserve(payload);
-        } else {
-          await Plotly.relayout(els.chart, payload);
-        }
-      } catch (_) {}
+      const minAbs = Math.max((hi - lo) * 0.0015, 0.01);
+      const pad = Math.max((hi - lo) * padPct, minAbs);
+      const payload = { 'yaxis.autorange': false, 'yaxis.rangemode': 'normal', 'yaxis.range': [lo - pad, hi + pad] };
+      try { await Plotly.relayout(els.chart, payload); } catch(_) {}
     };
 
     // === Indicators & helpers ===
@@ -502,7 +496,12 @@
     function sma(arr, p){ if(!Array.isArray(arr)||!arr.length||!p) return []; const out=Array(arr.length).fill(null); let sum=0; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(Number.isFinite(v)) sum+=v; if(i>=p){ const w=+arr[i-p]; if(Number.isFinite(w)) sum-=w; } if(i>=p-1) out[i]=sum/p; } return out; }
     function ema(arr, p){ const out=Array(arr.length).fill(null); const k=2/(p+1); let prev=null; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(!Number.isFinite(v)) { out[i]=prev; continue; } prev = prev==null? v : (v - prev)*k + prev; out[i]=prev; } return out; }
     function smaTrace(rows, p, color, name){ const c = rows.map(r=>r.c); const y=sma(c,p); const last = y.filter(Number.isFinite).at(-1); return { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y, name, line:{color, width:1.8}, hoverinfo:'skip', yaxis:'y', __last:last }; }
-    function volTrace(rows){ return { type:'bar', x: rows.map(r=>new Date(r.t)), y: rows.map(r=>r.v||0), name:'Volume', marker:{ color: css('--c-vol'), opacity:0.35 }, yaxis:'y2' }; }
+    function volTrace(rows){
+      const x = rows.map(r=>new Date(r.t));
+      const y = rows.map(r=>r.v||0);
+      const colors = rows.map(r=> (Number.isFinite(r.c)&&Number.isFinite(r.o) && r.c>=r.o) ? 'rgba(34,197,94,0.50)' : 'rgba(239,68,68,0.50)');
+      return { type:'bar', x, y, name:'Volume', marker:{ color: colors }, opacity:0.45, yaxis:'y2', hoverinfo:'skip' };
+    }
     function rsiTrace(rows, period=14){ const c=rows.map(r=>r.c); const gains=[],losses=[]; for(let i=1;i<c.length;i++){ const d=c[i]-c[i-1]; gains.push(Math.max(0,d)); losses.push(Math.max(0,-d)); }
       const avgG=ema(gains,period); const avgL=ema(losses,period); const rsi=Array(c.length).fill(null); for(let i=0;i<c.length;i++){ if(i===0) continue; const gi=avgG[i-1], li=avgL[i-1]; if(Number.isFinite(gi) && Number.isFinite(li)){ const rs = li===0? 100 : gi/li; const val = 100 - (100/(1+rs)); rsi[i]=val; } }
       return { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y:rsi, name:'RSI', line:{color:css('--c-rsi'), width:1.6}, yaxis:'y3', hoverinfo:'skip' };
@@ -522,25 +521,32 @@
       function rollingMid(h,l,p){ const out=Array(h.length).fill(null); for(let i=0;i<h.length;i++){ const s=Math.max(0,i-p+1); let hi=-Infinity, lo=Infinity; for(let j=s;j<=i;j++){ if(Number.isFinite(h[j])) hi=Math.max(hi,h[j]); if(Number.isFinite(l[j])) lo=Math.min(lo,l[j]); } if(hi>-Infinity&&lo<Infinity) out[i]=avg(hi,lo); } return out; }
       const tenkan=rollingMid(high,low,9); const kijun=rollingMid(high,low,26); const spanA=tenkan.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(kijun[i]))? (v+kijun[i])/2 : null); const spanB=rollingMid(high,low,52);
       const shift=26;
-      const spanAShift = Array(shift).fill(null).concat(spanA); spanAShift.length = x.length;
-      const spanBShift = Array(shift).fill(null).concat(spanB); spanBShift.length = x.length;
-      // Build cloud: green where A>B, red where B>A
-      const top = spanAShift.map((a,i)=>{ const b=spanBShift[i]; if(Number.isFinite(a)&&Number.isFinite(b)) return Math.max(a,b); return null; });
-      const bot = spanAShift.map((a,i)=>{ const b=spanBShift[i]; if(Number.isFinite(a)&&Number.isFinite(b)) return Math.min(a,b); return null; });
-      const lowerUp   = bot.map((v,i)=>{ const a=spanAShift[i], b=spanBShift[i]; return (Number.isFinite(a)&&Number.isFinite(b) && a>=b)? v : null; });
-      const lowerDown = bot.map((v,i)=>{ const a=spanAShift[i], b=spanBShift[i]; return (Number.isFinite(a)&&Number.isFinite(b) && a<b) ? v : null; });
-
-      const cloudTop1 = { type:'scatter', mode:'lines', x, y:top, name:'Cloud Top', line:{width:0}, hoverinfo:'skip', showlegend:false };
-      const cloudUp   = { type:'scatter', mode:'lines', x, y:lowerUp,   name:'Cloud Up',   line:{width:0}, hoverinfo:'skip', fill:'tonexty', fillcolor:css('--c-ichi-up'), showlegend:false };
-      const cloudTop2 = { type:'scatter', mode:'lines', x, y:top, name:'Cloud Top', line:{width:0}, hoverinfo:'skip', showlegend:false };
-      const cloudDown = { type:'scatter', mode:'lines', x, y:lowerDown, name:'Cloud Down', line:{width:0}, hoverinfo:'skip', fill:'tonexty', fillcolor:css('--c-ichi-down'), showlegend:false };
-
-      // Chikou (lagging) and lines
-      const chikou = close.slice(); chikou.splice(0,0,...Array(shift).fill(null)); chikou.length = x.length;
-      const ten = { type:'scatter', mode:'lines', x, y:tenkan, name:'Tenkan', line:{color:css('--c-ichi-tenkan'), width:1.2}, hoverinfo:'skip' };
-      const kij = { type:'scatter', mode:'lines', x, y:kijun,  name:'Kijun',  line:{color:css('--c-ichi-kijun'), width:1.2}, hoverinfo:'skip' };
-      const chi = { type:'scatter', mode:'lines', x, y:chikou, name:'Chikou', line:{color:css('--c-ichi-chikou'), width:1.2, dash:'dot'}, hoverinfo:'skip' };
-
+      // Extend x forward by 'shift' steps so cloud projects into the future like Fidelity
+      const steps = x.length>1 ? (x[1]-x[0]) : 24*3600*1000; // fallback 1 day
+      const xExt = x.concat(Array.from({length:shift}, (_,k)=> new Date(x[x.length-1].getTime() + (k+1)*steps)));
+      const proj = (arr)=>{ const out=Array(xExt.length).fill(null); for(let i=0;i<arr.length;i++){ const v=arr[i]; if(Number.isFinite(v)) out[i+shift]=v; } return out; };
+      const spanAFwd = proj(spanA);
+      const spanBFwd = proj(spanB);
+      // Cloud segmentation (green when A>=B)
+      const len = xExt.length;
+      const top = Array(len).fill(null), bot = Array(len).fill(null), lowerUp=Array(len).fill(null), lowerDown=Array(len).fill(null);
+      for(let i=0;i<len;i++){
+        const a=spanAFwd[i], b=spanBFwd[i];
+        if(Number.isFinite(a)&&Number.isFinite(b)){
+          const hi=Math.max(a,b), lo=Math.min(a,b);
+          top[i]=hi; bot[i]=lo; if(a>=b) lowerUp[i]=lo; else lowerDown[i]=lo;
+        }
+      }
+      const cloudTop1 = { type:'scatter', mode:'lines', x:xExt, y:top, name:'Cloud Top', line:{width:0}, hoverinfo:'skip', showlegend:false };
+      const cloudUp   = { type:'scatter', mode:'lines', x:xExt, y:lowerUp,   name:'Cloud Up',   line:{width:0}, hoverinfo:'skip', fill:'tonexty', fillcolor:css('--c-ichi-up'), showlegend:false };
+      const cloudTop2 = { type:'scatter', mode:'lines', x:xExt, y:top, name:'Cloud Top', line:{width:0}, hoverinfo:'skip', showlegend:false };
+      const cloudDown = { type:'scatter', mode:'lines', x:xExt, y:lowerDown, name:'Cloud Down', line:{width:0}, hoverinfo:'skip', fill:'tonexty', fillcolor:css('--c-ichi-down'), showlegend:false };
+      // Proper Chikou (lagging) shifted 26 periods backward
+      const chikou = Array(x.length).fill(null);
+      for(let i=0;i<close.length;i++){ const ii=i-shift; if(ii>=0) chikou[ii]=close[i]; }
+      const ten = { type:'scatter', mode:'lines', x, y:tenkan, name:'Tenkan', line:{color:css('--c-ichi-tenkan'), width:1.6}, hoverinfo:'skip' };
+      const kij = { type:'scatter', mode:'lines', x, y:kijun,  name:'Kijun',  line:{color:css('--c-ichi-kijun'), width:1.8}, hoverinfo:'skip' };
+      const chi = { type:'scatter', mode:'lines', x, y:chikou, name:'Chikou', line:{color:css('--c-ichi-chikou'), width:1.4, dash:'dot'}, hoverinfo:'skip' };
       return [cloudTop1, cloudUp, cloudTop2, cloudDown, ten, kij, chi];
     }
     function makeFibShapes(rows){
@@ -835,6 +841,8 @@
       if(isChipOn('SMA50') && Number.isFinite(last50)) layout.shapes.push(addH(last50, css('--c-sma50')));
       if(isChipOn('SMA200') && Number.isFinite(last200)) layout.shapes.push(addH(last200, css('--c-sma200')));
       Plotly.react(els.chart, traces, layout, {responsive:true, displayModeBar:false});
+      // After render, tighten y-axis so candles fill the pane
+      setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch(_){} }, 0);
     }
 
     // Compute robust last SMA values (fetch longer history when needed)
@@ -853,90 +861,27 @@
     }
 
     // --- Live quote (independent of chart) ---
-    
-    // Conservative 5y DCF from Yahoo summary modules
-    function buildValuationFromYahoo(root){
-      const num = v => (v && typeof v==='object' && 'raw' in v) ? v.raw : (Number.isFinite(+v) ? +v : NaN);
-
-      // Shares
-      let shares = num(root?.defaultKeyStatistics?.sharesOutstanding) || num(root?.price?.sharesOutstanding);
-      if(!Number.isFinite(shares) || shares <= 0) return null;
-
-      // Cash / Debt
-      const cash = num(root?.financialData?.totalCash);
-      const debt = num(root?.financialData?.totalDebt);
-
-      // Free cash flow (prefer FCF, then cashflow stmt, then 70% OCF, then 70% NI)
-      let fcf = num(root?.financialData?.freeCashflow)
-            || num(root?.cashflowStatementHistory?.cashflowStatements?.[0]?.freeCashFlow);
-      if(!Number.isFinite(fcf)){
-        const ocf = num(root?.financialData?.operatingCashflow);
-        if(Number.isFinite(ocf)) fcf = ocf * 0.70;
-      }
-      if(!Number.isFinite(fcf) || fcf <= 0){
-        const ni = num(root?.financialData?.netIncomeToCommon);
-        if(Number.isFinite(ni) && ni > 0) fcf = ni * 0.70;
-      }
-      if(!Number.isFinite(fcf) || fcf <= 0) return null;
-
-      // Growth (analyst trend → revenue/earnings growth → 3%), clamp −2%..12%
-      let g = NaN;
-      const trend = root?.earningsTrend?.trend || [];
-      for(const t of trend){ const gv = num(t?.growth); if(Number.isFinite(gv)) { g = gv; break; } }
-      if(!Number.isFinite(g)){
-        const rG = num(root?.financialData?.revenueGrowth);
-        const eG = num(root?.financialData?.earningsGrowth);
-        g = Number.isFinite(rG) ? rG : Number.isFinite(eG) ? eG : 0.03;
-      }
-      g = Math.max(-0.02, Math.min(0.12, g));
-
-      // Discount rate from beta (≈8.5% ±2%), clamp 7%..12%
-      let beta = num(root?.defaultKeyStatistics?.beta); if(!Number.isFinite(beta)) beta = 1;
-      let wacc = 0.085 + (beta - 1) * 0.02; wacc = Math.max(0.07, Math.min(0.12, wacc));
-
-      // 5y projection + terminal growth ≤ 3%
-      const n = 5, gt = Math.min(0.03, wacc - 0.01);
-      let f = fcf, pvSum = 0;
-      for(let i=1;i<=n;i++){ f *= (1+g); pvSum += f / Math.pow(1+wacc, i); }
-      const tv = (f * (1+gt)) / (wacc - gt);
-      let equity = pvSum + (tv / Math.pow(1+wacc, n));
-      if(Number.isFinite(cash)) equity += cash;
-      if(Number.isFinite(debt)) equity -= debt;
-
-      const perShare = equity / shares;
-      return Number.isFinite(perShare) && perShare > 0 ? { perShare } : null;
-    }
-    
     function parseQuotePayload(j){
       const r = j?.quoteResponse?.result?.[0];
       if (!r) return null;
-
       const prevClose = Number(r.regularMarketPreviousClose);
-
-      // Build candidates with timestamps (fallback to 0 if missing)
       const cand = [];
-      if (Number.isFinite(+r.postMarketPrice))    cand.push({p:+r.postMarketPrice,  t:+(r.postMarketTime||0),  d:+r.postMarketChange,  pct:+r.postMarketChangePercent});
-      if (Number.isFinite(+r.preMarketPrice))     cand.push({p:+r.preMarketPrice,   t:+(r.preMarketTime||0),   d:+r.preMarketChange,   pct:+r.preMarketChangePercent});
-      if (Number.isFinite(+r.regularMarketPrice)) cand.push({p:+r.regularMarketPrice,t:+(r.regularMarketTime||0),d:+r.regularMarketChange,pct:+r.regularMarketChangePercent});
-
-      if (!cand.length) return { price:null, change:null, changePct:null, prevClose, name: r.shortName || r.longName || '', currency: r.currency || 'USD' };
-
-      // Choose the most recent by timestamp
-      cand.sort((a,b) => (b.t||0)-(a.t||0));
-      const best = cand[0];
-
-      // If Yahoo didn't give change/pct for that session, compute from prevClose
+      if (Number.isFinite(+r.postMarketPrice))    cand.push({p:+r.postMarketPrice,  t:+(r.postMarketTime||0),  d:+r.postMarketChange,  pct:+r.postMarketChangePercent, s:'POST'});
+      if (Number.isFinite(+r.preMarketPrice))     cand.push({p:+r.preMarketPrice,   t:+(r.preMarketTime||0),   d:+r.preMarketChange,   pct:+r.preMarketChangePercent,  s:'PRE'});
+      if (Number.isFinite(+r.regularMarketPrice)) cand.push({p:+r.regularMarketPrice,t:+(r.regularMarketTime||0),d:+r.regularMarketChange,pct:+r.regularMarketChangePercent,s:'REG'});
+      cand.sort((a,b)=>(b.t||0)-(a.t||0));
+      const best = cand[0] || {};
       let price  = best.p;
       let change = Number.isFinite(best.d)   ? best.d   : (Number.isFinite(prevClose) ? price - prevClose : null);
       let pct    = Number.isFinite(best.pct) ? best.pct : (Number.isFinite(prevClose) ? (price - prevClose)/prevClose*100 : null);
-
       return {
-        price,
-        change,
-        changePct: pct,
-        prevClose,
+        price, change, changePct:pct, prevClose,
         name: r.shortName || r.longName || '',
-        currency: r.currency || 'USD'
+        currency: r.currency || 'USD',
+        exchange: r.fullExchangeName || r.exchange || r.market || '',
+        marketState: r.marketState || '',
+        asOf: best.t ? best.t*1000 : Date.now(),
+        session: best.s || 'REG'
       };
     }
 
@@ -946,10 +891,17 @@
         if(!r.ok) throw new Error('quote '+r.status);
         const j = await r.json();
         const q = parseQuotePayload(j) || {};
-        // NEW: set headline text
         els.headline.innerHTML = q?.name
           ? `<span style="color:${css('--accent')};font-weight:900;letter-spacing:.3px">${state.ticker}</span> <span style="opacity:.9">— ${q.name}</span>`
           : `<span style="color:${css('--accent')};font-weight:900;letter-spacing:.3px">${state.ticker}</span>`;
+        // New: sub-info line
+        try{
+          const fmtTime = (ms)=>{ const d=new Date(ms); return d.toLocaleString('en-US',{ timeZone:'America/New_York', hour:'2-digit', minute:'2-digit' }); };
+          const sess = (q.session||'REG').toUpperCase();
+          const sessText = sess==='PRE'?'Pre‑Market': sess==='POST'?'After‑Hours':'Regular';
+          els.subInfo.textContent = [q.exchange||'', q.currency||'USD', `Session: ${sessText}`, `${state.range} · ${state.interval}`, `As of ${fmtTime(q.asOf||Date.now())} ET`]
+            .filter(Boolean).join(' • ');
+        }catch{ els.subInfo.textContent=''; }
 
         // Fallbacks using chart data when fields are missing or invalid
         let price = Number.isFinite(+q.price) ? +q.price : null;
@@ -990,6 +942,7 @@
         // Try fundamentals for weighted model
         try{
           const modules = 'price,financialData,defaultKeyStatistics,earningsTrend,cashflowStatementHistory,incomeStatementHistory,balanceSheetHistory,summaryDetail';
+         
           const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=${encodeURIComponent(modules)}`, { cache:'no-store' });
           if(sr.ok){
             const sj = await sr.json();
