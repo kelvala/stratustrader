@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.041</title>
+<title>Stock Analyzer v.042</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -18,7 +18,7 @@
     --metric-bg:#1a1f2e;--metric-border:#2a2f3e;
     --field-bg:#0c0f16;--field-text:#e5e7eb;
     --c-up:#16a34a;--c-down:#dc2626;
-    --c-sma20:#22c55e;--c-sma50:#60a5fa;--c-sma200:#ef4444; /* Fidelity-like red for 200SMA */
+    --c-sma20:#22c55e;--c-sma50:#60a5fa;--c-sma200:#f59e0b; /* back to yellowish 200 SMA */
     --c-rsi:#a78bfa;--c-macd:#38bdf8;--c-vol:#10b981;
     --grid:#283044;
     --lvl-beginner:#22c55e; --lvl-intermediate:#f59e0b; --lvl-advanced:#ef4444;
@@ -32,7 +32,7 @@
     --accent:#22c55e;--focus:#3b82f3;--border:#e2e8f0;--hover:#f1f5f9;
     --metric-bg:#f1f5f9;--metric-border:#e2e8f0;
     --c-up:#16a34a;--c-down:#dc2626;
-    --c-sma20:#22c55e;--c-sma50:#2563eb;--c-sma200:#ef4444;
+    --c-sma20:#22c55e;--c-sma50:#2563eb;--c-sma200:#f59e0b; /* yellowish in light too */
     --c-rsi:#7c3aed;--c-macd:#0ea5e9;--c-vol:#16a34a;
     --grid:#e5e7eb; --tf-bg:#eef2ff; --tf-head:#c7d2fe; --tf-glow:#6366f1;
     --field-bg:#ffffff; --field-text:#111827;
@@ -214,10 +214,8 @@
 
     <!-- Info bar -->
     <div id="info" class="info">
-      <h3 id="headline" style="margin:0 0 4px 0"></h3>
-      <div id="subInfo" style="margin:0 0 8px 0; font-size:12px; color:var(--muted)"> 
-        <!-- filled in by JS: Exchange • Currency • Session • Range · Interval · As of -->
-      </div>
+      <h3 id="headline" style="margin:0 0 6px 0"></h3>
+      <div id="subInfo" style="opacity:.85;font-size:13px;margin:-2px 0 6px 0"></div>
       <div style="opacity:.9;font-size:14px;line-height:1.6">
         <div id="lastLine">Last: — · Change: —</div>
         <div id="prevCloseLine">Yesterday’s Close: —</div>
@@ -256,11 +254,9 @@
               <option value="1y">Yearly</option>
             </select>
           </div>
-          <!-- Candle height control -->
           <div class="control" style="grid-column:1 / -1">
-            <label for="heightSel">Candle height</label>
-            <input id="heightSel" type="range" min="0" max="100" step="1" />
-            <div id="heightLabel" style="font-size:12px;color:var(--muted)"></div>
+            <label for="heightSel">Candle height <span id="heightLabel" style="opacity:.7;margin-left:6px">Balanced</span></label>
+            <input id="heightSel" type="range" min="0" max="100" value="75" step="1" style="width:100%" />
           </div>
         </div>
       </div>
@@ -355,931 +351,201 @@
   </nav>
 
   <script>
-  (function(){
+  (() => {
+    const q = s => document.querySelector(s);
+
+    /* ---------- Elements ---------- */
     const els = {
-      chart: document.getElementById('chart'),
-      toggles: document.getElementById('toggles'),
-      q: document.getElementById('q'),
-      ac: document.getElementById('ac'),
-      searchBtn: document.getElementById('searchBtn'),
-      lastLine: document.getElementById('lastLine'),
-      prevCloseLine: document.getElementById('prevCloseLine'),
-      ivLine: document.getElementById('ivLine'),
-      headline: document.getElementById('headline'),
-      subInfo: document.getElementById('subInfo'),
-      scrList: document.getElementById('scrList'),
-      chartCard: document.getElementById('chartCard'),
-      container: document.querySelector('.container'),
-      wideBtn: document.getElementById('wideBtn'),
-      maxBtn: document.getElementById('maxBtn'),
-      refreshBtn: document.getElementById('refreshBtn'),
-      sheetGPTs: document.getElementById('sheetGPTs'),
-      sheetScreeners: document.getElementById('sheetScreeners'),
-      toolGPTs: document.getElementById('toolGPTs'),
-      toolScreeners: document.getElementById('toolScreeners'),
-      btmNav: document.getElementById('btmNav')
-    };
-    const state = { ticker: 'AAPL', range: '6mo', interval: '1d', rows: [], symbols: [], acMatches: [], acIndex: -1, quoteTimer: null, fibOn:false, fibShapes:[], sessionsOn:false };
-    const isLocal = (location.hostname === 'localhost' || location.hostname === '127.0.0.1');
-
-    // Cache timeframe selects
-    els.timeSel = document.getElementById('timeSel');
-    els.freqSel = document.getElementById('freqSel');
-    els.heightSel = document.getElementById('heightSel');
-    els.heightLabel = document.getElementById('heightLabel');
-
-    // Utilities
-    const css = v => getComputedStyle(document.body).getPropertyValue(v).trim();
-    const fmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
-    const $ = (sel, root=document) => root.querySelector(sel);
-    const $all = (sel, root=document) => Array.from(root.querySelectorAll(sel));
-    function median(arr){
-      const a = (arr||[]).map(Number).filter(v=>Number.isFinite(v)).sort((x,y)=>x-y);
-      if(!a.length) return NaN; const m = Math.floor(a.length/2);
-      return a.length%2 ? a[m] : (a[m-1]+a[m])/2;
-    }
-    const fmtPx = v => (Number.isFinite(+v) ? `$${fmt.format(+v)}` : '—');
-    const fmtPxPos = v => (Number.isFinite(+v) && +v > 0 ? `$${fmt.format(+v)}` : '—');
-    const fmtPct = v => (Number.isFinite(+v) ? `${(+v).toFixed(2)}%` : '—');
-    const clampZero = (v, eps = 1e-6) => (Number.isFinite(v) && Math.abs(v) < eps ? 0 : v);
-    const getChip = k => document.querySelector(`.chip[data-k="${k}"]`);
-    const isChipOn = k => !!getChip(k)?.classList.contains('active');
-    function sanitizeTicker(s){
-      const raw = String(s||'').trim();
-      const beforePipe = raw.split('|')[0];
-      return beforePipe.trim().toUpperCase();
-    }
-
-    // Helper: Regular session time in America/New_York (09:30–16:00, Mon–Fri)
-    const dtfET = new Intl.DateTimeFormat('en-US', { timeZone:'America/New_York', hour12:false, hour:'2-digit', minute:'2-digit', weekday:'short' });
-    function isRegularSessionET(ms){
-      const parts = dtfET.formatToParts(new Date(ms));
-      const getNum = (t)=> +((parts.find(p=>p.type===t)?.value)||'0');
-      const wd = (parts.find(p=>p.type==='weekday')?.value)||'';
-      if (/Sat|Sun/i.test(wd)) return false;
-      const hm = getNum('hour') + getNum('minute')/60;
-      return hm >= 9.5 && hm <= 16.0; // 09:30–16:00 ET
-    }
-
-    const quantile = (arr, q)=>{
-      const a = (arr||[]).filter(Number.isFinite).sort((x,y)=>x-y);
-      if(!a.length) return NaN;
-      const idx = (a.length - 1) * q;
-      const lo = Math.floor(idx), hi = Math.ceil(idx);
-      const w = idx - lo;
-      return hi===lo ? a[lo] : a[lo]*(1-w) + a[hi]*w;
-    };
-    const padScaleFromTight = (t)=>{ t = Math.max(0, Math.min(100, +t||0)); return 1.4 - (t/100)*1.1; };
-
-    // --- Fit y-axis strictly to visible candlestick highs/lows ------------------
-    const fitPriceAxisToCandlesStrict = async () => {
-      if (!els.chart) return;
-      const d = els.chart.data || [];
-      const c = d.find(t => t && t.type === 'candlestick');
-      if (!c || !c.x || !c.high || !c.low || !c.x.length) return;
-
-      const toMs = (v) => new Date(v).getTime();
-
-      // Determine current visible x window
-      const L  = els.chart._fullLayout || els.chart.layout || {};
-      const xa = L.xaxis || {};
-      let x0ms, x1ms;
-      if (Array.isArray(xa.range) && xa.autorange === false) {
-        x0ms = toMs(xa.range[0]);
-        x1ms = toMs(xa.range[1]);
-      } else {
-        x0ms = toMs(c.x[0]);
-        x1ms = toMs(c.x[c.x.length - 1]);
-      }
-
-      // Visible indices
-      const cxms = c.x.map(toMs);
-      let i0 = 0;
-      while (i0 < cxms.length && cxms[i0] < x0ms) i0++;
-      let i1 = cxms.length - 1;
-      while (i1 > i0 && cxms[i1] > x1ms) i1--;
-
-      if (i1 <= i0) return;
-
-      // Compute hi/lo strictly from visible candles (exclude AH when Pre/Post OFF)
-      const intraday = /m|h/i.test(String(state.interval||els.freqSel?.value||''));
-      const includeAH = isChipOn('SESS');
-      const hiArr = [], loArr = [];
-      for (let i = i0; i <= i1; i++) {
-        const tms = cxms[i];
-        if (intraday && !includeAH && !isRegularSessionET(tms)) continue;
-        const h = c.high[i], l = c.low[i];
-        if (Number.isFinite(h)) hiArr.push(h);
-        if (Number.isFinite(l)) loArr.push(l);
-      }
-      if (!hiArr.length || !loArr.length) return;
-
-      let hi = Math.max(...hiArr), lo = Math.min(...loArr);
-      // Trim extreme wicks on intraday to make candles visually taller
-      if (intraday) {
-        const hiQ = quantile(hiArr, 0.995);
-        const loQ = quantile(loArr, 0.005);
-        if (Number.isFinite(hiQ)) hi = hiQ;
-        if (Number.isFinite(loQ)) lo = loQ;
-      }
-      if (hi === lo) { hi += 1; lo -= 1; }
-
-      // Dynamic padding based on time/frequency (taller candles)
-      const time = els.timeSel?.value || '6mo';
-      const freq = els.freqSel?.value || '1d';
-      const padPct = (() => {
-        if (["1m","5m","15m","60m"].includes(freq)) {
-          if (/^(1|2|5|10)d$/.test(time)) return 0.002; // very tight 1–10 day intraday
-          if (/mo$/.test(time)) return 0.006;           // multi‑month intraday
-          return 0.010;                                  // other intraday
-        }
-        if (time === '1mo' || time === '2mo') return 0.015;
-        if (time === '3mo' || time === '6mo' || time === 'ytd') return 0.020;
-        if (time === '1y' || time === '2y') return 0.025;
-        return 0.030; // long ranges
-      })();
-      const minAbs = Math.max((hi - lo) * 0.0015, 0.01);
-      let pad = Math.max((hi - lo) * padPct, minAbs);
-      // Apply user preference (make candles taller by shrinking pad) — apply to all ranges
-      if (els.heightSel) {
-        const scale = padScaleFromTight(state.candleTight ?? 75);
-        pad *= scale;
-      }
-      const payload = { 'yaxis.autorange': false, 'yaxis.rangemode': 'normal', 'yaxis.range': [lo - pad, hi + pad] };
-      try { await Plotly.relayout(els.chart, payload); } catch(_) {}
+      input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'),
+      headline:q('#headline'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'),
+      subInfo:q('#subInfo'),
+      chartCard:q('#chartCard'), chart:q('#chart'),
+      timeSel:q('#timeSel'), freqSel:q('#freqSel'), toggles:q('#toggles'),
+      heightSel:q('#heightSel'), heightLabel:q('#heightLabel'),
+      themeToggle:q('#themeToggle'), autoFib:q('#autoFib'),
+      refreshBtn:q('#refreshBtn'), maxBtn:q('#maxBtn'), wideBtn:q('#wideBtn'),
+      tfCard:q('#tfCard'), tfHead:q('#tfHead')
     };
 
-    // === Indicators & helpers ===
-    function isIntraday(interval){ return /m|h/i.test(String(interval||'')); }
+    /* ---------- State ---------- */
+    let CURRENT = { ticker:null, company:"", prevClose:null };
+    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null };
 
-    function candleTrace(rows){
-      const x = rows.map(r=>new Date(r.t));
-      const open = rows.map(r=>r.o);
-      const high = rows.map(r=>r.h);
-      const low = rows.map(r=>r.l);
-      const close = rows.map(r=>r.c);
-      const ticker = state.ticker;
+    /* ---------- Utils & Formatters ---------- */
+    const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+    const debounce = (fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
+    const fmtPx = v => Number.isFinite(+v) ? `$${(+v).toFixed(2)}` : '—';
+    const fmtPct = v => Number.isFinite(+v) ? `${(+v).toFixed(2)}%` : '—';
+    const clampZero = (v,eps=1e-10)=> (Number.isFinite(v)&&Math.abs(v)<eps?0:v);
+    const median = (arr)=>{ const a=(arr||[]).map(Number).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length) return NaN; const m=Math.floor(a.length/2); return a.length%2? a[m] : (a[m-1]+a[m])/2; };
+    const $all = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
+    const sanitizeTicker = s => String(s||'').split('|')[0].trim().toUpperCase();
 
-      const trCandles = {
-        type: 'candlestick',
-        x: x,
-        open: open,
-        high: high,
-        low: low,
-        close: close,
-        name: ticker,
-        yaxis: 'y',
-        increasing: { line: { color: css('--c-up') || '#16a34a', width: 2.6 }, fillcolor: (css('--c-up')||'#16a34a') },
-        decreasing: { line: { color: css('--c-down') || '#dc2626', width: 2.6 }, fillcolor: (css('--c-down')||'#dc2626') },
-        whiskerwidth: 0.7,
-        opacity: 0.98,
-        showlegend: false,
-        hovertemplate: 'Date: %{x|%Y-%m-%d %H:%M}<br>O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>',
-        visible: true // Always show candles
-      };
+    // ET helpers
+    const dtfET = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour12:false,hour:'2-digit',minute:'2-digit',weekday:'short'});
+    function isRegularSessionET(ms){ const parts=dtfET.formatToParts(new Date(ms)); const get=(t)=> parts.find(p=>p.type===t)?.value; const wd=(parts.find(p=>p.type==='weekday')?.value)||''; if(/Sat|Sun/i.test(wd)) return false; const h=+(get('hour')||'0'); const m=+(get('minute')||'0'); const hm=h+m/60; return hm>=9.5 && hm<=16.0; }
+    const isIntraday = (interval)=> /m|h/i.test(String(interval||''));
+    const padScaleFromTight = (t)=>{ t = Math.max(0, Math.min(100, +t||0)); return 1.6 - (t/100)*1.2; };
 
-      return trCandles;
-    }
-    function sma(arr, p){ if(!Array.isArray(arr)||!arr.length||!p) return []; const out=Array(arr.length).fill(null); let sum=0; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(Number.isFinite(v)) sum+=v; if(i>=p){ const w=+arr[i-p]; if(Number.isFinite(w)) sum-=w; } if(i>=p-1) out[i]=sum/p; } return out; }
-    function ema(arr, p){ const out=Array(arr.length).fill(null); const k=2/(p+1); let prev=null; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(!Number.isFinite(v)) { out[i]=prev; continue; } prev = prev==null? v : (v - prev)*k + prev; out[i]=prev; } return out; }
-    function smaTrace(rows, p, color, name){
-      const c = rows.map(r=>r.c);
-      // Build SMA and extend it across the full width by back/forward filling
-      let y = sma(c,p);
-      // Use helper fillers if available to extend line across entire series
-      try {
-        if (typeof fillBackward === 'function') y = fillBackward(y);
-        if (typeof fillForward === 'function') y = fillForward(y);
-      } catch(_){}
-      const last = (y||[]).filter(Number.isFinite).at(-1);
-      return { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y, name, line:{color, width:1.8}, hoverinfo:'skip', yaxis:'y', __last:last };
-    }
-    function volTrace(rows){
-      const x = rows.map(r=>new Date(r.t));
-      const y = rows.map(r=>r.v||0);
-      const colors = rows.map(r=> (Number.isFinite(r.c)&&Number.isFinite(r.o) && r.c>=r.o) ? 'rgba(34,197,94,0.50)' : 'rgba(239,68,68,0.50)');
-      return { type:'bar', x, y, name:'Volume', marker:{ color: colors }, opacity:0.45, yaxis:'y2', hoverinfo:'skip' };
-    }
-    function rsiTrace(rows, period=14){ const c=rows.map(r=>r.c); const gains=[],losses=[]; for(let i=1;i<c.length;i++){ const d=c[i]-c[i-1]; gains.push(Math.max(0,d)); losses.push(Math.max(0,-d)); }
-      const avgG=ema(gains,period); const avgL=ema(losses,period); const rsi=Array(c.length).fill(null); for(let i=0;i<c.length;i++){ if(i===0) continue; const gi=avgG[i-1], li=avgL[i-1]; if(Number.isFinite(gi) && Number.isFinite(li)){ const rs = li===0? 100 : gi/li; const val = 100 - (100/(1+rs)); rsi[i]=val; } }
-      return { type:'scatter', mode:'lines', x: rows.map(r=>new Date(r.t)), y:rsi, name:'RSI', line:{color:css('--c-rsi'), width:1.6}, yaxis:'y3', hoverinfo:'skip' };
-    }
-    function macdTraces(rows){ const c=rows.map(r=>r.c); const e12=ema(c,12), e26=ema(c,26); const macd=e12.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(e26[i]))? v-e26[i] : null); const signal=ema(macd,9); const hist=macd.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(signal[i]))? v-signal[i]: null);
-      const x=rows.map(r=>new Date(r.t));
-      const colors = hist.map(v=> v==null? 'rgba(0,0,0,0)' : (v>=0? 'rgba(34,197,94,0.35)':'rgba(239,68,68,0.35)'));
-      return [
-        { type:'scatter', mode:'lines', x, y:macd, name:'MACD', line:{color:css('--c-macd'), width:1.6}, yaxis:'y4', hoverinfo:'skip' },
-        { type:'scatter', mode:'lines', x, y:signal, name:'Signal', line:{color:'rgba(148,163,184,0.9)', width:1.2, dash:'dot'}, yaxis:'y4', hoverinfo:'skip' },
-        { type:'bar', x, y:hist, name:'Histogram', marker:{ color:colors }, yaxis:'y4', hoverinfo:'skip' }
-      ];
-    }
-    function ichiTraces(rows){
-      const high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c), x=rows.map(r=>new Date(r.t));
-      const avg=(a,b)=> (a+b)/2;
-      function rollingMid(h,l,p){ const out=Array(h.length).fill(null); for(let i=0;i<h.length;i++){ const s=Math.max(0,i-p+1); let hi=-Infinity, lo=Infinity; for(let j=s;j<=i;j++){ if(Number.isFinite(h[j])) hi=Math.max(hi,h[j]); if(Number.isFinite(l[j])) lo=Math.min(lo,l[j]); } if(hi>-Infinity&&lo<Infinity) out[i]=avg(hi,lo); } return out; }
-      const tenkan=rollingMid(high,low,9); const kijun=rollingMid(high,low,26); const spanA=tenkan.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(kijun[i]))? (v+kijun[i])/2 : null); const spanB=rollingMid(high,low,52);
-      const shift=26;
-      // Extend x forward by 'shift' steps so cloud projects into the future like Fidelity
-      const steps = x.length>1 ? (x[1]-x[0]) : 24*3600*1000; // fallback 1 day
-      const xExt = x.concat(Array.from({length:shift}, (_,k)=> new Date(x[x.length-1].getTime() + (k+1)*steps)));
-      const proj = (arr)=>{ const out=Array(xExt.length).fill(null); for(let i=0;i<arr.length;i++){ const v=arr[i]; if(Number.isFinite(v)) out[i+shift]=v; } return out; };
-      const spanAFwd = proj(spanA);
-      const spanBFwd = proj(spanB);
-      // Cloud segmentation (green when A>=B)
-      const len = xExt.length;
-      const top = Array(len).fill(null), bot = Array(len).fill(null), lowerUp=Array(len).fill(null), lowerDown=Array(len).fill(null);
-      for(let i=0;i<len;i++){
-        const a=spanAFwd[i], b=spanBFwd[i];
-        if(Number.isFinite(a)&&Number.isFinite(b)){
-          const hi=Math.max(a,b), lo=Math.min(a,b);
-          top[i]=hi; bot[i]=lo; if(a>=b) lowerUp[i]=lo; else lowerDown[i]=lo;
-        }
-      }
-      const cloudTop1 = { type:'scatter', mode:'lines', x:xExt, y:top, name:'Cloud Top', line:{width:0}, hoverinfo:'skip', showlegend:false };
-      const cloudUp   = { type:'scatter', mode:'lines', x:xExt, y:lowerUp,   name:'Cloud Up',   line:{width:0}, hoverinfo:'skip', fill:'tonexty', fillcolor:css('--c-ichi-up'), showlegend:false };
-      const cloudTop2 = { type:'scatter', mode:'lines', x:xExt, y:top, name:'Cloud Top', line:{width:0}, hoverinfo:'skip', showlegend:false };
-      const cloudDown = { type:'scatter', mode:'lines', x:xExt, y:lowerDown, name:'Cloud Down', line:{width:0}, hoverinfo:'skip', fill:'tonexty', fillcolor:css('--c-ichi-down'), showlegend:false };
-      // Proper Chikou (lagging) shifted 26 periods backward
-      const chikou = Array(x.length).fill(null);
-      for(let i=0;i<close.length;i++){ const ii=i-shift; if(ii>=0) chikou[ii]=close[i]; }
-      const ten = { type:'scatter', mode:'lines', x, y:tenkan, name:'Tenkan', line:{color:css('--c-ichi-tenkan'), width:1.6}, hoverinfo:'skip' };
-      const kij = { type:'scatter', mode:'lines', x, y:kijun,  name:'Kijun',  line:{color:css('--c-ichi-kijun'), width:1.8}, hoverinfo:'skip' };
-      const chi = { type:'scatter', mode:'lines', x, y:chikou, name:'Chikou', line:{color:css('--c-ichi-chikou'), width:1.4, dash:'dot'}, hoverinfo:'skip' };
-      return [cloudTop1, cloudUp, cloudTop2, cloudDown, ten, kij, chi];
-    }
-    function makeFibShapes(rows){
-      const n = rows.length; if(n<20) return [];
-      const look = Math.min(150, n);
-      const sub = rows.slice(n-look);
-      let hi = -Infinity, lo = Infinity; for(const r of sub){ if(Number.isFinite(r.h)) hi = Math.max(hi, r.h); if(Number.isFinite(r.l)) lo = Math.min(lo, r.l); }
-      if(!(hi>lo && isFinite(hi) && isFinite(lo))) return [];
-      const levels = [0,0.236,0.382,0.5,0.618,0.786,1];
-      const x0 = new Date(sub[0].t), x1 = new Date(sub[sub.length-1].t);
-      const color = '#8b5cf6';
-      const shapes = levels.map(l=>{
-        const y = lo + (hi-lo)*l; return { type:'line', xref:'x', yref:'y', x0, x1, y0:y, y1:y, line:{ color, width:1, dash: l===0.5? 'dash':'dot' } };
-      });
-      return shapes;
-    }
-    function makeSessionDecor(rows){
-      const shapes=[]; const annotations=[]; if(!rows||!rows.length) return {shapes, annotations};
-      const dayMs = 86400000; // ms/day
-      // iterate days present in data
-      const byDay = new Map();
-      for(const r of rows){ const d = new Date(r.t); const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); byDay.set(key, true); }
-      const mk = (d, h, m)=> new Date(new Date(d).setHours(h, m||0, 0, 0));
-      for(const key of byDay.keys()){
-        const pre0 = mk(key, 4, 0), pre1 = mk(key, 9, 30);
-        const post0 = mk(key, 16, 0), post1 = mk(key, 20, 0);
-        shapes.push({ type:'rect', xref:'x', yref:'paper', x0: pre0, x1: pre1, y0:0, y1:1, fillcolor:'rgba(147,197,253,0.08)', line:{width:0} });
-        shapes.push({ type:'rect', xref:'x', yref:'paper', x0: post0, x1: post1, y0:0, y1:1, fillcolor:'rgba(147,197,253,0.08)', line:{width:0} });
-      }
-      return { shapes, annotations };
-    }
-
-    // Helpers to align extended SMA onto visible rows
-    const fillForward = (arr)=>{
-      let last=null; return arr.map(v=>{ if(Number.isFinite(v)) { last=v; return v; } return Number.isFinite(last)? last : null; });
-    };
-    const fillBackward = (arr)=>{
-      const out = arr.slice();
-      let firstIdx = out.findIndex(Number.isFinite);
-      if(firstIdx>0){ const val = out[firstIdx]; for(let i=0;i<firstIdx;i++) out[i]=val; }
-      return out;
-    };
-    function mapByTs(rows, values){ const m=new Map(); for(let i=0;i<rows.length;i++){ const t=rows[i]?.t; if(Number.isFinite(values[i])) m.set(t, values[i]); } return m; }
-
-    // Build SMA series (20/50/200) aligned to the visible viewport so each line spans full width
-    async function buildSMAAlignedSeries(){
-      const rows = state.rows||[]; state.smaSeries = state.smaSeries || {}; state.smaLast = state.smaLast || {};
-      if(!rows.length){ state.smaSeries={}; state.smaLast={}; return; }
-      const closes = rows.map(r=>r.c);
-      const periods = [20,50,200];
-      const pickExtendedRange = (interval, p)=>{
-        switch(interval){
-          case '1m': return '5d';
-          case '5m': return '1mo';
-          case '15m': return '3mo';
-          case '60m': return '6mo';
-          case '1d': default: return p>=200? '3y':'1y';
-          case '1wk': return '10y';
-          case '1mo': return 'max';
-          case '3mo': return 'max';
-          case '1y':  return 'max';
-        }
-      };
-      async function alignFromExtended(p){
-        const extRange = pickExtendedRange(state.interval, p);
-        try{
-          const ext = await fetchRows(state.ticker, extRange, state.interval);
-          if(Array.isArray(ext) && ext.length){
-            const yExt = sma(ext.map(r=>r.c), p);
-            const mapP = mapByTs(ext, yExt);
-            const aligned = rows.map(r=> mapP.get(r.t) ?? null);
-            return fillBackward(fillForward(aligned));
-          }
-        }catch{}
-        return null;
-      }
-      for(const p of periods){
-        let y = sma(closes, p);
-        if(y.some(Number.isFinite)){
-          y = fillBackward(y);
-        } else {
-          const extAligned = await alignFromExtended(p);
-          if(extAligned){ y = extAligned; }
-          else {
-            const lastClose = closes.filter(Number.isFinite).at(-1) ?? null; y = Array(rows.length).fill(lastClose);
-          }
-        }
-        state.smaSeries[p] = y;
-        const last = y.filter(Number.isFinite).at(-1);
-        if(Number.isFinite(last)) state.smaLast[p] = last;
-      }
-    }
-
-    // Anchor model (chart-only)
-    function anchorPerShare(rows){
-      if(!rows||rows.length===0) return NaN;
-      const closes = rows.map(r=> +r.c).filter(Number.isFinite);
-      if(!closes.length) return NaN;
-      const last = closes[closes.length-1];
-      const s50 = sma(closes, 50).at(-1);
-      const s200 = sma(closes, 200).at(-1);
-      let val = NaN;
-      if(Number.isFinite(s200)) val = 0.5*last + 0.3*(s50||last) + 0.2*s200;
-      else if(Number.isFinite(s50)) val = 0.6*last + 0.4*s50;
-      else val = median(closes);
-      return Number.isFinite(val) && val>0 ? val : NaN;
-    }
-
-    // Weighted intrinsic value from multiple models
-    function intrinsicWeighted(fund, rows, opts){
-      const parts = [];
-      // Anchor (always available with chart)
-      const anc = anchorPerShare(rows||[]); if(Number.isFinite(anc) && anc>0) parts.push({model:'ANCHOR', value:anc, weight:0.15});
-
-      // DCF
-      (function(){
-        const {shares, cash, debt, fcf, gDCF, wacc} = fund||{};
-        if(!(Number.isFinite(shares)&&shares>0 && Number.isFinite(fcf)&&fcf>0 && Number.isFinite(wacc)&&wacc>0)) return;
-        let g = Number.isFinite(gDCF)? Math.max(-0.02, Math.min(0.12, gDCF)) : 0.03;
-        const n=5, gt = Math.min(0.03, wacc-0.01);
-        let f = fcf, pv=0; for(let i=1;i<=n;i++){ f *= (1+g); pv += f/Math.pow(1+wacc, i); }
-        const tv = (f*(1+gt))/(wacc-gt);
-        let equity = pv + tv/Math.pow(1+wacc,n);
-        if(Number.isFinite(fund.cash)) equity += fund.cash; if(Number.isFinite(fund.debt)) equity -= fund.debt;
-        const per = equity/shares; if(Number.isFinite(per)&&per>0) parts.push({model:'DCF', value:per, weight:0.45});
-      })();
-
-      // DDM (Gordon)
-      (function(){
-        const { dividendNext, divGrowth, wacc } = fund||{};
-        if(!(Number.isFinite(dividendNext)&&dividendNext>0 && Number.isFinite(wacc) && wacc>0)) return;
-        const g = Math.max(0, Math.min(0.08, Number.isFinite(divGrowth)? divGrowth : 0.03));
-        if(wacc<=g) return;
-        const per = dividendNext/(wacc-g); if(Number.isFinite(per)&&per>0) parts.push({model:'DDM', value:per, weight:0.20});
-      })();
-
-      // Graham Growth formula (modernized)
-      (function(){
-        const { epsTTM, gDCF, aaaYield } = fund||{};
-        if(!(Number.isFinite(epsTTM)&&epsTTM>0)) return;
-        const g = Math.max(0, Math.min(0.15, Number.isFinite(gDCF)? gDCF : 0.05))*100; // convert to %
-        const Y = Math.max(3.0, Number.isFinite(aaaYield)? aaaYield : 5.0); // current AAA yield approx
-        const per = epsTTM * (8.5 + 2*g) * (4.4 / Y);
-        if(Number.isFinite(per) && per>0) parts.push({model:'GRAHAM', value:per, weight:0.20});
-      })();
-
-      const usable = parts.filter(p=>Number.isFinite(p.value) && p.value>0);
-      if(!usable.length) return { perShare: NaN, parts: [] };
-      // renormalize weights to 1.0
-      const wsum = usable.reduce((s,p)=>s+p.weight,0) || 1;
-      const per = usable.reduce((s,p)=> s + p.value * (p.weight/wsum), 0);
-      const norm = usable.map(p=>({...p, weight: +(p.weight/wsum).toFixed(2)}));
-      return { perShare: per, parts: norm };
-    }
-
-    // === Symbol list + Autocomplete ===
+    // CSV symbols for autocomplete (minimal)
     async function loadSymbols(){
       if(state.symbols?.length) return state.symbols;
       try{
-        const r = await fetch('/stock_data.csv', { cache:'no-store' });
-        if(!r.ok) throw new Error('symbols '+r.status);
-        const text = await r.text();
-        const lines = text.split(/\r?\n/).filter(Boolean);
-        const out=[]; let start=0;
-        const header = lines[0] || '';
-        if(/^\s*symbol\s*(\||,)/i.test(header)) start=1; // skip header if present
-        for(let i=start;i<lines.length;i++){
-          const line = lines[i];
-          const delim = line.includes('|') ? '|' : ',';
-          const parts = line.split(delim);
-          const sym = (parts[0]||'').trim().toUpperCase(); if(!sym) continue;
-          const name = parts.slice(1).join(' ').replace(/\s*\|\s*/g,' ').trim();
-          out.push({ t:sym, n:name });
-        }
-        state.symbols = out;
-      }catch(err){ state.symbols = []; }
+        const r = await fetch('/stock_data.csv',{cache:'no-store'}); if(!r.ok) throw 0; const text=await r.text();
+        const lines=text.split(/\r?\n/).filter(Boolean); const out=[]; let start=0; if(/^\s*symbol\s*(\||,)/i.test(lines[0]||'')) start=1;
+        for(let i=start;i<lines.length;i++){ const line=lines[i]; const d=line.includes('|')?'|':','; const [sym,...rest]=line.split(d); const s=(sym||'').trim().toUpperCase(); if(!s) continue; const n=rest.join(' ').replace(/\s*\|\s*/g,' ').trim(); out.push({t:s,n}); }
+        state.symbols=out;
+      }catch{ state.symbols=[]; }
       return state.symbols;
     }
-    function acFilter(q){
-      const s = (q||'').trim().toUpperCase(); if(!s) return [];
-      const arr = state.symbols||[];
-      const starts = [], contains = [];
-      for(const r of arr){
-        const t=r.t||'', n=(r.n||'').toUpperCase();
-        if(t.startsWith(s)) starts.push(r);
-        else if(t.includes(s) || n.includes(s)) contains.push(r);
-        if(starts.length>=30) break;
-      }
-      const rest = contains.filter(r=>!starts.includes(r)).slice(0, 40-starts.length);
-      return starts.concat(rest).slice(0,40);
-    }
-    function acRender(){
-      const box = els.ac; box.innerHTML='';
-      if(!state.acMatches.length){ box.classList.remove('show'); return; }
-      for(let i=0;i<state.acMatches.length;i++){
-        const m = state.acMatches[i];
-        const div = document.createElement('div');
-        div.className = 'ac-item'+(i===state.acIndex?' active':'');
-        div.setAttribute('role','option');
-        div.dataset.index=String(i);
-        div.innerHTML = `<div class="ticker">${m.t}</div><div class="company">${m.n||''}</div>`;
-        div.addEventListener('mousedown', (e)=>{ e.preventDefault(); acChoose(i); });
-        box.appendChild(div);
-      }
-      box.classList.add('show');
-    }
-    function acChoose(idx){
-      const m = state.acMatches[idx]; if(!m) return;
-      const sym = sanitizeTicker(m.t);
-      els.q.value = sym; hideAC(); setTicker(sym);
-    }
-    function hideAC(){ els.ac.classList.remove('show'); state.acMatches=[]; state.acIndex=-1; }
 
-    els.q.addEventListener('input', async ()=>{
-      await loadSymbols();
-      const v = els.q.value;
-      state.acMatches = acFilter(v);
-      state.acIndex = -1; // do not preselect; Enter should use typed ticker
-      acRender();
-    });
-    els.q.addEventListener('keydown', (e)=>{
-      if(e.key==='ArrowDown'){
-        if(state.acMatches.length){ e.preventDefault(); state.acIndex = (state.acIndex+1+state.acMatches.length)%state.acMatches.length; acRender(); }
-      } else if(e.key==='ArrowUp'){
-        if(state.acMatches.length){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; acRender(); }
-      } else if(e.key==='Enter'){
-        e.preventDefault();
-        if(els.ac.classList.contains('show') && state.acIndex>=0){ acChoose(state.acIndex); }
-        else { setTicker(els.q.value); }
-      } else if(e.key==='Escape'){
-        hideAC();
-      }
-    });
-    els.q.addEventListener('blur', ()=> setTimeout(hideAC, 120));
+    /* ---------- Indicators ---------- */
+    const sma = (arr,p)=>{ if(!Array.isArray(arr)||!arr.length||!p) return []; const out=Array(arr.length).fill(null); let sum=0; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(Number.isFinite(v)) sum+=v; if(i>=p){ const w=+arr[i-p]; if(Number.isFinite(w)) sum-=w; } if(i>=p-1) out[i]=sum/p; } return out; };
+    const ema = (arr,p)=>{ const out=Array(arr.length).fill(null); const k=2/(p+1); let prev=null; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(!Number.isFinite(v)) { out[i]=prev; continue; } prev = prev==null? v : (v - prev)*k + prev; out[i]=prev; } return out; };
+    const fillForward = (arr)=>{ let last=null; return arr.map(v=>{ if(Number.isFinite(v)){ last=v; return v; } return Number.isFinite(last)? last : null; }); };
+    const fillBackward = (arr)=>{ const out=arr.slice(); const fi=out.findIndex(Number.isFinite); if(fi>0){ const v=out[fi]; for(let i=0;i<fi;i++) out[i]=v; } return out; };
+    const mapByTs = (rows, values)=>{ const m=new Map(); for(let i=0;i<rows.length;i++){ const t=rows[i]?.t; const v=values[i]; if(Number.isFinite(v)) m.set(t, v); } return m; };
 
-    // === Chart rendering ===
-    // Build Plotly layout with conditional rangebreaks based on Pre/Post chip
-    function buildLayout(base){
-      const includeAH = isChipOn('SESS');
-      const intraday = /m|h/i.test(String(state.interval||''));
-      const rangebreaks = (!intraday || includeAH) ? [] : [
-        // Exclude after-hours in ET: 16:00 → 09:30 (wraps midnight)
-        { pattern: 'hour', bounds: [16, 9.5] },
-        // Weekends
-        { pattern: 'day of week', bounds: ['sat', 'mon'] }
-      ];
-      return Object.assign({}, base, {
-        xaxis: Object.assign({}, base?.xaxis, intraday ? { rangebreaks } : {}),
-        hovermode: 'x unified',
-        // Include SESS in uirevision so toggles apply without re-draw
-        uirevision: `${base?.uirevision||'chart'}|sess:${includeAH?1:0}`
-      });
+    // Build SMA series aligned to state.rows; when < period, back/forward fill; when missing, try extended pull
+    async function buildSMAAlignedSeries(){
+      const rows = state.rows||[]; state.smaSeries = state.smaSeries || {}; state.smaLast = state.smaLast || {}; if(!rows.length){ state.smaSeries={}; state.smaLast={}; return; }
+      const closes = rows.map(r=>r.c);
+      const periods = [20,50,200];
+      const pickRange=(interval,p)=>{ switch(interval){ case '1m':return '5d'; case '5m':return '1mo'; case '15m':return '3mo'; case '60m':return '6mo'; case '1wk':return '10y'; case '1mo': return 'max'; case '3mo': return 'max'; case '1y': return 'max'; default: return p>=200? '3y':'1y'; } };
+      async function alignFromExtended(p){ const extR = pickRange(state.interval, p); try{ const ext = await fetchRows(state.ticker, extR, state.interval); if(Array.isArray(ext)&&ext.length){ const yExt = sma(ext.map(r=>r.c), p); const mapP = mapByTs(ext, yExt); const aligned = rows.map(r=> mapP.get(r.t) ?? null); return fillBackward(fillForward(aligned)); } }catch{} return null; }
+      for(const p of periods){ let y = sma(closes, p); if(y.some(Number.isFinite)) y=fillBackward(fillForward(y)); else { const extAligned = await alignFromExtended(p); y = extAligned || Array(rows.length).fill(closes.filter(Number.isFinite).at(-1) ?? null); }
+        state.smaSeries[p]=y; const last = y.filter(Number.isFinite).at(-1); if(Number.isFinite(last)) state.smaLast[p]=last; }
     }
 
-    async function renderChart(data){
-      const rows = state.rows||[]; if(!rows.length || !els.chart) return;
-      const includeAH = isChipOn('SESS');
-      const intraday = isIntraday(state.interval);
-      const rowsDisplay = (intraday && !includeAH) ? rows.filter(r=>isRegularSessionET(r.t)) : rows;
+    /* ---------- Price axis fit (uses slider) ---------- */
+    async function fitPriceAxisToCandlesStrict(){
+      if (!els.chart) return;
+      const d = els.chart.data || []; const c = d.find(t => t && t.type === 'candlestick'); if (!c || !c.x?.length) return;
+      const toMs = v=> new Date(v).getTime(); const L=els.chart._fullLayout||els.chart.layout||{}; const xa=L.xaxis||{};
+      let x0ms, x1ms; if(Array.isArray(xa.range) && xa.autorange===false){ x0ms=toMs(xa.range[0]); x1ms=toMs(xa.range[1]); } else { x0ms=toMs(c.x[0]); x1ms=toMs(c.x[c.x.length-1]); }
+      const cxms=c.x.map(toMs); let i0=0; while(i0<cxms.length && cxms[i0]<x0ms) i0++; let i1=cxms.length-1; while(i1>i0 && cxms[i1]>x1ms) i1--; if(i1<=i0) return;
+      let hi=-Infinity, lo=Infinity; for(let i=i0;i<=i1;i++){ const h=c.high[i], l=c.low[i]; if(Number.isFinite(h)) hi=Math.max(hi,h); if(Number.isFinite(l)) lo=Math.min(lo,l); }
+      if(!Number.isFinite(hi)||!Number.isFinite(lo)) return; if(hi===lo){ hi+=1; lo-=1; }
+      const basePad = Math.max((hi-lo)*0.08, 0.01); const pad = basePad * padScaleFromTight(state.candleTight);
+      try{ await Plotly.relayout(els.chart, { 'yaxis.autorange':false, 'yaxis.range':[lo-pad, hi+pad] }); }catch{}
+    }
+
+    // Slider bindings
+    if(els.heightSel){ els.heightSel.value=String(state.candleTight); const updLbl=()=>{ const v=+els.heightSel.value; els.heightLabel.textContent = v>=80? 'Taller' : v<=20? 'Shorter' : 'Balanced'; }; updLbl(); els.heightSel.addEventListener('input', ()=>{ state.candleTight=+els.heightSel.value; localStorage.setItem('candleTight', String(state.candleTight)); updLbl(); fitPriceAxisToCandlesStrict(); }); }
+
+    /* ---------- Chart bits ---------- */
+    function candleTrace(rows){ return { type:'candlestick', x: rows.map(r=>new Date(r.t)), open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c), name: state.ticker, yaxis:'y', increasing:{ line:{ color: css('--c-up')||'#16a34a', width:2.4 } }, decreasing:{ line:{ color: css('--c-down')||'#dc2626', width:2.4 } }, showlegend:false, hovertemplate:'Date: %{x|%Y-%m-%d %H:%M}<br>O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>' }; }
+    function volTrace(rows){ const x=rows.map(r=>new Date(r.t)); const y=rows.map(r=>r.v||0); const cols=rows.map(r=> (r.c>=r.o)? 'rgba(34,197,94,0.5)':'rgba(239,68,68,0.5)'); return { type:'bar', x, y, name:'Volume', marker:{ color: cols }, yaxis:'y2', opacity:0.45, hoverinfo:'skip' }; }
+    function rsiArr(rows, period=14){ const c=rows.map(r=>r.c); const gains=[], losses=[]; for(let i=1;i<c.length;i++){ const d=c[i]-c[i-1]; gains.push(Math.max(0,d)); losses.push(Math.max(0,-d)); } const avgG=ema(gains,period); const avgL=ema(losses,period); const rsi=Array(c.length).fill(null); for(let i=1;i<c.length;i++){ const gi=avgG[i-1], li=avgL[i-1]; if(Number.isFinite(gi)&&Number.isFinite(li)){ const rs = li===0? 100 : gi/li; rsi[i]=100-(100/(1+rs)); } } return rsi; }
+    function rsiTrace(rows){ return { type:'scatter', mode:'lines', x:rows.map(r=>new Date(r.t)), y:rsiArr(rows), name:'RSI', line:{ color: css('--c-rsi')||'#a78bfa', width:1.6 }, yaxis:'y3', hoverinfo:'skip' }; }
+    function macdTraces(rows){ const c=rows.map(r=>r.c); const e12=ema(c,12), e26=ema(c,26); const macd=e12.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(e26[i]))? v-e26[i] : null); const signal=ema(macd,9); const hist=macd.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(signal[i]))? v-signal[i]: null); const x=rows.map(r=>new Date(r.t)); const cols=hist.map(v=> v==null? 'rgba(0,0,0,0)' : (v>=0? 'rgba(34,197,94,0.35)':'rgba(239,68,68,0.35)')); return [ { type:'scatter', mode:'lines', x, y:macd, name:'MACD', line:{ color: css('--c-macd')||'#38bdf8', width:1.6 }, yaxis:'y4', hoverinfo:'skip' }, { type:'scatter', mode:'lines', x, y:signal, name:'Signal', line:{ color:'#f59e0b', width:1.2, dash:'dot' }, yaxis:'y4', hoverinfo:'skip' }, { type:'bar', x, y:hist, name:'Histogram', marker:{ color: cols }, yaxis:'y4', hoverinfo:'skip' } ]; }
+    function ichiTraces(rows){ const high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c), x=rows.map(r=>new Date(r.t)); const rollingMid=(h,l,p)=>{ const out=Array(h.length).fill(null); for(let i=0;i<h.length;i++){ const s=Math.max(0,i-p+1); let hi=-Infinity, lo=Infinity; for(let j=s;j<=i;j++){ if(Number.isFinite(h[j])) hi=Math.max(hi,h[j]); if(Number.isFinite(l[j])) lo=Math.min(lo,l[j]); } if(hi>-Infinity&&lo<Infinity) out[i]=(hi+lo)/2; } return out; }; const tenkan=rollingMid(high,low,9), kijun=rollingMid(high,low,26), spanB=rollingMid(high,low,52); const spanA=tenkan.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(kijun[i]))? (v+kijun[i])/2 : null); const shift=26; const step = x.length>1? (x[1]-x[0]) : 24*3600*1000; const xExt = x.concat(Array.from({length:shift}, (_,k)=> new Date(x[x.length-1].getTime()+(k+1)*step))); const proj=(arr)=>{ const out=Array(xExt.length).fill(null); for(let i=0;i<arr.length;i++){ const v=arr[i]; if(Number.isFinite(v)) out[i+shift]=v; } return out; }; const a=proj(spanA), b=proj(spanB); const top=Array(xExt.length).fill(null), lowe=Array(xExt.length).fill(null); for(let i=0;i<xExt.length;i++){ const A=a[i], B=b[i]; if(Number.isFinite(A)&&Number.isFinite(B)){ const hi=Math.max(A,B), lo=Math.min(A,B); top[i]=hi; lowe[i]=lo; } } const cloudTop1={type:'scatter',mode:'lines',x:xExt,y:top,line:{width:0},showlegend:false,hoverinfo:'skip'}; const cloudUp={type:'scatter',mode:'lines',x:xExt,y:lowe,line:{width:0},fill:'tonexty',fillcolor:css('--c-ichi-up')||'rgba(34,197,94,.34)',showlegend:false,hoverinfo:'skip'}; const ten={type:'scatter',mode:'lines',x,y:tenkan,name:'Tenkan',line:{color:css('--c-ichi-tenkan')||'#f59e0b',width:1.6},hoverinfo:'skip'}; const kij={type:'scatter',mode:'lines',x,y:kijun,name:'Kijun',line:{color:css('--c-ichi-kijun')||'#60a5fa',width:1.8},hoverinfo:'skip'}; const chikou=Array(x.length).fill(null); for(let i=0;i<close.length;i++){ const ii=i-shift; if(ii>=0) chikou[ii]=close[i]; } const chi={type:'scatter',mode:'lines',x,y:chikou,name:'Chikou',line:{color:css('--c-ichi-chikou')||'#93c5fd',width:1.4,dash:'dot'},hoverinfo:'skip'}; return [cloudTop1,cloudUp,ten,kij,chi]; }
+
+    // Build Plotly layout and traces
+    function buildLayout(base){ return Object.assign({}, base, { hovermode:'x unified', uirevision:`${state.ticker}|${state.range}|${state.interval}` }); }
+
+    async function renderChart(){
+      const rows = state.rows||[]; if(!rows.length||!els.chart) return;
+      const includeAH = q('.chip[data-k="SESS"]')?.classList.contains('active');
+      const rowsDisplay = (isIntraday(state.interval) && !includeAH) ? rows.filter(r=>isRegularSessionET(r.t)) : rows;
       const traces = [];
       traces.push(candleTrace(rowsDisplay));
-      // Use SMA computed from displayed rows to match session view
-      const tSMA20 = smaTrace(rowsDisplay, 20, css('--c-sma20'), 'SMA 20');
-      tSMA20.visible = isChipOn('SMA20'); traces.push(tSMA20);
-      const tSMA50 = smaTrace(rowsDisplay, 50, css('--c-sma50'), 'SMA 50');
-      tSMA50.visible = isChipOn('SMA50'); traces.push(tSMA50);
-      const tSMA200 = smaTrace(rowsDisplay, 200, css('--c-sma200'), 'SMA 200');
-      tSMA200.visible = isChipOn('SMA200'); traces.push(tSMA200);
-      const tVOL = volTrace(rowsDisplay); tVOL.visible = isChipOn('VOL'); traces.push(tVOL);
-      const tRSI = rsiTrace(rowsDisplay); tRSI.visible = isChipOn('RSI'); traces.push(tRSI);
-      const macd = macdTraces(rowsDisplay); const macdOn = isChipOn('MACD'); macd.forEach(tr=>tr.visible=macdOn); traces.push(...macd);
-      const ichi = ichiTraces(rowsDisplay); const ichiOn = isChipOn('ICHI'); ichi.forEach(tr=>tr.visible=ichiOn); traces.push(...ichi);
-      if(isChipOn('AUTOFIB')){ state.fibShapes = makeFibShapes(rowsDisplay); } else { state.fibShapes = []; }
-      const sessDecor = (includeAH && intraday) ? makeSessionDecor(rows) : { shapes: [], annotations: [] };
+      // SMA 20/50/200 mapped from aligned series so they span full width
+      const map20 = mapByTs(state.rows, state.smaSeries?.[20]||[]);
+      const map50 = mapByTs(state.rows, state.smaSeries?.[50]||[]);
+      const map200= mapByTs(state.rows, state.smaSeries?.[200]||[]);
+      const xArr = rowsDisplay.map(r=>new Date(r.t));
+      const tSMA20 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map20.get(r.t) ?? null))), name:'SMA 20', line:{ color: css('--c-sma20')||'#22c55e', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA20"]')?.classList.contains('active')||false };
+      const tSMA50 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map50.get(r.t) ?? null))), name:'SMA 50', line:{ color: css('--c-sma50')||'#60a5fa', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA50"]')?.classList.contains('active')||false };
+      const tSMA200= { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map200.get(r.t) ?? null))), name:'SMA 200', line:{ color: css('--c-sma200')||'#f59e0b', width:2.0 }, yaxis:'y', visible: q('.chip[data-k="SMA200"]')?.classList.contains('active')||false };
+      traces.push(tSMA20,tSMA50,tSMA200);
+      // Other overlays
+      const volOn = q('.chip[data-k="VOL"]')?.classList.contains('active')||false; if(volOn) traces.push(volTrace(rowsDisplay));
+      const rsiOn = q('.chip[data-k="RSI"]')?.classList.contains('active')||false; if(rsiOn) traces.push(rsiTrace(rowsDisplay));
+      const macdOn= q('.chip[data-k="MACD"]')?.classList.contains('active')||false; if(macdOn) traces.push(...macdTraces(rowsDisplay));
+      const ichiOn= q('.chip[data-k="ICHI"]')?.classList.contains('active')||false; if(ichiOn) traces.push(...ichiTraces(rowsDisplay));
+
       const baseLayout = {
-        margin: { l: 56, r: 24, t: 18, b: 28 },
-        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
-        showlegend: true, legend: { orientation: 'h', y: -0.12 },
-        xaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
-        yaxis: { gridcolor: css('--grid'), showgrid: true, zeroline: false },
-        yaxis2: { overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false },
-        yaxis3: { overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
-        yaxis4: { overlaying:'y', side:'right', showgrid:false, showticklabels:false },
-        font: { color: css('--text') },
-        // Dark tooltip to match theme
-        hoverlabel: {
-          bgcolor: getComputedStyle(els.chartCard).backgroundColor,
-          bordercolor: css('--grid'),
-          font: { color: css('--text') }
-        },
-        shapes: [...(sessDecor.shapes||[]), ...(state.fibShapes||[])], annotations: [...(sessDecor.annotations||[])],
-        uirevision: `${state.ticker}|${state.range}|${state.interval}`
+        margin:{l:56,r:24,t:18,b:28},
+        paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+        showlegend:true, legend:{orientation:'h', y:-0.12},
+        xaxis:{ gridcolor:css('--grid'), showgrid:true, zeroline:false },
+        yaxis:{ gridcolor:css('--grid'), showgrid:true, zeroline:false },
+        yaxis2:{ overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false },
+        yaxis3:{ overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
+        yaxis4:{ overlaying:'y', side:'right', showgrid:false, showticklabels:false },
+        font:{ color:css('--text') }
       };
       const layout = buildLayout(baseLayout);
       await Plotly.react(els.chart, traces, layout, { responsive:true, displayModeBar:false });
-      // After render, fit y-axis tightly to visible session candles
       await fitPriceAxisToCandlesStrict();
     }
 
-    // Refit y-axis on interactions without full re-draw
-    els.chart?.on?.('plotly_relayout', ev => {
-      if (ev && (ev['xaxis.range[0]'] || ev['xaxis.range[1]'] || ev['xaxis.autorange'] !== undefined)) {
-        setTimeout(fitPriceAxisToCandlesStrict, 0);
-      }
-    });
+    // Refit y-axis on interactions
+    els.chart?.addEventListener?.('plotly_relayout', (ev)=>{ if(ev && (ev['xaxis.range[0]']||ev['xaxis.range[1]']||ev['xaxis.autorange']!==undefined)) setTimeout(fitPriceAxisToCandlesStrict,0); });
 
-    // Removed duplicate Pre/Post listener (SESS chip already triggers renderChart)
-    // Hook Pre/Post chip toggle to update rangebreaks and y-fit via restyle/relayout
-    getChip('PREPOST')?.addEventListener('click', async () => {
-      const L = els.chart?.layout || {};
-      const includeAH = isChipOn('PREPOST');
-      const rangebreaks = includeAH ? [] : [
-        { bounds: [16, 24], pattern: 'hour' },
-        { bounds: [0, 9.5], pattern: 'hour' },
-        { pattern: 'day of week', bounds: [6, 1] }
-      ];
-      try {
-        await Plotly.relayout(els.chart, {
-          'xaxis.rangebreaks': rangebreaks,
-          'uirevision': `${(L.uirevision||'chart').split('|')[0]}|prepost:${includeAH?1:0}`
-        });
-      } catch(_) {}
-      setTimeout(fitPriceAxisToCandlesStrict, 0);
-    });
-
-    // --- Live quote (independent of chart) ---
-    function parseQuotePayload(j){
-      const r = j?.quoteResponse?.result?.[0];
-      if (!r) return null;
-      const prevClose = Number(r.regularMarketPreviousClose);
-      const cand = [];
-      if (Number.isFinite(+r.postMarketPrice))    cand.push({p:+r.postMarketPrice,  t:+(r.postMarketTime||0),  d:+r.postMarketChange,  pct:+r.postMarketChangePercent, s:'POST'});
-      if (Number.isFinite(+r.preMarketPrice))     cand.push({p:+r.preMarketPrice,   t:+(r.preMarketTime||0),   d:+r.preMarketChange,   pct:+r.preMarketChangePercent,  s:'PRE'});
-      if (Number.isFinite(+r.regularMarketPrice)) cand.push({p:+r.regularMarketPrice,t:+(r.regularMarketTime||0),d:+r.regularMarketChange,pct:+r.regularMarketChangePercent,s:'REG'});
-      cand.sort((a,b)=>(b.t||0)-(a.t||0));
-      const best = cand[0] || {};
-      let price  = best.p;
-      let change = Number.isFinite(best.d)   ? best.d   : (Number.isFinite(prevClose) ? price - prevClose : null);
-      let pct    = Number.isFinite(best.pct) ? best.pct : (Number.isFinite(prevClose) ? (price - prevClose)/prevClose*100 : null);
-      return {
-        price, change, changePct:pct, prevClose,
-        name: r.shortName || r.longName || '',
-        currency: r.currency || 'USD',
-        exchange: r.fullExchangeName || r.exchange || r.market || '',
-        marketState: r.marketState || '',
-        asOf: best.t ? best.t*1000 : Date.now(),
-        session: best.s || 'REG'
-      };
-    }
-
+    /* ---------- Quote + subline (company info) ---------- */
     async function refreshQuoteOnce(){
       try{
-        const r = await fetch(`/api/quote?ticker=${encodeURIComponent(state.ticker)}`, { cache:'no-store' });
-        if(!r.ok) throw new Error('quote '+r.status);
-        const j = await r.json();
-        const q = parseQuotePayload(j) || {};
-        els.headline.innerHTML = q?.name
-          ? `<span style="color:${css('--accent')};font-weight:900;letter-spacing:.3px">${state.ticker}</span> <span class="text-muted">— ${q.name}</span>`
-          : `<span style="color:${css('--accent')};font-weight:900;letter-spacing:.3px">${state.ticker}</span>`;
-        // Sub-info line: Exchange • Currency • Session • Range · Interval • As of
-        try{
-          const fmtTime = (ms)=>{ const d=new Date(ms); return d.toLocaleString('en-US',{ timeZone:'America/New_York', hour:'2-digit', minute:'2-digit' }); };
-
-          const sess = (q.session||'REG').toUpperCase();
-          const sessText = sess==='PRE'?'Pre‑Market': sess==='POST'?'After‑Hours':'Regular';
-          els.subInfo.textContent = [q.exchange||'', q.currency||'USD', `Session: ${sessText}`, `${state.range} · ${state.interval}`, `As of ${fmtTime(q.asOf||Date.now())} ET`]
-            .filter(Boolean).join(' • ');
-        }catch{ els.subInfo.textContent=''; }
-
-        // Fallbacks using chart data when fields are missing or invalid
-       
-        let price = Number.isFinite(+q.price) ? +q.price : null;
-        let prevClose = Number.isFinite(+q.prevClose) && +q.prevClose > 0 ? +q.prevClose : null;
-        if(!prevClose){
-          const rows = (state.rows||[]);
-                   if(rows.length >= 2){
-            const p = rows[rows.length-2]?.c; if(Number.isFinite(+p) && +p>0) prevClose = +p;
-          }
-          if(!prevClose){
-            try{
-              const last5 = await fetchRows(state.ticker, '5d', '1d');
-              if(last5?.length >= 2){ const p2 = last5[last5.length-2]?.c; if(Number.isFinite(+p2) && +p2>0) prevClose = +p2; }
-            }catch{}
-          }
-        }
-        if(price==null && state.rows?.length){ const last = state.rows.at(-1)?.c; if(Number.isFinite(+last)) price = +last; }
-        // Always compute change from price vs prevClose for consistency
-        let change = (Number.isFinite(price) && Number.isFinite(prevClose) && prevClose>0)
-          ? (price - prevClose) : null;
-        let changePct = (change!=null && prevClose>0) ? (change / prevClose) * 100 : null;
-
-        // Clean up tiny rounding artifacts
-        if(change!=null) change = clampZero(change);
-        if(changePct!=null) changePct = clampZero(changePct);
- 
-        // Intrinsic value calculation: make ANCHOR available even without fundamentals
-        let intrinsic = NaN;
-        let ivParts = [];
-        // Preload rows for anchor
-        let rowsForAnchor = state.rows;
-        if(!rowsForAnchor || rowsForAnchor.length < 30){
-          try{ rowsForAnchor = await fetchRows(state.ticker, '6mo', '1d'); }catch{}
-        }
-        const vAnchorOnly = anchorPerShare(rowsForAnchor||[]);
-        if(Number.isFinite(vAnchorOnly) && vAnchorOnly>0){ intrinsic = vAnchorOnly; ivParts = [{ model:'ANCHOR', value:vAnchorOnly, weight:1 }]; }
-
-        // Try fundamentals for weighted model
-        try{
-          const modules = 'price,financialData,defaultKeyStatistics,earningsTrend,cashflowStatementHistory,incomeStatementHistory,balanceSheetHistory,summaryDetail';
-         
-          const sr = await fetch(`/api/summary?ticker=${encodeURIComponent(state.ticker)}&modules=${encodeURIComponent(modules)}`, { cache:'no-store' });
-          if(sr.ok){
-            const sj = await sr.json();
-            const root = sj?.quoteSummary?.result?.[0] || {};
-            const num = v => (v && typeof v==='object' && 'raw' in v) ? v.raw : (Number.isFinite(+v) ? +v : NaN);
-
-            // fundamentals for models
-            const shares = num(root?.defaultKeyStatistics?.sharesOutstanding) || num(root?.price?.sharesOutstanding);
-            const cash   = num(root?.financialData?.totalCash);
-            const debt   = num(root?.financialData?.totalDebt);
-            let fcf      = num(root?.financialData?.freeCashflow)
-                        || num(root?.cashflowStatementHistory?.cashflowStatements?.[0]?.freeCashFlow);
-            if(!Number.isFinite(fcf)){
-              const ocf = num(root?.financialData?.operatingCashflow);
-              if(Number.isFinite(ocf)) fcf = ocf * 0.70;
-            }
-            if(!Number.isFinite(fcf)){
-              const ni = num(root?.financialData?.netIncomeToCommon);
-              if(Number.isFinite(ni) && ni>0) fcf = ni * 0.70;
-            }
-            // growth proxies
-            let gDCF = NaN;
-            const trend = root?.earningsTrend?.trend || [];
-            for(const t of trend){ const gv = num(t?.growth); if(Number.isFinite(gv)) { gDCF = gv; break; } }
-            if(!Number.isFinite(gDCF)){
-              const rG = num(root?.financialData?.revenueGrowth);
-              const eG = num(root?.financialData?.earningsGrowth);
-              gDCF = Number.isFinite(rG) ? rG : Number.isFinite(eG) ? eG : 0.03;
-            }
-            gDCF = Math.max(-0.02, Math.min(0.12, gDCF));
-            let beta = num(root?.defaultKeyStatistics?.beta); if(!Number.isFinite(beta)) beta = 1;
-            let wacc = 0.085 + (beta - 1) * 0.02; wacc = Math.max(0.07, Math.min(0.12, wacc));
-            // Graham
-            const epsTTM = num(root?.defaultKeyStatistics?.trailingEps) || num(root?.price?.epsTrailingTwelveMonths);
-            const aaaYield = 5.0; // % proxy
-            // DDM
-            const divRateFwd = num(root?.summaryDetail?.dividendRate);
-            const divRateTra = num(root?.summaryDetail?.trailingAnnualDividendRate);
-            const divBase = Number.isFinite(divRateFwd) ? divRateFwd : divRateTra;
-            let divGrowth = Math.max(0, Math.min(0.08, gDCF));
-            const D1 = Number.isFinite(divBase) ? divBase * (1 + divGrowth) : NaN;
-
-            const fund = { shares, cash, debt, fcf, gDCF, wacc, epsTTM, aaaYield, dividendNext:D1, divGrowth };
-            const ivw = intrinsicWeighted(fund, rowsForAnchor||[], {});
-            if(Number.isFinite(ivw?.perShare) && ivw.perShare>0){ intrinsic = ivw.perShare; ivParts = ivw.parts||[]; }
-            else {
-              const valuation = buildValuationFromYahoo(root);
-              if(Number.isFinite(valuation?.perShare) && valuation.perShare>0){ intrinsic = valuation.perShare; ivParts = [{model:'DCF', value:valuation.perShare, weight:1}]; }
-            }
-
-            if(!Number.isFinite(intrinsic) || intrinsic<=0){
-              const candidates = [];
-              for (const modName of ['financialData', 'summaryDetail', 'price']){
-                const mod = (root && root[modName]) || {};
-                for (const k of ['targetMedianPrice','targetMeanPrice','targetHighPrice','targetLowPrice']){
-                  const val = num(mod[k]);
-                  if (Number.isFinite(val) && val > 0) candidates.push(+val);
-                }
-              }
-              if (candidates.length) intrinsic = median(candidates);
-            }
-          }
-        }catch{}
-
-        // Leave blank if no IV
-        if(!Number.isFinite(intrinsic) || intrinsic<=0){ intrinsic = NaN; }
-
-        let chText = '—';
-        let chHTML = '—';
-        if(Number.isFinite(change) && Number.isFinite(changePct)){
-          const sign = change>0?'+': (change<0?'-':'');
-          const absCh = Math.abs(change);
-          const absPct = Math.abs(changePct);
-          chText = `${sign}${fmt.format(absCh)} (${sign}${absPct.toFixed(2)}%)`;
-          const col = change>0 ? css('--c-up') : change<0 ? css('--c-down') : css('--muted');
-           chHTML = `<span style=\"color:${col};font-weight:800\">${chText}</span>`;
-         }
+        const r = await fetch(`/api/quote?ticker=${encodeURIComponent(state.ticker)}`, { cache:'no-store' }); if(!r.ok) throw 0; const j=await r.json();
+        const R = j?.quoteSummary?.result?.[0]?.price || j?.quoteResponse?.result?.[0] || {};
+        const name = R.longName || R.shortName || '';
+        const exch = R.exchangeName || R.fullExchangeName || R.exchange || '';
+        const currency = R.currency || 'USD';
+        const regPrice = +(R.regularMarketPrice?.raw ?? R.regularMarketPrice);
+        const prevClose = +(R.regularMarketPreviousClose?.raw ?? R.regularMarketPreviousClose);
+        const postPrice = +(R.postMarketPrice?.raw ?? R.postMarketPrice);
+        const prePrice  = +(R.preMarketPrice?.raw ?? R.preMarketPrice);
+        const postTime  = +((R.postMarketTime?.raw ?? R.postMarketTime) || 0) * 1000;
+        const preTime   = +((R.preMarketTime?.raw ?? R.preMarketTime) || 0) * 1000;
+        const regTime   = +((R.regularMarketTime?.raw ?? R.regularMarketTime) || 0) * 1000;
+        // pick latest session
+        const triples = [
+          {p:regPrice, t:regTime, s:'REG'},
+          {p:postPrice,t:postTime,s:'POST'},
+          {p:prePrice, t:preTime, s:'PRE'}
+        ].filter(x=>Number.isFinite(x.p)&&x.t>0).sort((a,b)=>b.t-a.t);
+        const best = triples[0] || {p:regPrice, t:regTime, s:'REG'};
+        const price = Number.isFinite(best.p)? best.p : (state.rows?.at(-1)?.c ?? NaN);
+        const chg = (Number.isFinite(price)&&Number.isFinite(prevClose)&&prevClose>0)? price-prevClose : NaN;
+        const pct = Number.isFinite(chg)&&prevClose>0? (chg/prevClose*100) : NaN;
+        const sessText = best.s==='PRE'? 'Pre‑Market' : best.s==='POST'? 'After‑Hours' : 'Regular';
+        els.headline.textContent = `${state.ticker}${name? ' — '+name:''}`;
+        els.subInfo.textContent = [exch||'', currency||'', `Session: ${sessText}`, `${state.range} · ${state.interval}`].filter(Boolean).join(' • ');
+        const col = (chg>0? css('--c-up'): chg<0? css('--c-down'): css('--muted')) || '#cbd5e1';
+        const chHTML = Number.isFinite(chg) ? `<span style="font-weight:800;color:${col}">${chg>0?'+':''}$${Math.abs(chg).toFixed(2)} (${chg>0?'+':''}${Math.abs(pct).toFixed(2)}%)</span>` : '—';
         els.lastLine.innerHTML = `Last: ${fmtPx(price)} · Change: ${chHTML}`;
-        els.prevCloseLine.textContent = `Yesterday’s Close: ${fmtPxPos(prevClose)}`;
-        els.ivLine.textContent = `Intrinsic Value: ${fmtPxPos(intrinsic)}`;
-        if(ivParts && ivParts.length){
-          const tip = ivParts.map(p=>`${p.model}: ${fmtPx(p.value)} (${(p.weight*100).toFixed(0)}%)`).join(' · ');
-          els.ivLine.title = tip;
-        }
-      }catch(err){ /* silent */ }
+        els.prevCloseLine.textContent = `Yesterday’s Close: ${fmtPx(prevClose)}`;
+        // Simple intrinsic proxy: average of SMA50 & SMA200 when available
+        const s50 = state.smaLast?.[50]; const s200 = state.smaLast?.[200]; const iv = Number.isFinite(s50)&&Number.isFinite(s200)? ((s50+s200)/2) : (Number.isFinite(s200)? s200 : Number.isFinite(s50)? s50 : NaN);
+        els.ivLine.textContent = `Intrinsic Value: ${fmtPx(iv)}`;
+      }catch{}
     }
 
-    function startQuoteTimer(){
-      if(state.quoteTimer){ clearInterval(state.quoteTimer); state.quoteTimer = null; }
-      refreshQuoteOnce();
-      state.quoteTimer = setInterval(refreshQuoteOnce, 60*1000);
-    }
+    function startQuoteTimer(){ if(state.quoteTimer){ clearInterval(state.quoteTimer); state.quoteTimer=null; } refreshQuoteOnce(); state.quoteTimer=setInterval(refreshQuoteOnce, 60000); }
 
-    // Chart data fetch (proxy first to avoid CORS; direct only on localhost)
+    /* ---------- Data fetch ---------- */
     async function fetchRows(ticker, range, interval){
       try{
-        const u = `/api/chart?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`;
-        const r = await fetch(u, { cache:'no-store' });
-        if(r.ok){
-          const j = await r.json();
-          const res = j?.chart?.result?.[0];
-          if(res){
-            const ts = res.timestamp || [];
-            const q = res.indicators?.quote?.[0]||{};
-            const o=q.open||[], h=q.high||[], l=q.low||[], c=q.close||[], v=q.volume||[];
-            const rows=[]; for(let i=0;i<ts.length;i++){ if(!Number.isFinite(c[i])) continue; rows.push({ t:ts[i]*1000, o:o[i], h:h[i], l:l[i], c:c[i], v:v[i] }); }
-            return rows;
-          }
-        }
+        const r = await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`, { cache:'no-store' });
+        if(r.ok){ const j=await r.json(); const res=j?.chart?.result?.[0]; if(res){ const ts=res.timestamp||[]; const q=res.indicators?.quote?.[0]||{}; const rows=[]; for(let i=0;i<ts.length;i++){ const c=q.close?.[i]; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:q.open?.[i], h:q.high?.[i], l:q.low?.[i], c:+c, v:q.volume?.[i]||0 }); } return rows; } }
       }catch{}
-      if(!isLocal) throw new Error('CORS: use /api/chart in production');
-      const u2 = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}&includeTimestamps=true`;
-      const r2 = await fetch(u2, { cache:'no-store', referrerPolicy:'no-referrer' });
-      if(!r2.ok) throw new Error('chart '+r2.status);
-      const j2 = await r2.json();
-      const res2 = j2?.chart?.result?.[0];
-      if(!res2) throw new Error('no data');
-      const ts2 = res2.timestamp || [];
-      const q2 = res2.indicators?.quote?.[0]||{};
-      const o2=q2.open||[], h2=q2.high||[], l2=q2.low||[], c2=q2.close||[], v2=q2.volume||[];
-      const rows2=[]; for(let i=0;i<ts2.length;i++){ if(!Number.isFinite(c2[i])) continue; rows2.push({ t:ts2[i]*1000, o:o2[i], h:h2[i], l:l2[i], c:c2[i], v:v2[i] }); }
-      return rows2;
+      throw new Error('chart fetch failed');
     }
 
-    // === Search flow ===
+    /* ---------- Load + render pipeline ---------- */
     async function loadAndRender(){
-      try{
-        const rows = await fetchRows(state.ticker, state.range, state.interval);
-        state.rows = rows || [];
-        await buildSMAAlignedSeries();
-        renderChart();
-      }catch(e){ /* ignore */ }
-      refreshQuoteOnce();
-    }
-    function setTicker(t){
-      const sym = sanitizeTicker(t);
-      if(!sym) return;
-      state.ticker = sym;
-      els.q.value = sym;
-      hideAC();
-      loadAndRender();
+      try{ state.rows = await fetchRows(state.ticker, state.range, state.interval); await buildSMAAlignedSeries(); await renderChart(); refreshQuoteOnce(); }catch(e){ console.error('Chart error', e); }
     }
 
-    els.searchBtn?.addEventListener('click', ()=> setTicker(els.q.value));
-    // Removed duplicate Enter handler; handled above in AC keydown
-    // els.q?.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ setTicker(els.q.value); } });
-
-    // Timeframe + interval changes
-    els.timeSel?.addEventListener('change', ()=>{ state.range = els.timeSel.value; loadAndRender(); });
-    els.freqSel?.addEventListener('change', ()=>{ state.interval = els.freqSel.value; loadAndRender(); });
-
-    // Toggle chips (features)
-    els.toggles?.addEventListener('click', (e)=>{
-      const btn = e.target.closest('.chip'); if(!btn) return;
-      const k = btn.dataset.k; if(!k) return;
-      if(k==='SESS') return; // handled below to persist
-      const on = !btn.classList.contains('active');
-      btn.classList.toggle('active', on);
-      btn.setAttribute('aria-pressed', on? 'true':'false');
-      renderChart();
-    });
-
-    // Toolbar buttons
-    els.wideBtn?.addEventListener('click', ()=>{ els.container?.classList.toggle('wide'); setTimeout(()=>Plotly.Plots.resize(els.chart), 50); });
-    els.maxBtn?.addEventListener('click', ()=>{ els.chartCard?.classList.toggle('max'); setTimeout(()=>Plotly.Plots.resize(els.chart), 100); });
-    els.refreshBtn?.addEventListener('click', ()=>{ loadAndRender(); });
-
-    // ===== Pre/Post chip default OFF on first load =====
-    (function initSessionsPref(){
-      const saved = localStorage.getItem('sessionsOn');
-      state.sessionsOn = saved==null ? false : (saved==='1');
-      const chip = document.querySelector('.chip[data-k="SESS"]');
-      if(chip){
-        chip.classList.toggle('active', !!state.sessionsOn);
-        chip.setAttribute('aria-pressed', state.sessionsOn? 'true':'false');
-        chip.addEventListener('click', ()=>{
-          state.sessionsOn = !state.sessionsOn;
-          chip.classList.toggle('active', state.sessionsOn);
-          chip.setAttribute('aria-pressed', state.sessionsOn? 'true':'false');
-          localStorage.setItem('sessionsOn', state.sessionsOn? '1':'0');
-          renderChart();
-        });
-      }
-    })();
-
-    // Candle height slider init
-    (function initCandleHeight(){
-      const saved = localStorage.getItem('candleTight');
-      state.candleTight = saved!=null ? +saved : 75; // 0..100 (higher = taller)
-      if (els.heightSel){
-        els.heightSel.value = String(state.candleTight);
-        const setLabel = ()=>{
-          const v = +els.heightSel.value;
-          els.heightLabel.textContent = v>=80? 'Taller' : v<=20? 'Shorter' : 'Balanced';
-        };
-        setLabel();
-        let rafId = 0;
-        const applyHeight = ()=>{
-          state.candleTight = +els.heightSel.value;
-          localStorage.setItem('candleTight', String(state.candleTight));
-          setLabel();
-          // Re-render chart so ranges/overlays respect new height, then y-fit will run
-          try { renderChart(); } catch(_) { try { fitPriceAxisToCandlesStrict(); } catch(_) {} }
-        };
-        els.heightSel.addEventListener('input', ()=>{
-          if (rafId) cancelAnimationFrame(rafId);
-          rafId = requestAnimationFrame(applyHeight);
-        });
-        els.heightSel.addEventListener('change', applyHeight);
-      }
-    })();
-
-    // ===== Sheets wiring (GPTs/Screeners) and Screeners config =====
-    function openSheet(id){ const el = document.getElementById(id); if(el){ el.hidden=false; el.querySelector('.sheet-inner')?.focus?.(); } }
-    function closeSheet(id){ const el = document.getElementById(id); if(el){ el.hidden=true; } }
-    document.body.addEventListener('click', (e)=>{
-      const btnClose = e.target.closest('[data-close]'); if(btnClose){ closeSheet(btnClose.getAttribute('data-close')); }
-    });
-    els.toolGPTs?.addEventListener('click', ()=> openSheet('sheetGPTs'));
-    els.toolScreeners?.addEventListener('click', ()=> openSheet('sheetScreeners'));
-
-    // Bottom nav wiring (optional)
-    els.btmNav?.addEventListener('click', (e)=>{
-      const tab = e.target.closest('.tab'); if(!tab) return; const t = tab.dataset.tab;
-      $all('.btmnav .tab').forEach(b=>b.classList.toggle('active', b===tab));
-      if(t==='screeners') openSheet('sheetScreeners'); else if(t==='gpts') openSheet('sheetGPTs');
-    });
-
-    // Finviz Screeners presets with localStorage override
-    const defaultScreeners = [
-      { id:'beg-top-div', level:'Beginner', title:'High Dividend Yield', desc:'Dividend yield above 4%, larger caps.', url:'https://finviz.com/screener.ashx?v=111&f=cap_large,fa_div_pos,fa_div_o5' },
-      { id:'beg-growth', level:'Beginner', title:'Steady Revenue Growth', desc:'Positive sales and EPS growth YoY.', url:'https://finviz.com/screener.ashx?v=111&f=fa_epsyoy_pos,fa_salesqoq_pos' },
-      { id:'int-quality', level:'Intermediate', title:'Quality + Profitability', desc:'High gross margin, ROE, low debt.', url:'https://finviz.com/screener.ashx?v=111&f=fa_grossm_pos,fa_debteq_low,fa_roe_pos' },
-      { id:'int-value', level:'Intermediate', title:'Value Candidates', desc:'Low P/E and P/FCF filters.', url:'https://finviz.com/screener.ashx?v=111&f=fa_pe_u20,fa_fcf_pos' },
-      { id:'adv-momo', level:'Advanced', title:'Momentum Scan', desc:'Price above 50/200 SMA, near 52W high.', url:'https://finviz.com/screener.ashx?v=111&f=ta_sma50_pb,ta_sma200_pb,sh_price_o5,ta_highlow52w_a30' },
-      { id:'adv-reversal', level:'Advanced', title:'Oversold Reversal', desc:'RSI oversold with bounce setup.', url:'https://finviz.com/screener.ashx?v=111&f=ta_rsi_os,ta_sma20_pa' }
-    ];
-    function getScreeners(){
-      try{ const raw = localStorage.getItem('screeners.custom'); if(raw){ const arr = JSON.parse(raw); if(Array.isArray(arr) && arr.length) return arr; } }catch{}
-      return defaultScreeners;
-    }
-    function renderScreeners(){
-      const arr = getScreeners(); const root = els.scrList; if(!root) return; root.innerHTML='';
-      for(const s of arr){
-        const item = document.createElement('div'); item.className='scr-item'; item.dataset.lvl = s.level||'Beginner';
-        item.innerHTML = `
-          <div style="flex:1;min-width:0">
-            <div class="title">${s.title||''}</div>
-            <div class="desc">${s.desc||''}</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span class="badge">${s.level||''}</span>
-            <a class="open-btn" href="${s.url}" target="_blank" rel="noopener">Open</a>
-          </div>`;
-        root.appendChild(item);
-      }
-    }
-    renderScreeners();
+    // UI wiring
+    els.searchBtn?.addEventListener('click', ()=>{ const t=sanitizeTicker(els.input.value); if(!t) return; state.ticker=t; localStorage.setItem('lastTicker', t); loadAndRender(); });
+    els.timeSel?.addEventListener('change', ()=>{ state.range=els.timeSel.value; loadAndRender(); });
+    els.freqSel?.addEventListener('change', ()=>{ state.interval=els.freqSel.value; loadAndRender(); });
+    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
 
     // Start
-    loadSymbols().finally(()=>{
-      els.q.value = state.ticker;
-      loadAndRender();
-      startQuoteTimer();
-    });
+    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); startQuoteTimer(); })();
   })();
   </script>
 </body>
