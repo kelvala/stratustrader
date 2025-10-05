@@ -24,8 +24,10 @@
     --lvl-beginner:#22c55e; --lvl-intermediate:#f59e0b; --lvl-advanced:#ef4444;
     --tf-bg:#1c1f35; --tf-head:#1a214e; --tf-glow:#3b82f6;
     --c-ichi-tenkan:#f59e0b; --c-ichi-kijun:#60a5fa; --c-ichi-chikou:#f472b6; /* pinkish chikou like Fidelity */
-    --c-ichi-up:rgba(34,197,94,.42);
-    --c-ichi-down:rgba(239,68,68,.38);
+    --c-ichi-up:rgba(34,197,94,.45);
+    --c-ichi-down:rgba(239,68,68,.40);
+    --c-ichi-spanA:#22c55e; /* Senkou Span A line */
+    --c-ichi-spanB:#ef4444; /* Senkou Span B line */
   }
   .light{
     --bg:#f8fafc;--panel:#fff;--text:#222;--muted:#64748b;
@@ -455,7 +457,7 @@
       const xExt = x.concat(Array.from({length:shift}, (_,k)=> new Date(x[x.length-1].getTime()+(k+1)*step)));
       const proj=(arr)=>{ const out=Array(xExt.length).fill(null); for(let i=0;i<arr.length;i++){ const v=arr[i]; if(Number.isFinite(v)) out[i+shift]=v; } return out; };
       const a=proj(spanA), b=proj(spanB);
-      // Build segmented clouds: green when A>B, red when B>A, split with nulls at transitions
+      // Segmented clouds
       const upTop=Array(xExt.length).fill(null), upBot=Array(xExt.length).fill(null);
       const dnTop=Array(xExt.length).fill(null), dnBot=Array(xExt.length).fill(null);
       for(let i=0;i<xExt.length;i++){
@@ -466,14 +468,17 @@
         }
       }
       const cloudUpTop={type:'scatter',mode:'lines',x:xExt,y:upTop,line:{width:0},showlegend:false,hoverinfo:'skip'};
-      const cloudUpFill={type:'scatter',mode:'lines',x:xExt,y:upBot,line:{width:0},fill:'tonexty',fillcolor:css('--c-ichi-up')||'rgba(34,197,94,.34)',showlegend:false,hoverinfo:'skip'};
+      const cloudUpFill={type:'scatter',mode:'lines',x:xExt,y:upBot,line:{width:0},fill:'tonexty',fillcolor:css('--c-ichi-up')||'rgba(34,197,94,.45)',showlegend:false,hoverinfo:'skip'};
       const cloudDnTop={type:'scatter',mode:'lines',x:xExt,y:dnTop,line:{width:0},showlegend:false,hoverinfo:'skip'};
-      const cloudDnFill={type:'scatter',mode:'lines',x:xExt,y:dnBot,line:{width:0},fill:'tonexty',fillcolor:css('--c-ichi-down')||'rgba(239,68,68,.28)',showlegend:false,hoverinfo:'skip'};
+      const cloudDnFill={type:'scatter',mode:'lines',x:xExt,y:dnBot,line:{width:0},fill:'tonexty',fillcolor:css('--c-ichi-down')||'rgba(239,68,68,.40)',showlegend:false,hoverinfo:'skip'};
+      // Span lines for visual edges
+      const spanALine={type:'scatter',mode:'lines',x:xExt,y:a,name:'Span A',line:{color:css('--c-ichi-spanA')||'#22c55e',width:1.2,dash:'dot'},hoverinfo:'skip',showlegend:false};
+      const spanBLine={type:'scatter',mode:'lines',x:xExt,y:b,name:'Span B',line:{color:css('--c-ichi-spanB')||'#ef4444',width:1.2,dash:'dot'},hoverinfo:'skip',showlegend:false};
       const ten={type:'scatter',mode:'lines',x,y:tenkan,name:'Tenkan',line:{color:css('--c-ichi-tenkan')||'#f59e0b',width:1.6},hoverinfo:'skip'};
       const kij={type:'scatter',mode:'lines',x,y:kijun,name:'Kijun',line:{color:css('--c-ichi-kijun')||'#60a5fa',width:1.8},hoverinfo:'skip'};
       const chikou=Array(x.length).fill(null); for(let i=0;i<close.length;i++){ const ii=i-shift; if(ii>=0) chikou[ii]=close[i]; }
       const chi={type:'scatter',mode:'lines',x,y:chikou,name:'Chikou',line:{color:css('--c-ichi-chikou')||'#93c5fd',width:1.4,dash:'dot'},hoverinfo:'skip'};
-      return [cloudUpTop,cloudUpFill,cloudDnTop,cloudDnFill,ten,kij,chi];
+      return [cloudUpTop,cloudUpFill,cloudDnTop,cloudDnFill,spanALine,spanBLine,ten,kij,chi];
     }
 
     // Build Plotly layout and traces
@@ -515,10 +520,12 @@
     function makeFibTraces(x0,x1,levels){
       const x=[new Date(x0), new Date(x1)];
       const color=css('--c-fib')||'#f59e0b';
-      return levels.map((lv,i)=>({
-        type:'scatter', mode:'lines', x, y:[lv,lv], name:`Fib ${Math.round(FIB_PCTS[i]*1000)/10}%`,
-        line:{ color, width:1, dash:'dot' }, yaxis:'y', hoverinfo:'skip', showlegend:false, meta:{kind:'AUTOFIB', pct:FIB_PCTS[i]}
-      }));
+      return levels.map((lv,i)=>{ const pct=Math.round(FIB_PCTS[i]*1000)/10; const label=`${(+lv).toFixed(2)} (${pct}%)`; return ({
+        type:'scatter', mode:'lines+text', x, y:[lv,lv], name:`Fib ${pct}%`,
+        line:{ color, width:1, dash:'dot' }, yaxis:'y', hoverinfo:'skip', showlegend:false,
+        text:[label,label], textposition:['middle left','middle right'], textfont:{color:color, size:10},
+        meta:{kind:'AUTOFIB', pct:FIB_PCTS[i]}
+      }); });
     }
     function updateAutoFib(){
       if(!els.chart) return;
@@ -528,7 +535,8 @@
       const s=computeHiLoInRange(rows,x0,x1); if(!s) return;
       const xArr=[new Date(x0), new Date(x1)];
       for(let i=0;i<state.fibIdx.length && i<s.levels.length;i++){
-        try{ Plotly.restyle(els.chart, { x:[xArr], y:[[s.levels[i], s.levels[i]]]}, [state.fibIdx[i]]); }catch{}
+        const lv=s.levels[i]; const pct=Math.round(FIB_PCTS[i]*1000)/10; const label=`${(+lv).toFixed(2)} (${pct}%)`;
+        try{ Plotly.restyle(els.chart, { x:[xArr], y:[[lv, lv]], text:[[label,label]], textposition:[[ 'middle left','middle right' ]]}, [state.fibIdx[i]]); }catch{}
       }
     }
     const updateAutoFibDebounced = debounce(updateAutoFib, 50);
@@ -660,8 +668,8 @@
     els.timeSel?.addEventListener('change', ()=>{ state.range=els.timeSel.value; loadAndRender(); });
     els.freqSel?.addEventListener('change', ()=>{ state.interval=els.freqSel.value; loadAndRender(); });
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
-    // When Auto Fib toggles, update overlays immediately without waiting for full redraw
-    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(applyShapesForCurrentView, 0); } });
+    // After Auto Fib toggle ensure labels update
+    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(updateAutoFibDebounced, 0); } });
     // Start
     (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); startQuoteTimer(); })();
   })();
