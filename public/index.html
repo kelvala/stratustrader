@@ -382,6 +382,9 @@
     const median = (arr)=>{ const a=(arr||[]).map(Number).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length) return NaN; const m=Math.floor(a.length/2); return a.length%2? a[m] : (a[m-1]+a[m])/2; };
     const $all = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
     const sanitizeTicker = s => String(s||'').split('|')[0].trim().toUpperCase();
+    function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const html=items.slice(0,60).map((o,i)=>`<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${o.n||''}</span></div>`).join(''); els.list.innerHTML=html; els.list.classList.add('show'); }
+    function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ state.acMatches=[]; state.acIndex=-1; renderAC(); return; } const sym=state.symbols||[]; const re=new RegExp('^'+s.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')); const pri = sym.filter(r=> re.test(r.t)); const sec = sym.filter(r=> !re.test(r.t) && r.t.includes(s)); const nameHits = sym.filter(r=> (r.n||'').toUpperCase().includes(s)&&!pri.includes(r)&&!sec.includes(r)); state.acMatches=[...pri,...sec,...nameHits]; state.acIndex=0; renderAC(); }
+    function pickAC(i){ if(!state.acMatches?.length) return; const it=state.acMatches[i]; if(!it) return; els.input.value=it.t; state.acMatches=[]; state.acIndex=-1; renderAC(); }
 
     // ET helpers
     const dtfET = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour12:false,hour:'2-digit',minute:'2-digit',weekday:'short'});
@@ -665,6 +668,9 @@
 
     // UI wiring
     els.searchBtn?.addEventListener('click', ()=>{ const t=sanitizeTicker(els.input.value); if(!t) return; state.ticker=t; localStorage.setItem('lastTicker', t); loadAndRender(); });
+    els.input?.addEventListener('input', (e)=>{ updateAC(e.target.value); });
+    els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ state.acMatches=[]; renderAC(); return;} if(!state.acMatches.length){ return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
+    els.list?.addEventListener('mousedown', (e)=>{ const it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });
     els.timeSel?.addEventListener('change', ()=>{ state.range=els.timeSel.value; loadAndRender(); });
     els.freqSel?.addEventListener('change', ()=>{ state.interval=els.freqSel.value; loadAndRender(); });
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
