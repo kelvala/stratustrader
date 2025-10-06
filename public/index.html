@@ -222,6 +222,7 @@
         <div id="lastLine">Last: — · Change: —</div>
         <div id="prevCloseLine">Yesterday’s Close: —</div>
         <div id="ivLine">Intrinsic Value: —</div>
+        <div id="rangeLine">Range: — · Volume: —</div>
       </div>
       <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
     </div>
@@ -360,7 +361,7 @@
     const els = {
       input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'),
       headline:q('#headline'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'),
-      subInfo:q('#subInfo'),
+      subInfo:q('#subInfo'), rangeLine:q('#rangeLine'),
       chartCard:q('#chartCard'), chart:q('#chart'),
       timeSel:q('#timeSel'), freqSel:q('#freqSel'), toggles:q('#toggles'),
       heightSel:q('#heightSel'), heightLabel:q('#heightLabel'),
@@ -617,37 +618,73 @@
       try{
         const r = await fetch(`/api/quote?ticker=${encodeURIComponent(state.ticker)}`, { cache:'no-store' }); if(!r.ok) throw 0; const j=await r.json();
         const R = j?.quoteSummary?.result?.[0]?.price || j?.quoteResponse?.result?.[0] || {};
-        const name = R.longName || R.shortName || '';
+        // --- Company name with fallback to local symbols list ---
+        let compName = R.longName || R.shortName || '';
+        if(!compName){
+          const found = (state.symbols||[]).find(s=>s.t===state.ticker);
+          if(found && found.n) compName = found.n;
+        }
         const exch = R.exchangeName || R.fullExchangeName || R.exchange || '';
         const currency = R.currency || 'USD';
         const regPrice = +(R.regularMarketPrice?.raw ?? R.regularMarketPrice);
-        const prevClose = +(R.regularMarketPreviousClose?.raw ?? R.regularMarketPreviousClose);
+        const prevCloseRaw = +(R.regularMarketPreviousClose?.raw ?? R.regularMarketPreviousClose);
         const postPrice = +(R.postMarketPrice?.raw ?? R.postMarketPrice);
         const prePrice  = +(R.preMarketPrice?.raw ?? R.preMarketPrice);
         const postTime  = +((R.postMarketTime?.raw ?? R.postMarketTime) || 0) * 1000;
         const preTime   = +((R.preMarketTime?.raw ?? R.preMarketTime) || 0) * 1000;
         const regTime   = +((R.regularMarketTime?.raw ?? R.regularMarketTime) || 0) * 1000;
+        const dayHigh = +(R.regularMarketDayHigh?.raw ?? R.regularMarketDayHigh);
+        const dayLow  = +(R.regularMarketDayLow?.raw ?? R.regularMarketDayLow);
+        const dayVol  = +(R.regularMarketVolume?.raw ?? R.regularMarketVolume);
+        const avgVol3 = +(R.averageDailyVolume3Month?.raw ?? R.averageDailyVolume3Month);
+        const w52High = +(R.fiftyTwoWeekHigh?.raw ?? R.fiftyTwoWeekHigh);
+        const w52Low  = +(R.fiftyTwoWeekLow?.raw ?? R.fiftyTwoWeekLow);
+
         // pick latest session
         const triples = [
           {p:regPrice, t:regTime, s:'REG'},
           {p:postPrice,t:postTime,s:'POST'},
-          {p:prePrice, t:preTime, s:'PRE'}
+            {p:prePrice, t:preTime, s:'PRE'}
         ].filter(x=>Number.isFinite(x.p)&&x.t>0).sort((a,b)=>b.t-a.t);
         const best = triples[0] || {p:regPrice, t:regTime, s:'REG'};
         const price = Number.isFinite(best.p)? best.p : (state.rows?.at(-1)?.c ?? NaN);
+
+        // Robust previous close fallback
+        let prevClose = Number.isFinite(prevCloseRaw)? prevCloseRaw : NaN;
+        if(!Number.isFinite(prevClose)){
+          if(state.rows?.length>1){ prevClose = state.rows[state.rows.length-2].c; }
+        }
+
         const chg = (Number.isFinite(price)&&Number.isFinite(prevClose)&&prevClose>0)? price-prevClose : NaN;
-        const pct = Number.isFinite(chg)&&prevClose>0? (chg/prevClose*100) : NaN;
+        const pct = (Number.isFinite(chg)&&Number.isFinite(prevClose)&&prevClose!==0)? (chg/prevClose*100) : NaN;
         const sessText = best.s==='PRE'? 'Pre‑Market' : best.s==='POST'? 'After‑Hours' : 'Regular';
-        els.headline.textContent = `${state.ticker}${name? ' — '+name:''}`;
+
+        // Headline + sub info (always show company name if we have it)
+        els.headline.textContent = compName ? `${state.ticker} — ${compName}` : state.ticker;
         els.subInfo.textContent = [exch||'', currency||'', `Session: ${sessText}`, `${state.range} · ${state.interval}`].filter(Boolean).join(' • ');
+
+        // Price/change line
         const col = (chg>0? css('--c-up'): chg<0? css('--c-down'): css('--muted')) || '#cbd5e1';
-        const chHTML = Number.isFinite(chg) ? `<span style="font-weight:800;color:${col}">${chg>0?'+':''}$${Math.abs(chg).toFixed(2)} (${chg>0?'+':''}${Math.abs(pct).toFixed(2)}%)</span>` : '—';
-        els.lastLine.innerHTML = `Last: ${fmtPx(price)} · Change: ${chHTML}`;
+        const changeHTML = Number.isFinite(chg) ? `<span style="font-weight:800;color:${col}">${chg>0?'+':''}$${Math.abs(chg).toFixed(2)} (${chg>0?'+':''}${Math.abs(pct).toFixed(2)}%)</span>` : '—';
+        els.lastLine.innerHTML = `Last: ${fmtPx(price)} · Change: ${changeHTML}`;
         els.prevCloseLine.textContent = `Yesterday’s Close: ${fmtPx(prevClose)}`;
-        // Simple intrinsic proxy: average of SMA50 & SMA200 when available
-        const s50 = state.smaLast?.[50]; const s200 = state.smaLast?.[200]; const iv = Number.isFinite(s50)&&Number.isFinite(s200)? ((s50+s200)/2) : (Number.isFinite(s200)? s200 : Number.isFinite(s50)? s50 : NaN);
+
+        // Extra range / volume line
+        const rangePart = (Number.isFinite(dayLow)&&Number.isFinite(dayHigh)) ? `${fmtPx(dayLow)} – ${fmtPx(dayHigh)}` : '—';
+        const volFmt = (v)=> Number.isFinite(v)? (v>1e9? (v/1e9).toFixed(2)+'B': v>1e6? (v/1e6).toFixed(2)+'M': v>1e3? (v/1e3).toFixed(2)+'K': String(v)) : '—';
+        const volPart = volFmt(dayVol);
+        const avgVolPart = volFmt(avgVol3);
+        const w52Part = (Number.isFinite(w52Low)&&Number.isFinite(w52High)) ? `${fmtPx(w52Low)} – ${fmtPx(w52High)}` : '—';
+        if(els.rangeLine){ els.rangeLine.innerHTML = `Range: <b>${rangePart}</b> · Vol: <b>${volPart}</b> (Avg: ${avgVolPart}) · 52W: <b>${w52Part}</b>`; }
+
+        // Intrinsic value proxy
+        const s50 = state.smaLast?.[50]; const s200 = state.smaLast?.[200];
+        const iv = Number.isFinite(s50)&&Number.isFinite(s200)? ((s50+s200)/2) : (Number.isFinite(s200)? s200 : Number.isFinite(s50)? s50 : NaN);
         els.ivLine.textContent = `Intrinsic Value: ${fmtPx(iv)}`;
-      }catch{}
+      }catch(err){
+        // minimal graceful degradation
+        els.lastLine.innerHTML = 'Last: — · Change: —';
+      }
     }
 
     function startQuoteTimer(){ if(state.quoteTimer){ clearInterval(state.quoteTimer); state.quoteTimer=null; } refreshQuoteOnce(); state.quoteTimer=setInterval(refreshQuoteOnce, 60000); }
