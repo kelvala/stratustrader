@@ -373,7 +373,7 @@
 
     /* ---------- State ---------- */
     let CURRENT = { ticker:null, company:"", prevClose:null };
-    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null };
+    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0 };
 
     /* ---------- Utils & Formatters ---------- */
     const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -384,9 +384,24 @@
     const median = (arr)=>{ const a=(arr||[]).map(Number).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length) return NaN; const m=Math.floor(a.length/2); return a.length%2? a[m] : (a[m-1]+a[m])/2; };
     const $all = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
     const sanitizeTicker = s => String(s||'').split('|')[0].trim().toUpperCase();
+    const normalizeTickerForFetch = t => sanitizeTicker(t).replace(/\s+/g,'').replace(/\.([A-Z0-9]{1,3})$/,'-$1'); // BRK.B -> BRK-B, etc.
+    function hideAC(){ if(els.list){ els.list.classList.remove('show'); els.list.innerHTML=''; } state.acMatches=[]; state.acIndex=-1; }
     function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const html=items.slice(0,60).map((o,i)=>`<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${o.n||''}</span></div>`).join(''); els.list.innerHTML=html; els.list.classList.add('show'); }
-    function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ state.acMatches=[]; state.acIndex=-1; renderAC(); return; } const sym=state.symbols||[]; const re=new RegExp('^'+s.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&')); const pri = sym.filter(r=> re.test(r.t)); const sec = sym.filter(r=> !re.test(r.t) && r.t.includes(s)); const nameHits = sym.filter(r=> (r.n||'').toUpperCase().includes(s)&&!pri.includes(r)&&!sec.includes(r)); state.acMatches=[...pri,...sec,...nameHits]; state.acIndex=0; renderAC(); }
-    function pickAC(i){ if(!state.acMatches?.length) return; const it=state.acMatches[i]; if(!it) return; els.input.value=it.t; state.acMatches=[]; state.acIndex=-1; renderAC(); }
+    function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ hideAC(); return; } // lazy retry symbols load if empty
+      if(!state.symbols.length && state.symbolsTried>0){ loadSymbols(true); }
+      const sym=state.symbols||[]; if(!sym.length){ // show loading placeholder
+        els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">Loading symbols…</div>'; els.list.classList.add('show'); return; }
+      const re=new RegExp('^'+s.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&'));
+      const pri = sym.filter(r=> re.test(r.t));
+      const sec = sym.filter(r=> !re.test(r.t) && r.t.includes(s));
+      const nameHits = sym.filter(r=> (r.n||'').toUpperCase().includes(s)&&!pri.includes(r)&&!sec.includes(r));
+      const matches=[...pri,...sec,...nameHits];
+      if(!matches.length){ els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">No matches</div>'; els.list.classList.add('show'); state.acMatches=[]; state.acIndex=-1; return; }
+      state.acMatches=matches; state.acIndex=0; renderAC(); }
+    function pickAC(i){ if(!state.acMatches?.length) return; const it=state.acMatches[i]; if(!it) return; els.input.value=it.t; hideAC(); }
+
+    // Close autocomplete when clicking outside
+    document.addEventListener('click', e=>{ if(!els.list) return; if(e.target===els.input || e.target.closest('#ac')) return; hideAC(); });
 
     // ET helpers
     const dtfET = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour12:false,hour:'2-digit',minute:'2-digit',weekday:'short'});
@@ -401,38 +416,26 @@
       return (isIntraday(state.interval) && !includeAH) ? rows.filter(r=>isRegularSessionET(r.t)) : rows;
     }
 
-    // CSV symbols for autocomplete (robust with fallbacks)
-    async function loadSymbols(){
-      if(state.symbols?.length) return state.symbols;
+    // CSV symbols for autocomplete (robust with fallbacks + retry)
+    async function loadSymbols(force){
+      if(state.symbols.length && !force) return state.symbols;
+      state.symbolsTried++;
       const paths = ['stock_data.csv','/stock_data.csv','/public/stock_data.csv'];
       let text = '';
       for(const p of paths){
-        try{
-          const r = await fetch(p,{cache:'no-store'});
-          if(r.ok){ text = await r.text(); if(text) break; }
-        }catch{/* try next */}
+        try{ const r = await fetch(p,{cache:'no-store'}); if(r.ok){ text = await r.text(); if(text) break; } }catch{/* try next */}
       }
-      if(!text){ state.symbols=[]; return state.symbols; }
+      if(!text){ if(force && state.symbolsTried<4) setTimeout(()=>loadSymbols(true), 800); return state.symbols; }
       try{
         const lines = text.split(/\r?\n/).filter(Boolean);
-        const out = [];
-        let start=0;
-        if(/^\s*symbol\s*(\||,)/i.test(lines[0]||'')) start=1; // skip header
+        const out = []; let start=0; if(/^[\s]*symbol\s*(\||,)/i.test(lines[0]||'')) start=1;
         for(let i=start;i<lines.length;i++){
-          const line = lines[i];
-          const d = line.includes('|') ? '|' : ',';
-            const parts = line.split(d);
-            if(!parts.length) continue;
-            const sym = (parts[0]||'').trim().toUpperCase();
-            if(!sym) continue;
-            const name = parts.slice(1).join(' ').replace(/\s*\|\s*/g,' ').trim();
-            out.push({ t:sym, n:name });
+          const line = lines[i]; const d = line.includes('|') ? '|' : ','; const parts=line.split(d);
+          const sym=(parts[0]||'').trim().toUpperCase(); if(!sym) continue; const name=parts.slice(1).join(' ').replace(/\s*\|\s*/g,' ').trim();
+          out.push({ t:sym, n:name });
         }
         state.symbols = out;
-      }catch{
-        state.symbols = [];
-      }
-      // If user already typed something, refresh matches once symbols loaded
+      }catch{ state.symbols=[]; }
       if(els.input && els.input.value) updateAC(els.input.value);
       return state.symbols;
     }
@@ -664,113 +667,75 @@
         let avgVol3 = +(R.averageDailyVolume3Month?.raw ?? R.averageDailyVolume3Month);
         let w52High = +(R.fiftyTwoWeekHigh?.raw ?? R.fiftyTwoWeekHigh);
         let w52Low  = +(R.fiftyTwoWeekLow?.raw ?? R.fiftyTwoWeekLow);
-
-        // ------- Fallbacks when quote endpoint omits fields (still show something) -------
         const rowsAll = state.rows||[];
         const toET = (ms)=> new Date(new Date(ms).toLocaleString('en-US',{timeZone:'America/New_York'}));
         const etKey = (ms)=>{ const d=toET(ms); return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); };
         if(rowsAll.length){
-          // Day hi/lo/vol fallback
-            if(!Number.isFinite(dayHigh) || !Number.isFinite(dayLow) || !Number.isFinite(dayVol)){
-              const lastKey = etKey(rowsAll.at(-1).t);
-              let hi=-Infinity, lo=Infinity, volSum=0;
-              for(const r of rowsAll){ if(etKey(r.t)!==lastKey) continue; if(Number.isFinite(r.h)) hi=Math.max(hi,r.h); if(Number.isFinite(r.l)) lo=Math.min(lo,r.l); if(Number.isFinite(r.v)) volSum+=r.v; }
-              if(!Number.isFinite(dayHigh) && hi>-Infinity) dayHigh=hi;
-              if(!Number.isFinite(dayLow)  && lo< Infinity) dayLow =lo;
-              if(!Number.isFinite(dayVol)  && volSum>0) dayVol=volSum;
-            }
-          // Avg volume fallback (simple average of last up to 20 session aggregates)
-          if(!Number.isFinite(avgVol3)){
-            const byDay = new Map();
-            for(const r of rowsAll){ const k=etKey(r.t); const prev=byDay.get(k)||0; byDay.set(k, prev + (Number.isFinite(r.v)?r.v:0)); }
-            const vols=[...byDay.values()].slice(-20).filter(Number.isFinite);
-            if(vols.length) avgVol3 = vols.reduce((a,b)=>a+b,0)/vols.length;
+          if(!Number.isFinite(dayHigh) || !Number.isFinite(dayLow) || !Number.isFinite(dayVol)){
+            const lastKey = etKey(rowsAll.at(-1).t); let hi=-Infinity, lo=Infinity, volSum=0;
+            for(const r of rowsAll){ if(etKey(r.t)!==lastKey) continue; if(Number.isFinite(r.h)) hi=Math.max(hi,r.h); if(Number.isFinite(r.l)) lo=Math.min(lo,r.l); if(Number.isFinite(r.v)) volSum+=r.v; }
+            if(!Number.isFinite(dayHigh) && hi>-Infinity) dayHigh=hi;
+            if(!Number.isFinite(dayLow)  && lo< Infinity) dayLow =lo;
+            if(!Number.isFinite(dayVol)  && volSum>0) dayVol=volSum;
           }
-          // 52w range fallback (use last 365 days of data we have)
+          if(!Number.isFinite(avgVol3)){
+            const byDay=new Map(); for(const r of rowsAll){ const k=etKey(r.t); byDay.set(k,(byDay.get(k)||0)+(Number.isFinite(r.v)?r.v:0)); }
+            const vols=[...byDay.values()].slice(-20).filter(Number.isFinite); if(vols.length) avgVol3 = vols.reduce((a,b)=>a+b,0)/vols.length;
+          }
           if(!Number.isFinite(w52High) || !Number.isFinite(w52Low)){
-            const cutoff = Date.now()-365*864e5;
-            let hi=-Infinity, lo=Infinity;
+            const cutoff=Date.now()-365*864e5; let hi=-Infinity,lo=Infinity;
             for(const r of rowsAll){ if(r.t<cutoff) continue; if(Number.isFinite(r.h)) hi=Math.max(hi,r.h); if(Number.isFinite(r.l)) lo=Math.min(lo,r.l); }
             if(!Number.isFinite(w52High) && hi>-Infinity) w52High=hi;
             if(!Number.isFinite(w52Low)  && lo< Infinity) w52Low =lo;
           }
         }
-        // ------------------------------------------------------------------------------
-
-        // pick latest session
-        const triples = [
-          {p:regPrice, t:regTime, s:'REG'},
-          {p:postPrice,t:postTime,s:'POST'},
-          {p:prePrice, t:preTime, s:'PRE'}
-        ].filter(x=>Number.isFinite(x.p)&&x.t>0).sort((a,b)=>b.t-a.t);
-        const best = triples[0] || {p:regPrice, t:regTime, s:'REG'};
+        const triples=[{p:regPrice,t:regTime,s:'REG'},{p:postPrice,t:postTime,s:'POST'},{p:prePrice,t:preTime,s:'PRE'}].filter(x=>Number.isFinite(x.p)&&x.t>0).sort((a,b)=>b.t-a.t);
+        const best=triples[0]||{p:regPrice,t:regTime,s:'REG'};
         const price = Number.isFinite(best.p)? best.p : (state.rows?.at(-1)?.c ?? NaN);
-
-        // Robust previous close fallback
-        let prevClose = Number.isFinite(prevCloseRaw)? prevCloseRaw : NaN;
-        if(!Number.isFinite(prevClose)){
-          if(state.rows?.length>1){ prevClose = state.rows[state.rows.length-2].c; }
-        }
-
-        const chg = (Number.isFinite(price)&&Number.isFinite(prevClose)&&prevClose>0)? price-prevClose : NaN;
-        const pct = (Number.isFinite(chg)&&Number.isFinite(prevClose)&&prevClose!==0)? (chg/prevClose*100) : NaN;
+        let prevClose = Number.isFinite(prevCloseRaw)? prevCloseRaw : NaN; if(!Number.isFinite(prevClose)&&state.rows?.length>1) prevClose = state.rows[state.rows.length-2].c;
+        const chg=(Number.isFinite(price)&&Number.isFinite(prevClose)&&prevClose>0)? price-prevClose:NaN;
+        const pct=(Number.isFinite(chg)&&Number.isFinite(prevClose)&&prevClose!==0)? (chg/prevClose*100):NaN;
         const sessText = best.s==='PRE'? 'Pre‑Market' : best.s==='POST'? 'After‑Hours' : 'Regular';
-
-        // Headline + sub info (always show company name if we have it)
         els.headline.textContent = compName ? `${state.ticker} — ${compName}` : state.ticker;
         els.subInfo.textContent = [exch||'', currency||'', `Session: ${sessText}`, `${state.range} · ${state.interval}`].filter(Boolean).join(' • ');
-
-        // Price/change line
-        const col = (chg>0? css('--c-up'): chg<0? css('--c-down'): css('--muted')) || '#cbd5e1';
-        const changeHTML = Number.isFinite(chg) ? `<span style="font-weight:800;color:${col}">${chg>0?'+':''}$${Math.abs(chg).toFixed(2)} (${chg>0?'+':''}${Math.abs(pct).toFixed(2)}%)</span>` : '—';
-        els.lastLine.innerHTML = `Last: ${fmtPx(price)} · Change: ${changeHTML}`;
-        els.prevCloseLine.textContent = `Yesterday’s Close: ${fmtPx(prevClose)}`;
-
-        // Extra range / volume line
-        const rangePart = (Number.isFinite(dayLow)&&Number.isFinite(dayHigh)) ? `${fmtPx(dayLow)} – ${fmtPx(dayHigh)}` : '—';
-        const volFmt = (v)=> Number.isFinite(v)? (v>1e9? (v/1e9).toFixed(2)+'B': v>1e6? (v/1e6).toFixed(2)+'M': v>1e3? (v/1e3).toFixed(2)+'K': String(v)) : '—';
-        const volPart = volFmt(dayVol);
-        const avgVolPart = volFmt(avgVol3);
-        const w52Part = (Number.isFinite(w52Low)&&Number.isFinite(w52High)) ? `${fmtPx(w52Low)} – ${fmtPx(w52High)}` : '—';
-        if(els.rangeLine){ els.rangeLine.innerHTML = `Range: <b>${rangePart}</b> · Vol: <b>${volPart}</b> (Avg: ${avgVolPart}) · 52W: <b>${w52Part}</b>`; }
-
-        // Intrinsic value proxy
-        const s50 = state.smaLast?.[50]; const s200 = state.smaLast?.[200];
-        const iv = Number.isFinite(s50)&&Number.isFinite(s200)? ((s50+s200)/2) : (Number.isFinite(s200)? s200 : Number.isFinite(s50)? s50 : NaN);
-        els.ivLine.textContent = `Intrinsic Value: ${fmtPx(iv)}`;
-      }catch(err){
-        // minimal graceful degradation (also try chart fallback if range line empty)
-        if(state.rows?.length && els.rangeLine && /Range:\s*—/.test(els.rangeLine.textContent||'')){
-          const rows = state.rows; const last = rows.at(-1); if(last){ let hi=-Infinity,lo=Infinity,vol=0; const toET=(ms)=> new Date(new Date(ms).toLocaleString('en-US',{timeZone:'America/New_York'})); const key= (d)=> d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); const lastKey=key(toET(last.t)); for(const r of rows){ if(key(toET(r.t))!==lastKey) continue; hi=Math.max(hi,r.h); lo=Math.min(lo,r.l); vol+=r.v||0; } if(hi>-Infinity && lo<Infinity){ els.rangeLine.innerHTML = `Range: <b>${fmtPx(lo)}</b> – <b>${fmtPx(hi)}</b> · Vol: <b>${vol}</b>`; } }
-        els.lastLine.innerHTML = 'Last: — · Change: —';
-      }
+        const col=(chg>0?css('--c-up'):chg<0?css('--c-down'):css('--muted'))||'#cbd5e1';
+        const changeHTML=Number.isFinite(chg)? `<span style="font-weight:800;color:${col}">${chg>0?'+':''}$${Math.abs(chg).toFixed(2)} (${chg>0?'+':''}${Math.abs(pct).toFixed(2)}%)</span>`:'—';
+        els.lastLine.innerHTML=`Last: ${fmtPx(price)} · Change: ${changeHTML}`;
+        els.prevCloseLine.textContent=`Yesterday’s Close: ${fmtPx(prevClose)}`;
+        const rangePart=(Number.isFinite(dayLow)&&Number.isFinite(dayHigh))? `${fmtPx(dayLow)} – ${fmtPx(dayHigh)}`:'—';
+        const volFmt=v=> Number.isFinite(v)? (v>1e9?(v/1e9).toFixed(2)+'B': v>1e6?(v/1e6).toFixed(2)+'M': v>1e3?(v/1e3).toFixed(2)+'K': String(v)):'—';
+        const volPart=volFmt(dayVol); const avgVolPart=volFmt(avgVol3); const w52Part=(Number.isFinite(w52Low)&&Number.isFinite(w52High))? `${fmtPx(w52Low)} – ${fmtPx(w52High)}`:'—';
+        if(els.rangeLine) els.rangeLine.innerHTML=`Range: <b>${rangePart}</b> · Vol: <b>${volPart}</b> (Avg: ${avgVolPart}) · 52W: <b>${w52Part}</b>`;
+        const s50=state.smaLast?.[50]; const s200=state.smaLast?.[200]; const iv=Number.isFinite(s50)&&Number.isFinite(s200)?((s50+s200)/2):(Number.isFinite(s200)?s200:Number.isFinite(s50)?s50:NaN);
+        els.ivLine.textContent=`Intrinsic Value: ${fmtPx(iv)}`;
+      }catch(err){ if(els.rangeLine && /Range:\s*—/.test(els.rangeLine.textContent||'')){ els.rangeLine.innerHTML='Range: — · Vol: —'; } }
     }
 
     /* ---------- Data fetch ---------- */
     async function fetchRows(ticker, range, interval){
+      const T = normalizeTickerForFetch(ticker);
       try{
-        const r = await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`, { cache:'no-store' });
-        if(r.ok){ const j=await r.json(); const res=j?.chart?.result?.[0]; if(res){ const ts=res.timestamp||[]; const q=res.indicators?.quote?.[0]||{}; const rows=[]; for(let i=0;i<ts.length;i++){ const c=q.close?.[i]; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:q.open?.[i], h:q.high?.[i], l:q.low?.[i], c:+c, v:q.volume?.[i]||0 }); } return rows; } }
+        const r = await fetch(`/api/chart?ticker=${encodeURIComponent(T)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`, { cache:'no-store' });
+        if(r.ok){ const j=await r.json(); const res=j?.chart?.result?.[0]; if(res){ const ts=res.timestamp||[]; const qd=res.indicators?.quote?.[0]||{}; const rows=[]; for(let i=0;i<ts.length;i++){ const c=qd.close?.[i]; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:qd.open?.[i], h:qd.high?.[i], l:qd.low?.[i], c:+c, v:qd.volume?.[i]||0 }); } return rows; } }
       }catch{}
       throw new Error('chart fetch failed');
     }
 
-    /* ---------- Load + render pipeline ---------- */
     async function loadAndRender(){
-      try{ state.rows = await fetchRows(state.ticker, state.range, state.interval); await buildSMAAlignedSeries(); await renderChart(); refreshQuoteOnce(); }catch(e){ console.error('Chart error', e); }
+      try{ state.rows = await fetchRows(state.ticker, state.range, state.interval); await buildSMAAlignedSeries(); await renderChart(); refreshQuoteOnce(); }
+      catch(e){ console.error('Chart error', e); els.lastLine.innerHTML='Last: — · Change: —'; if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)'; }
     }
 
-    // UI wiring
-    els.searchBtn?.addEventListener('click', ()=>{ const t=sanitizeTicker(els.input.value); if(!t) return; state.ticker=t; localStorage.setItem('lastTicker', t); loadAndRender(); });
+    // UI wiring (patched search + AC close)
+    els.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; const t=sanitizeTicker(raw); if(!t){ els.input.focus(); return; } state.ticker=t; localStorage.setItem('lastTicker', t); hideAC(); loadAndRender(); });
     els.input?.addEventListener('input', (e)=>{ updateAC(e.target.value); });
-    els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ state.acMatches=[]; renderAC(); return;} if(!state.acMatches.length){ return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
+    els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ hideAC(); return;} if(!state.acMatches.length){ if(e.key==='Enter'){ els.searchBtn?.click(); } return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
     els.list?.addEventListener('mousedown', (e)=>{ const it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });
     els.timeSel?.addEventListener('change', ()=>{ state.range=els.timeSel.value; loadAndRender(); });
     els.freqSel?.addEventListener('change', ()=>{ state.interval=els.freqSel.value; loadAndRender(); });
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
-    // After Auto Fib toggle ensure labels update
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(updateAutoFibDebounced, 0); } });
-    // Start
+
     (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); })();
   })();
   </script>
