@@ -87,11 +87,12 @@
   .chip:not(.active){filter: saturate(0.95) brightness(1.02);} 
   /* Chip base colors (fixed typos) */
   .chip[data-k="SMA20"]{border-color:var(--c-sma20);color:var(--c-sma20);} 
-  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var,--c-sma50;} 
-  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var,--c-sma200;} 
-  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var,--c-rsi;} 
-  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var,--c-macd;} 
-  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var,--c-vol;} 
+  /* fixed var() syntax below */
+  .chip[data-k="SMA50"]{border-color:var(--c-sma50);color:var(--c-sma50);} 
+  .chip[data-k="SMA200"]{border-color:var(--c-sma200);color:var(--c-sma200);} 
+  .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
+  .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);} 
+  .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip[data-k="SESS"]{border-color:#93c5fd;color:#93c5fd}
@@ -400,15 +401,39 @@
       return (isIntraday(state.interval) && !includeAH) ? rows.filter(r=>isRegularSessionET(r.t)) : rows;
     }
 
-    // CSV symbols for autocomplete (minimal)
+    // CSV symbols for autocomplete (robust with fallbacks)
     async function loadSymbols(){
       if(state.symbols?.length) return state.symbols;
+      const paths = ['stock_data.csv','/stock_data.csv','/public/stock_data.csv'];
+      let text = '';
+      for(const p of paths){
+        try{
+          const r = await fetch(p,{cache:'no-store'});
+          if(r.ok){ text = await r.text(); if(text) break; }
+        }catch{/* try next */}
+      }
+      if(!text){ state.symbols=[]; return state.symbols; }
       try{
-        const r = await fetch('/stock_data.csv',{cache:'no-store'}); if(!r.ok) throw 0; const text=await r.text();
-        const lines=text.split(/\r?\n/).filter(Boolean); const out=[]; let start=0; if(/^\s*symbol\s*(\||,)/i.test(lines[0]||'')) start=1;
-        for(let i=start;i<lines.length;i++){ const line=lines[i]; const d=line.includes('|')?'|':','; const [sym,...rest]=line.split(d); const s=(sym||'').trim().toUpperCase(); if(!s) continue; const n=rest.join(' ').replace(/\s*\|\s*/g,' ').trim(); out.push({t:s,n}); }
-        state.symbols=out;
-      }catch{ state.symbols=[]; }
+        const lines = text.split(/\r?\n/).filter(Boolean);
+        const out = [];
+        let start=0;
+        if(/^\s*symbol\s*(\||,)/i.test(lines[0]||'')) start=1; // skip header
+        for(let i=start;i<lines.length;i++){
+          const line = lines[i];
+          const d = line.includes('|') ? '|' : ',';
+            const parts = line.split(d);
+            if(!parts.length) continue;
+            const sym = (parts[0]||'').trim().toUpperCase();
+            if(!sym) continue;
+            const name = parts.slice(1).join(' ').replace(/\s*\|\s*/g,' ').trim();
+            out.push({ t:sym, n:name });
+        }
+        state.symbols = out;
+      }catch{
+        state.symbols = [];
+      }
+      // If user already typed something, refresh matches once symbols loaded
+      if(els.input && els.input.value) updateAC(els.input.value);
       return state.symbols;
     }
 
@@ -746,7 +771,7 @@
     // After Auto Fib toggle ensure labels update
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(updateAutoFibDebounced, 0); } });
     // Start
-    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); startQuoteTimer(); })();
+    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); })();
   })();
   </script>
 </body>
