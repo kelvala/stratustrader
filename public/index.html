@@ -633,18 +633,50 @@
         const postTime  = +((R.postMarketTime?.raw ?? R.postMarketTime) || 0) * 1000;
         const preTime   = +((R.preMarketTime?.raw ?? R.preMarketTime) || 0) * 1000;
         const regTime   = +((R.regularMarketTime?.raw ?? R.regularMarketTime) || 0) * 1000;
-        const dayHigh = +(R.regularMarketDayHigh?.raw ?? R.regularMarketDayHigh);
-        const dayLow  = +(R.regularMarketDayLow?.raw ?? R.regularMarketDayLow);
-        const dayVol  = +(R.regularMarketVolume?.raw ?? R.regularMarketVolume);
-        const avgVol3 = +(R.averageDailyVolume3Month?.raw ?? R.averageDailyVolume3Month);
-        const w52High = +(R.fiftyTwoWeekHigh?.raw ?? R.fiftyTwoWeekHigh);
-        const w52Low  = +(R.fiftyTwoWeekLow?.raw ?? R.fiftyTwoWeekLow);
+        let dayHigh = +(R.regularMarketDayHigh?.raw ?? R.regularMarketDayHigh);
+        let dayLow  = +(R.regularMarketDayLow?.raw ?? R.regularMarketDayLow);
+        let dayVol  = +(R.regularMarketVolume?.raw ?? R.regularMarketVolume);
+        let avgVol3 = +(R.averageDailyVolume3Month?.raw ?? R.averageDailyVolume3Month);
+        let w52High = +(R.fiftyTwoWeekHigh?.raw ?? R.fiftyTwoWeekHigh);
+        let w52Low  = +(R.fiftyTwoWeekLow?.raw ?? R.fiftyTwoWeekLow);
+
+        // ------- Fallbacks when quote endpoint omits fields (still show something) -------
+        const rowsAll = state.rows||[];
+        const toET = (ms)=> new Date(new Date(ms).toLocaleString('en-US',{timeZone:'America/New_York'}));
+        const etKey = (ms)=>{ const d=toET(ms); return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); };
+        if(rowsAll.length){
+          // Day hi/lo/vol fallback
+            if(!Number.isFinite(dayHigh) || !Number.isFinite(dayLow) || !Number.isFinite(dayVol)){
+              const lastKey = etKey(rowsAll.at(-1).t);
+              let hi=-Infinity, lo=Infinity, volSum=0;
+              for(const r of rowsAll){ if(etKey(r.t)!==lastKey) continue; if(Number.isFinite(r.h)) hi=Math.max(hi,r.h); if(Number.isFinite(r.l)) lo=Math.min(lo,r.l); if(Number.isFinite(r.v)) volSum+=r.v; }
+              if(!Number.isFinite(dayHigh) && hi>-Infinity) dayHigh=hi;
+              if(!Number.isFinite(dayLow)  && lo< Infinity) dayLow =lo;
+              if(!Number.isFinite(dayVol)  && volSum>0) dayVol=volSum;
+            }
+          // Avg volume fallback (simple average of last up to 20 session aggregates)
+          if(!Number.isFinite(avgVol3)){
+            const byDay = new Map();
+            for(const r of rowsAll){ const k=etKey(r.t); const prev=byDay.get(k)||0; byDay.set(k, prev + (Number.isFinite(r.v)?r.v:0)); }
+            const vols=[...byDay.values()].slice(-20).filter(Number.isFinite);
+            if(vols.length) avgVol3 = vols.reduce((a,b)=>a+b,0)/vols.length;
+          }
+          // 52w range fallback (use last 365 days of data we have)
+          if(!Number.isFinite(w52High) || !Number.isFinite(w52Low)){
+            const cutoff = Date.now()-365*864e5;
+            let hi=-Infinity, lo=Infinity;
+            for(const r of rowsAll){ if(r.t<cutoff) continue; if(Number.isFinite(r.h)) hi=Math.max(hi,r.h); if(Number.isFinite(r.l)) lo=Math.min(lo,r.l); }
+            if(!Number.isFinite(w52High) && hi>-Infinity) w52High=hi;
+            if(!Number.isFinite(w52Low)  && lo< Infinity) w52Low =lo;
+          }
+        }
+        // ------------------------------------------------------------------------------
 
         // pick latest session
         const triples = [
           {p:regPrice, t:regTime, s:'REG'},
           {p:postPrice,t:postTime,s:'POST'},
-            {p:prePrice, t:preTime, s:'PRE'}
+          {p:prePrice, t:preTime, s:'PRE'}
         ].filter(x=>Number.isFinite(x.p)&&x.t>0).sort((a,b)=>b.t-a.t);
         const best = triples[0] || {p:regPrice, t:regTime, s:'REG'};
         const price = Number.isFinite(best.p)? best.p : (state.rows?.at(-1)?.c ?? NaN);
@@ -682,12 +714,12 @@
         const iv = Number.isFinite(s50)&&Number.isFinite(s200)? ((s50+s200)/2) : (Number.isFinite(s200)? s200 : Number.isFinite(s50)? s50 : NaN);
         els.ivLine.textContent = `Intrinsic Value: ${fmtPx(iv)}`;
       }catch(err){
-        // minimal graceful degradation
+        // minimal graceful degradation (also try chart fallback if range line empty)
+        if(state.rows?.length && els.rangeLine && /Range:\s*—/.test(els.rangeLine.textContent||'')){
+          const rows = state.rows; const last = rows.at(-1); if(last){ let hi=-Infinity,lo=Infinity,vol=0; const toET=(ms)=> new Date(new Date(ms).toLocaleString('en-US',{timeZone:'America/New_York'})); const key= (d)=> d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); const lastKey=key(toET(last.t)); for(const r of rows){ if(key(toET(r.t))!==lastKey) continue; hi=Math.max(hi,r.h); lo=Math.min(lo,r.l); vol+=r.v||0; } if(hi>-Infinity && lo<Infinity){ els.rangeLine.innerHTML = `Range: <b>${fmtPx(lo)}</b> – <b>${fmtPx(hi)}</b> · Vol: <b>${vol}</b>`; } }
         els.lastLine.innerHTML = 'Last: — · Change: —';
       }
     }
-
-    function startQuoteTimer(){ if(state.quoteTimer){ clearInterval(state.quoteTimer); state.quoteTimer=null; } refreshQuoteOnce(); state.quoteTimer=setInterval(refreshQuoteOnce, 60000); }
 
     /* ---------- Data fetch ---------- */
     async function fetchRows(ticker, range, interval){
