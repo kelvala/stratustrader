@@ -192,6 +192,9 @@
   .ac-item .company{ color: var(--muted); font-weight:700; }
   .ac-item:hover .company, .ac-item.active .company{ color: var(--muted); opacity:.95; }
 
+  /* Toast */
+  #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(40px);background:var(--panel);color:var(--text);border:1px solid var(--border);padding:10px 14px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:4000;box-shadow:0 6px 24px -2px rgba(0,0,0,.45)}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
@@ -368,9 +371,61 @@
       heightSel:q('#heightSel'), heightLabel:q('#heightLabel'),
       themeToggle:q('#themeToggle'), autoFib:q('#autoFib'),
       refreshBtn:q('#refreshBtn'), maxBtn:q('#maxBtn'), wideBtn:q('#wideBtn'),
-      tfCard:q('#tfCard'), tfHead:q('#tfHead')
+      tfCard:q('#tfCard'), tfHead:q('#tfHead'),
+      /* Newly added */
+      toolGPTs:q('#toolGPTs'), toolScreeners:q('#toolScreeners'),
+      sheetGPTs:q('#sheetGPTs'), sheetScreeners:q('#sheetScreeners'),
+      btmNav:q('#btmNav'), askGPT:q('#askGPT'), gptInput:q('#gptInput'), scrList:q('#scrList')
     };
 
+    /* ---------- Toast ---------- */
+    let toast = q('#toast');
+    if(!toast){ toast = document.createElement('div'); toast.id='toast'; document.body.appendChild(toast); }
+    function showToast(msg, ms=2600){ toast.textContent=msg; toast.classList.add('show'); clearTimeout(showToast._t); showToast._t=setTimeout(()=>toast.classList.remove('show'), ms); }
+
+    /* ---------- Sheets (GPTs / Screeners) ---------- */
+    function openSheet(id){ const el=q('#'+id); if(!el) return; el.hidden=false; el.setAttribute('data-open','true'); document.body.style.overflow='hidden'; if(id==='sheetGPTs' && els.gptInput){ setTimeout(()=>els.gptInput.focus(),50); } }
+    function closeSheet(id){ const el=q('#'+id); if(!el) return; el.hidden=true; el.removeAttribute('data-open'); if(![...document.querySelectorAll('.sheet')].some(s=>!s.hidden)) document.body.style.overflow=''; }
+    function toggleSheet(id){ const el=q('#'+id); if(!el) return; if(el.hidden) openSheet(id); else closeSheet(id); }
+
+    document.addEventListener('click', e=>{ const btn=e.target.closest('[data-close]'); if(btn){ closeSheet(btn.getAttribute('data-close')); } });
+    els.toolGPTs?.addEventListener('click', ()=>{ openSheet('sheetGPTs'); highlightTab('gpts'); });
+    els.toolScreeners?.addEventListener('click', ()=>{ openSheet('sheetScreeners'); highlightTab('screeners'); });
+
+    // Escape closes top-most sheet
+    document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ const open=[...document.querySelectorAll('.sheet')].filter(s=>!s.hidden).pop(); if(open){ closeSheet(open.id); highlightTab('home'); } } });
+
+    /* ---------- Bottom Nav ---------- */
+    function highlightTab(tab){ if(!els.btmNav) return; els.btmNav.querySelectorAll('.tab').forEach(t=> t.classList.toggle('active', t.dataset.tab===tab)); }
+    els.btmNav?.addEventListener('click', e=>{ const tab=e.target.closest('.tab'); if(!tab) return; const k=tab.dataset.tab; if(k==='home'){ closeSheet('sheetGPTs'); closeSheet('sheetScreeners'); highlightTab('home'); } else if(k==='gpts'){ openSheet('sheetGPTs'); highlightTab('gpts'); } else if(k==='screeners'){ openSheet('sheetScreeners'); highlightTab('screeners'); } else if(k==='settings'){ showToast('Settings coming soon'); highlightTab('settings'); } });
+
+    /* ---------- Screeners Populate ---------- */
+    const screenerDefs=[
+      {id:'highMomentum', title:'High Momentum (RSI 55-70 & Price > SMA50)', lvl:'Intermediate', desc:'Focuses on symbols showing sustained directional strength without extreme overbought.'},
+      {id:'goldenCross', title:'Golden Cross Watch (SMA50 > SMA200)', lvl:'Beginner', desc:'Potential long-term trend shifts signaled by 50/200 SMA relationship.'},
+      {id:'valueRebound', title:'Value Rebound (Price < SMA200 & RSI Rising)', lvl:'Intermediate', desc:'Look for early reversals in oversold longer-term downtrends.'},
+      {id:'volumeExpansion', title:'Volume Expansion (Today Vol > 150% Avg)', lvl:'Advanced', desc:'Unusual interest may precede directional continuation.'}
+    ];
+    function ensureScreeners(){ if(!els.scrList) return; if(els.scrList.dataset.filled) return; els.scrList.innerHTML = screenerDefs.map(s=>`<div class="scr-item" data-lvl="${s.lvl}" data-id="${s.id}">
+      <div style="flex:1;min-width:0">
+        <div class="title">${s.title}</div>
+        <div class="desc">${s.desc}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="badge">${s.lvl}</span>
+        <button class="open-btn" type="button" data-run="${s.id}">Run</button>
+      </div>
+    </div>`).join(''); els.scrList.dataset.filled='1'; }
+    document.addEventListener('click', e=>{ const run=e.target.closest('[data-run]'); if(!run) return; const id=run.dataset.run; showToast('Running screener: '+id+' (demo)'); });
+
+    /* ---------- Ask GPT Helper ---------- */
+    els.askGPT?.addEventListener('click', ()=>{ const txt=(els.gptInput?.value||'').trim(); if(!txt){ showToast('Enter a question first'); els.gptInput?.focus(); return; } const context=`Ticker: ${state.ticker}\nRange: ${state.range}\nInterval: ${state.interval}`; const prompt=context+"\n\nQuestion: "+txt; navigator.clipboard?.writeText(prompt).then(()=>{ showToast('Prompt copied to clipboard'); }).catch(()=>showToast('Prompt ready (copy failed)')); });
+
+    // Open sheet population hooks
+    const sheetObserver = new MutationObserver(()=>{ if(!els.sheetScreeners?.hidden) ensureScreeners(); });
+    if(els.sheetScreeners) sheetObserver.observe(els.sheetScreeners, { attributes:true, attributeFilter:['hidden'] });
+
+    /* ---------- Existing code continues below (chart, autocomplete, etc.) ---------- */
     /* ---------- State ---------- */
     let CURRENT = { ticker:null, company:"", prevClose:null };
     const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0 };
