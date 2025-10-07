@@ -389,8 +389,9 @@
     function toggleSheet(id){ const el=q('#'+id); if(!el) return; if(el.hidden) openSheet(id); else closeSheet(id); }
 
     document.addEventListener('click', e=>{ const btn=e.target.closest('[data-close]'); if(btn){ closeSheet(btn.getAttribute('data-close')); } });
-    els.toolGPTs?.addEventListener('click', ()=>{ openSheet('sheetGPTs'); highlightTab('gpts'); });
-    els.toolScreeners?.addEventListener('click', ()=>{ openSheet('sheetScreeners'); highlightTab('screeners'); });
+    // Modified: simple toggle on button click per user request
+    els.toolGPTs?.addEventListener('click', ()=>{ toggleSheet('sheetGPTs'); });
+    els.toolScreeners?.addEventListener('click', ()=>{ toggleSheet('sheetScreeners'); });
 
     // Escape closes top-most sheet
     document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ const open=[...document.querySelectorAll('.sheet')].filter(s=>!s.hidden).pop(); if(open){ closeSheet(open.id); highlightTab('home'); } } });
