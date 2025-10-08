@@ -410,7 +410,7 @@
       {id:'breakingOut', lvl:'Intermediate', title:'Fundamentally Backed Breakouts', url:'https://finviz.com/screener.ashx?v=141&f=fa_debteq_u1,fa_roe_o20,sh_avgvol_o100,ta_highlow50d_nh,ta_sma20_pa,ta_sma200_pa,ta_sma50_pa&ft=4&o=-perf1w', desc:'Quality + technical confirmations.'},
       {id:'highEarningsGrowth', lvl:'Intermediate', title:'High Earnings Growth', url:'https://finviz.com/screener.ashx?v=141&f=fa_epsqoq_o25,fa_epsyoy_o25,fa_epsyoy1_o25,fa_salesqoq_o25,sh_avgvol_o400,ta_rsi_nos50,ta_sma200_pa&ft=4&o=-perfytd', desc:'Strong recent & forward growth + above 200 SMA.'},
       {id:'highSalesGrowth', lvl:'Intermediate', title:'High Sales Growth (Quality)', url:'https://finviz.com/screener.ashx?v=111&f=fa_debteq_u0.5,fa_roe_o15,fa_sales5years_o20,fa_salesqoq_o20,sh_avgvol_o200,sh_instown_o60,sh_price_o5,sh_short_u5&ft=4', desc:'Sustained sales acceleration + quality factors.'},
-      {id:'buyAndHoldValue', lvl:'Intermediate', title:'Buy & Hold Value', url:'https://finviz.com/screener.ashx?v=121&f=cap_microover,fa_curratio_o1.5,fa_estltgrowth_o10,fa_peg_o1,fa_roe_o15,ta_beta_o1.5,ta_sma20_pa&ft=4&o=-forwardpe', desc:'Reasonable growth + solid value metrics.'},
+      {id:'buyAndHoldValue', url:'https://finviz.com/screener.ashx?v=121&f=cap_microover,fa_curratio_o1.5,fa_estltgrowth_o10,fa_peg_o1,fa_roe_o15,ta_beta_o1.5,ta_sma20_pa&ft=4&o=-forwardpe', lvl:'Intermediate', title:'Buy & Hold Value', desc:'Reasonable growth + solid value metrics.'},
       {id:'weeklyEarningsGapUp', lvl:'Advanced', title:'Weekly Earnings Gap Up', url:'https://finviz.com/screener.ashx?v=141&f=earningsdate_tomorrowafter,sh_avgvol_o400,sh_curvol_o50,sh_short_u25,ta_averagetruerange_o0.5,ta_gap_u2&ft=4&o=-perfytd', desc:'Upcoming earnings + recent gap move.'},
       {id:'highRelativeVolume', lvl:'Advanced', title:'High Relative Volume Focus', url:'https://finviz.com/screener.ashx?v=131&f=fa_curratio_o1,fa_epsqoq_o15,fa_quickratio_o1,fa_salesqoq_o15,sh_avgvol_o400,sh_price_o5,sh_relvol_o1.5,ta_sma20_pa,ta_sma200_sb50,ta_sma50_sa200&ft=4&o=instown', desc:'Unusual accumulation + structural positioning.'},
       {id:'consistentGrowthBullishTrend', lvl:'Advanced', title:'Consistent Growth in Bullish Trend', url:'https://finviz.com/screener.ashx?v=141&f=fa_eps5years_pos,fa_epsqoq_o20,fa_epsyoy_o25,fa_epsyoy1_o15,fa_estltgrowth_pos,fa_roe_o15,sh_instown_o10,sh_price_o15,ta_highlow52w_a90h,ta_rsi_nos50&ft=4&o=-perfytd', desc:'High quality compounding + near range highs.'},
@@ -658,6 +658,7 @@
       state.fibIdx = [];
       const fibOn = q('.chip[data-k="AUTOFIB"]')?.classList.contains('active') || false;
 
+
       if (fibOn) {
         const [vx0, vx1] = (function() {
           // try current visible range if available, else bounds of rowsDisplay
@@ -721,19 +722,11 @@
         const regTime   = +((R.regularMarketTime?.raw ?? R.regularMarketTime) || 0) * 1000;
         const rowsAll = state.rows||[];
         const dtfET = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York'});
-        const dtfETTime = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York', hour:'2-digit', minute:'2-digit'});
-        const etKey = (ms)=>{ const d=new Date(dtfET.format(ms)); return d.toDateString(); };
-        let dayHigh=+(R.regularMarketDayHigh?.raw ?? R.regularMarketDayHigh);
-        let dayLow =+(R.regularMarketDayLow?.raw ?? R.regularMarketDayLow);
-        let dayVol =+(R.regularMarketVolume?.raw ?? R.regularMarketVolume);
-        if(rowsAll.length && (!Number.isFinite(dayHigh)||!Number.isFinite(dayLow)||!Number.isFinite(dayVol))){
-          const lastKey = etKey(rowsAll.at(-1).t); let hi=-Infinity, lo=Infinity, vol=0;
-          for(const r of rowsAll){ if(etKey(r.t)!==lastKey) continue; if(Number.isFinite(r.h)) hi=Math.max(hi,r.h); if(Number.isFinite(r.l)) lo=Math.min(lo,r.l); if(Number.isFinite(r.v)) vol+=r.v; }
-          if(!Number.isFinite(dayHigh) && hi>-Infinity) dayHigh=hi;
-          if(!Number.isFinite(dayLow)  && lo< Infinity) dayLow =lo;
-          if(!Number.isFinite(dayVol)  && vol>0) dayVol=vol;
-        }
-        const triples=[{p:regPrice,t:regTime,s:'REG'},{p:postPrice,t:postTime,s:'POST'},{p:prePrice,t:preTime,s:'PRE'}].filter(x=>Number.isFinite(x.p)&&x.t>0).sort((a,b)=>b.t-a.t);
+        const dtfETTime = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York', hour12:true, hour:'numeric', minute:'2-digit'});
+        // pick freshest timestamp (reg/post/pre) actually present (avoid stale 7PM default)
+        const triples=[{p:regPrice,t:regTime,s:'REG'},{p:postPrice,t:postTime,s:'POST'},{p:prePrice,t:preTime,s:'PRE'}]
+          .filter(x=>Number.isFinite(x.p)&&x.t>0 && x.t < Date.now()+5*60*1000) // reject absurd future times
+          .sort((a,b)=>b.t-a.t);
         const best=triples[0]||{p:regPrice,t:regTime,s:'REG'};
         const price = Number.isFinite(best.p)? best.p : (state.rows?.at(-1)?.c ?? NaN);
         let prevClose = Number.isFinite(prevCloseRaw)? prevCloseRaw : (state.rows?.at(-2)?.c ?? NaN);
@@ -744,8 +737,8 @@
         if(els.subInfo) els.subInfo.textContent=[exch,currency,`${state.range} · ${state.interval}`,`Session: ${sessLabel}`].filter(Boolean).join(' • ');
         const col = chg>0? css('--c-up') : chg<0? css('--c-down') : (css('--muted')||'#999');
         const changeHTML = Number.isFinite(chg)? `<span style="font-weight:800;color:${col}">${chg>0?'+':''}$${Math.abs(chg).toFixed(2)} (${chg>0?'+':''}${Math.abs(pct).toFixed(2)}%)</span>`:'—';
-        const timeStr = Number.isFinite(best.t)? dtfETTime.format(new Date(best.t))+' ET' : '';
-        els.lastLine.innerHTML = `Last: $${Number.isFinite(price)? price.toFixed(2):'—'} · Change: ${changeHTML}${timeStr? ' · '+timeStr:''}`;
+        const tsDisp = Number.isFinite(best.t)? dtfETTime.format(new Date(best.t))+' ET' : dtfETTime.format(new Date())+' ET';
+        els.lastLine.innerHTML = `Last: $${Number.isFinite(price)? price.toFixed(2):'—'} · Change: ${changeHTML} · ${tsDisp}`;
         els.prevCloseLine.textContent = `Yesterday’s Close: ${Number.isFinite(prevClose)? '$'+prevClose.toFixed(2):'—'}`;
         computeIntrinsicAndDisplay();
       }catch(e){ console.error('Quote refresh error', e); els.lastLine.innerHTML='Last: — · Change: —'; }
