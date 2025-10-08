@@ -435,61 +435,6 @@
     const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0 };
     const FUNDAMENTALS = {}; // cache fundamentals per ticker
 
-    // --- Missing helpers restored (guarded to avoid redefinition) ---
-    if(typeof sleep!== 'function'){ function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); } }
-    if(typeof waitForPlotly!== 'function'){ async function waitForPlotly(timeout=12000){ const start=Date.now(); while(!(window.Plotly&&window.Plotly.newPlot)){ if(Date.now()-start>timeout) throw new Error('Plotly load timeout'); await sleep(40);} } }
-    if(typeof sanitizeTicker!== 'function'){ function sanitizeTicker(str){ return String(str||'').trim().toUpperCase().replace(/[^A-Z0-9.\-]/g,'').slice(0,15); } }
-    if(typeof normalizeTickerForFetch!== 'function'){ function normalizeTickerForFetch(t){ return sanitizeTicker(t).replace(/\.([A-Z0-9]{1,3})$/,'-$1'); } }
-
-    // Autocomplete utilities
-    if(!state.symbols) state.symbols=[];
-    if(typeof loadSymbols!== 'function'){
-      async function loadSymbols(force){
-        if(state.symbols.length && !force) return state.symbols;
-        const paths=['/stock_data.csv','stock_data.csv']; let raw='';
-        for(const p of paths){ try{ const r=await fetch(p,{cache:'no-store'}); if(r.ok){ raw=await r.text(); if(raw) break; } }catch{} }
-        if(!raw) return state.symbols=[];
-        try{
-          const lines=raw.split(/\r?\n/).filter(l=>l.trim()); const out=[]; for(const L of lines){ const d=L.includes('|')?'|':','; const parts=L.split(d); const sym=sanitizeTicker(parts[0]); if(!sym||sym==='SYMBOL') continue; const name=parts.slice(1).join(' ').trim(); out.push({ t:sym, n:name }); }
-          state.symbols=out;
-        }catch{ state.symbols=[]; }
-        return state.symbols;
-      }
-    }
-    if(typeof hideAC!== 'function'){ function hideAC(){ if(!els.list) return; els.list.classList.remove('show'); els.list.innerHTML=''; state.acMatches=[]; state.acIndex=-1; } }
-    if(typeof renderAC!== 'function'){
-      function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const frag=items.slice(0,60).map((o,i)=>`<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${o.n||''}</span></div>`).join(''); els.list.innerHTML=frag; els.list.classList.add('show'); }
-    }
-    if(typeof updateAC!== 'function'){
-      function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ hideAC(); return; } if(!state.symbols.length){ loadSymbols().then(()=>updateAC(qstr)); els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">Loading…</div>'; els.list.classList.add('show'); return; }
-        const upper=s; const pri=state.symbols.filter(r=> r.t.startsWith(upper)); const sec=state.symbols.filter(r=> !r.t.startsWith(upper) && r.t.includes(upper)); const nameHits=state.symbols.filter(r=> (r.n||'').toUpperCase().includes(upper) && !pri.includes(r) && !sec.includes(r)); const matches=[...pri,...sec,...nameHits].slice(0,100); state.acMatches=matches; state.acIndex=0; renderAC(); }
-    }
-    if(typeof pickAC!== 'function'){
-      function pickAC(i){ const it=state.acMatches?.[i]; if(!it) return; els.input.value=it.t; hideAC(); }
-    }
-
-    // Close AC when clicking outside (ensure once)
-    if(!document._acOutsideBound){ document.addEventListener('click', e=>{ if(e.target===els.input|| e.target.closest('#ac')) return; hideAC(); }); document._acOutsideBound=true; }
-
-    /* ---------- State initialization (ticker, etc.) ---------- */
-    // (moved from bottom for visibility)
-    let initTicker = 'AAPL';
-    // Override with URL ticker if present
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlTicker = urlParams.get('t');
-    if(urlTicker && typeof urlTicker === 'string' && urlTicker.length > 0){
-      const clean = sanitizeTicker(urlTicker);
-      if(clean) initTicker = clean;
-    }
-    els.input.value = initTicker;
-    go(initTicker, '');
-
-    /* ---------- Main logic (chart, autocomplete, etc.) ---------- */
-    /* ---------- State ---------- */
-    let CURRENT = { ticker:null, company:"", prevClose:null };
-    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0 };
-    const FUNDAMENTALS = {}; // cache fundamentals per ticker
-
     /* ---------- Utils & Formatters ---------- */
     const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
     const debounce = (fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
@@ -593,65 +538,40 @@
         const freeCashFlow = fd.freeCashflow?.raw; const totalCash = fd.totalCash?.raw; const totalDebt = fd.totalDebt?.raw; const sharesOutstanding = ek.sharesOutstanding?.raw ?? price.sharesOutstanding?.raw;
         // Dividends
         const nextDividend = sd.dividendRate?.raw; // approximate next annual dividend
-        const dividendGrowth = sd.dividendRate?.raw && sd.trailingAnnualDividendRate?.raw ? null : null; // placeholder if growth data not provided
+        const dividendGrowth = null; // placeholder if growth data not provided
         // Approx WACC (fallback): use 9% if not provided
         const wacc = 0.09;
         // AAA yield fallback constant
         const aaaYield = 0.055;
+        function _num(x){ return Number.isFinite(+x)? +x : null; }
         return {
           eps: _num(eps), growth: _num(longTermGrowth), ivGraham: null,
           longName: price.longName || price.shortName || '', sector: prof.sector || '', industry: prof.industry || '', marketCap: price.marketCap?.raw ?? null,
           freeCashFlow:_num(freeCashFlow), totalCash:_num(totalCash), totalDebt:_num(totalDebt), sharesOutstanding:_num(sharesOutstanding),
-          nextDividend:_num(nextDividend), dividendGrowth:_num(dividendGrowth), wacc, growthDCF:_num(longTermGrowth), growthEPS:_num(growthEPS), aaaYield,
-          fcf:_num(freeCashFlow)
+          nextDividend:_num(nextDividend), dividendGrowth:_num(dividendGrowth), wacc:_num(wacc)||0.09, aaaYield:_num(aaaYield)||0.055,
+          growthDCF:_num(longTermGrowth), gDCF:_num(longTermGrowth), epsTTM:_num(eps)
         };
-      }catch{ return {}; }
-      function _num(v){ return Number.isFinite(+v)? +v : null; }
+      }catch(e){ console.warn('fundamentals fail', e); return {}; }
     }
-
-    async function go(ticker, company){
-      CURRENT={...CURRENT,ticker,company};
-      els.headline.textContent=`${ticker}${company?' — '+company:''}`;
-      els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent=''; if(els.companyLine) els.companyLine.textContent=''; if(els.updateLine) els.updateLine.textContent='Updated: —';
-      try{
-        if(!FUNDAMENTALS[ticker]){ try{ FUNDAMENTALS[ticker]=await getFundamentals(ticker); }catch{ FUNDAMENTALS[ticker]={}; } }
-        await waitForPlotly();
-        const rows = await fetchRows(ticker, state.range, state.interval); state.rows = rows;
-        await buildSMAAlignedSeries();
-        await renderChart();
-        await refreshQuoteOnce();
-        computeAndDisplayIntrinsic();
-        scheduleQuoteAutoRefresh();
-      }catch(e){ console.error('Go error', e); els.lastLine.innerHTML='Last: — · Change: —'; }
+    /* ---------- Init ---------- */
+    function init(){
+      // Ensure at least one load
+      refreshQuoteOnce();
+      setTimeout(refreshQuoteOnce, 3500 + Math.random()*1500|0);
+      // Auto width toggle if narrow
+      if(innerWidth<800){ els.wideBtn?.click(); }
+      // Theme detection
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if(isDark){ document.body.classList.add('dark'); }
+      // Restore last ticker if set
+      const last = localStorage.getItem('lastTicker')||'';
+      if(last) setTimeout(()=>{ els.input.value=last; els.searchBtn.click(); }, 100);
     }
-
-    /* ---------- Data fetch ---------- */
-    async function fetchRows(ticker, range, interval){
-      const T = normalizeTickerForFetch(ticker);
-      try{
-        const r = await fetch(`/api/chart?ticker=${encodeURIComponent(T)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`, { cache:'no-store' });
-        if(r.ok){ const j=await r.json(); const res=j?.chart?.result?.[0]; if(res){ const ts=res.timestamp||[]; const qd=res.indicators?.quote?.[0]||{}; const rows=[]; for(let i=0;i<ts.length;i++){ const c=qd.close?.[i]; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:qd.open?.[i], h:qd.high?.[i], l:qd.low?.[i], c:+c, v:qd.volume?.[i]||0 }); } return rows; } }
-      }catch{}
-      throw new Error('chart fetch failed');
-    }
-
-    async function loadAndRender(){
-      try{ state.rows = await fetchRows(state.ticker, state.range, state.interval); await buildSMAAlignedSeries(); await renderChart(); refreshQuoteOnce(); }
-      catch(e){ console.error('Chart error', e); els.lastLine.innerHTML='Last: — · Change: —'; if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)'; }
-    }
-
-    // UI wiring (patched search + AC close)
-    els.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; const t=sanitizeTicker(raw); if(!t){ els.input.focus(); return; } state.ticker=t; localStorage.setItem('lastTicker', t); hideAC(); loadAndRender(); });
-    els.input?.addEventListener('input', (e)=>{ updateAC(e.target.value); });
-    els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ hideAC(); return;} if(!state.acMatches.length){ if(e.key==='Enter'){ els.searchBtn?.click(); } return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
-    els.list?.addEventListener('mousedown', (e)=>{ const it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });
-    els.timeSel?.addEventListener('change', ()=>{ state.range=els.timeSel.value; loadAndRender(); });
-    els.freqSel?.addEventListener('change', ()=>{ state.interval=els.freqSel.value; loadAndRender(); });
-    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
-    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(updateAutoFibDebounced, 0); } });
-
-    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); })();
+    init();
   })();
   </script>
+
+  <!-- Toast (moved here to guarantee visibility) -->
+  <div id="toast" style="position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(40px);background:var(--panel);color:var(--text);border:1px solid var(--border);padding:10px 14px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:4000;box-shadow:0 6px 24px -2px rgba(0,0,0,.45)"></div>
 </body>
 </html>
