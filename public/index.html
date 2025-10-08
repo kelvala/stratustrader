@@ -386,6 +386,24 @@
     function closeSheet(id){ const el=q('#'+id); if(!el) return; el.hidden=true; el.removeAttribute('data-open'); if(![...document.querySelectorAll('.sheet')].some(s=>!s.hidden)) document.body.style.overflow=''; }
     function toggleSheet(id){ const el=q('#'+id); if(!el) return; if(el.hidden) openSheet(id); else closeSheet(id); }
 
+    // Added handlers for Wide / Max / Refresh
+    const __container = document.querySelector('.container');
+    // Restore persisted wide mode
+    if(localStorage.getItem('wideMode')==='1'){ __container?.classList.add('wide'); }
+    if(__container?.classList.contains('wide')){ els.wideBtn?.classList.add('active'); els.wideBtn?.setAttribute('aria-pressed','true'); }
+
+    function applyWideToggle(){ if(!__container) return; const on = __container.classList.toggle('wide'); if(on){ localStorage.setItem('wideMode','1'); } else { localStorage.removeItem('wideMode'); } const txt=els.wideBtn?.querySelector('.tool-txt'); if(txt) txt.textContent = on? 'Narrow':'Wide'; els.wideBtn?.setAttribute('aria-pressed', on?'true':'false'); }
+    els.wideBtn?.addEventListener('click', ()=>{ applyWideToggle(); setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} }, 50); });
+
+    function applyMaxToggle(){ const cc=els.chartCard; if(!cc) return; const now = cc.classList.toggle('max'); const txt=els.maxBtn?.querySelector('.tool-txt'); if(txt) txt.textContent = now? 'Restore':'Max'; els.maxBtn?.setAttribute('aria-pressed', now?'true':'false'); document.body.style.overflow = now? 'hidden' : ''; if(now){ setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },120); } else { setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },60); } }
+    els.maxBtn?.addEventListener('click', applyMaxToggle);
+
+    async function manualRefresh(){ els.refreshBtn?.setAttribute('data-busy','1'); try{ await loadAndRender(); showToast('Refreshed'); } catch{ showToast('Refresh failed'); } finally { els.refreshBtn?.removeAttribute('data-busy'); } }
+    els.refreshBtn?.addEventListener('click', manualRefresh);
+
+    // Keyboard shortcuts (optional): W=wide, M=max, R=refresh when focused on body & not typing
+    document.addEventListener('keydown', e=>{ if(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; if(e.metaKey||e.altKey||e.ctrlKey) return; if(e.key==='w'||e.key==='W'){ applyWideToggle(); } else if(e.key==='m'||e.key==='M'){ applyMaxToggle(); } else if(e.key==='r'||e.key==='R'){ manualRefresh(); } });
+
     // Added: highlightTab + bottom nav wiring (was missing, causing button logic to fail)
     function highlightTab(tab){ if(!els.btmNav) return; els.btmNav.querySelectorAll('.tab').forEach(t=> t.classList.toggle('active', t.dataset.tab===tab)); }
     els.btmNav?.addEventListener('click', e=>{ const tab=e.target.closest('.tab'); if(!tab) return; const k=tab.dataset.tab; if(k==='home'){ closeSheet('sheetGPTs'); closeSheet('sheetScreeners'); highlightTab('home'); return; } if(k==='gpts'){ const isOpen = !els.sheetGPTs.hidden; if(isOpen){ closeSheet('sheetGPTs'); highlightTab('home'); } else { openSheet('sheetGPTs'); highlightTab('gpts'); } return; } if(k==='screeners'){ const isOpen = !els.sheetScreeners.hidden; if(isOpen){ closeSheet('sheetScreeners'); highlightTab('home'); } else { ensureScreeners(); openSheet('sheetScreeners'); highlightTab('screeners'); } return; } if(k==='settings'){ showToast('Settings coming soon'); highlightTab('settings'); } });
