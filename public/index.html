@@ -386,6 +386,10 @@
     function closeSheet(id){ const el=q('#'+id); if(!el) return; el.hidden=true; el.removeAttribute('data-open'); if(![...document.querySelectorAll('.sheet')].some(s=>!s.hidden)) document.body.style.overflow=''; }
     function toggleSheet(id){ const el=q('#'+id); if(!el) return; if(el.hidden) openSheet(id); else closeSheet(id); }
 
+    // Added: highlightTab + bottom nav wiring (was missing, causing button logic to fail)
+    function highlightTab(tab){ if(!els.btmNav) return; els.btmNav.querySelectorAll('.tab').forEach(t=> t.classList.toggle('active', t.dataset.tab===tab)); }
+    els.btmNav?.addEventListener('click', e=>{ const tab=e.target.closest('.tab'); if(!tab) return; const k=tab.dataset.tab; if(k==='home'){ closeSheet('sheetGPTs'); closeSheet('sheetScreeners'); highlightTab('home'); return; } if(k==='gpts'){ const isOpen = !els.sheetGPTs.hidden; if(isOpen){ closeSheet('sheetGPTs'); highlightTab('home'); } else { openSheet('sheetGPTs'); highlightTab('gpts'); } return; } if(k==='screeners'){ const isOpen = !els.sheetScreeners.hidden; if(isOpen){ closeSheet('sheetScreeners'); highlightTab('home'); } else { ensureScreeners(); openSheet('sheetScreeners'); highlightTab('screeners'); } return; } if(k==='settings'){ showToast('Settings coming soon'); highlightTab('settings'); } });
+
     document.addEventListener('click', e=>{ const btn=e.target.closest('[data-close]'); if(btn){ closeSheet(btn.getAttribute('data-close')); } });
     // Restored: direct open + tab highlight (no toggle) for consistent UX across devices
     // REPLACED with toggle behavior per request
@@ -598,7 +602,7 @@
       if(!els.chart) return [NaN,NaN];
       const L=els.chart._fullLayout||els.chart.layout||{}; const xa=L.xaxis||{};
       const toMs=v=> new Date(v).getTime();
-      if(Array.isArray(xa.range) && xa.autorange===false){ return [toMs(xa.range[0]), toMs(xa.range[1])]; }
+      if(Array.isArray(xa.range) && xa.autorange === false){ return [toMs(xa.range[0]), toMs(xa.range[1])]; }
       const rows=getDisplayRows(); if(!rows.length) return [NaN,NaN];
       return [rows[0].t, rows[rows.length-1].t];
     }
