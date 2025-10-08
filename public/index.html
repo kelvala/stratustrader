@@ -430,7 +430,61 @@
     </div>`).join(''); els.scrList.dataset.filled='1'; }
     document.addEventListener('click', e=>{ const ln=e.target.closest('[data-openlink]'); if(!ln) return; /* keep simple, no toast needed */ });
 
-    /* ---------- Existing code continues below (chart, autocomplete, etc.) ---------- */
+    /* ---------- State ---------- */
+    let CURRENT = { ticker:null, company:"", prevClose:null };
+    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0 };
+    const FUNDAMENTALS = {}; // cache fundamentals per ticker
+
+    // --- Missing helpers restored (guarded to avoid redefinition) ---
+    if(typeof sleep!== 'function'){ function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); } }
+    if(typeof waitForPlotly!== 'function'){ async function waitForPlotly(timeout=12000){ const start=Date.now(); while(!(window.Plotly&&window.Plotly.newPlot)){ if(Date.now()-start>timeout) throw new Error('Plotly load timeout'); await sleep(40);} } }
+    if(typeof sanitizeTicker!== 'function'){ function sanitizeTicker(str){ return String(str||'').trim().toUpperCase().replace(/[^A-Z0-9.\-]/g,'').slice(0,15); } }
+    if(typeof normalizeTickerForFetch!== 'function'){ function normalizeTickerForFetch(t){ return sanitizeTicker(t).replace(/\.([A-Z0-9]{1,3})$/,'-$1'); } }
+
+    // Autocomplete utilities
+    if(!state.symbols) state.symbols=[];
+    if(typeof loadSymbols!== 'function'){
+      async function loadSymbols(force){
+        if(state.symbols.length && !force) return state.symbols;
+        const paths=['/stock_data.csv','stock_data.csv']; let raw='';
+        for(const p of paths){ try{ const r=await fetch(p,{cache:'no-store'}); if(r.ok){ raw=await r.text(); if(raw) break; } }catch{} }
+        if(!raw) return state.symbols=[];
+        try{
+          const lines=raw.split(/\r?\n/).filter(l=>l.trim()); const out=[]; for(const L of lines){ const d=L.includes('|')?'|':','; const parts=L.split(d); const sym=sanitizeTicker(parts[0]); if(!sym||sym==='SYMBOL') continue; const name=parts.slice(1).join(' ').trim(); out.push({ t:sym, n:name }); }
+          state.symbols=out;
+        }catch{ state.symbols=[]; }
+        return state.symbols;
+      }
+    }
+    if(typeof hideAC!== 'function'){ function hideAC(){ if(!els.list) return; els.list.classList.remove('show'); els.list.innerHTML=''; state.acMatches=[]; state.acIndex=-1; } }
+    if(typeof renderAC!== 'function'){
+      function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const frag=items.slice(0,60).map((o,i)=>`<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${o.n||''}</span></div>`).join(''); els.list.innerHTML=frag; els.list.classList.add('show'); }
+    }
+    if(typeof updateAC!== 'function'){
+      function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ hideAC(); return; } if(!state.symbols.length){ loadSymbols().then(()=>updateAC(qstr)); els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">Loading…</div>'; els.list.classList.add('show'); return; }
+        const upper=s; const pri=state.symbols.filter(r=> r.t.startsWith(upper)); const sec=state.symbols.filter(r=> !r.t.startsWith(upper) && r.t.includes(upper)); const nameHits=state.symbols.filter(r=> (r.n||'').toUpperCase().includes(upper) && !pri.includes(r) && !sec.includes(r)); const matches=[...pri,...sec,...nameHits].slice(0,100); state.acMatches=matches; state.acIndex=0; renderAC(); }
+    }
+    if(typeof pickAC!== 'function'){
+      function pickAC(i){ const it=state.acMatches?.[i]; if(!it) return; els.input.value=it.t; hideAC(); }
+    }
+
+    // Close AC when clicking outside (ensure once)
+    if(!document._acOutsideBound){ document.addEventListener('click', e=>{ if(e.target===els.input|| e.target.closest('#ac')) return; hideAC(); }); document._acOutsideBound=true; }
+
+    /* ---------- State initialization (ticker, etc.) ---------- */
+    // (moved from bottom for visibility)
+    let initTicker = 'AAPL';
+    // Override with URL ticker if present
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlTicker = urlParams.get('t');
+    if(urlTicker && typeof urlTicker === 'string' && urlTicker.length > 0){
+      const clean = sanitizeTicker(urlTicker);
+      if(clean) initTicker = clean;
+    }
+    els.input.value = initTicker;
+    go(initTicker, '');
+
+    /* ---------- Main logic (chart, autocomplete, etc.) ---------- */
     /* ---------- State ---------- */
     let CURRENT = { ticker:null, company:"", prevClose:null };
     const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0 };
