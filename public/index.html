@@ -388,32 +388,51 @@
 
     document.addEventListener('click', e=>{ const btn=e.target.closest('[data-close]'); if(btn){ closeSheet(btn.getAttribute('data-close')); } });
     // Restored: direct open + tab highlight (no toggle) for consistent UX across devices
-    els.toolGPTs?.addEventListener('click', ()=>{ openSheet('sheetGPTs'); highlightTab('gpts'); });
-    els.toolScreeners?.addEventListener('click', ()=>{ ensureScreeners(); openSheet('sheetScreeners'); highlightTab('screeners'); });
+    // REPLACED with toggle behavior per request
+    els.toolGPTs?.addEventListener('click', ()=>{ const isOpen = !els.sheetGPTs?.hidden; if(isOpen){ closeSheet('sheetGPTs'); highlightTab('home'); } else { openSheet('sheetGPTs'); highlightTab('gpts'); } });
+    els.toolScreeners?.addEventListener('click', ()=>{ const isOpen = !els.sheetScreeners?.hidden; if(isOpen){ closeSheet('sheetScreeners'); highlightTab('home'); } else { ensureScreeners(); openSheet('sheetScreeners'); highlightTab('screeners'); } });
 
     // Escape closes top-most sheet
     document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ const open=[...document.querySelectorAll('.sheet')].filter(s=>!s.hidden).pop(); if(open){ closeSheet(open.id); highlightTab('home'); } } });
 
-    /* ---------- Screeners Populate (Reverted to prior "yesterday" version) ---------- */
-    // Replaced large Finviz list with previous simpler demo list per restore request
-    const screenerDefs=[
-      {id:'highMomentum', title:'High Momentum (RSI 55-70 & Price > SMA50)', lvl:'Intermediate', desc:'Focuses on symbols showing sustained directional strength without extreme overbought.'},
-      {id:'goldenCross', title:'Golden Cross Watch (SMA50 > SMA200)', lvl:'Beginner', desc:'Potential long-term trend shifts signaled by 50/200 SMA relationship.'},
-      {id:'valueRebound', title:'Value Rebound (Price < SMA200 & RSI Rising)', lvl:'Intermediate', desc:'Look for early reversals in oversold longer-term downtrends.'},
-      {id:'volumeExpansion', title:'Volume Expansion (Today Vol > 150% Avg)', lvl:'Advanced', desc:'Unusual interest may precede directional continuation.'}
+    /* ---------- Screeners Populate (Updated with provided SCREENERS list) ---------- */
+    const SCREENERS = [
+      { id:"oversold_reversal", label:"Oversold Reversal", level:"Beginner", url:"https://finviz.com/screener.ashx?v=111&f=sh_price_o5,sh_relvol_o2,ta_change_u,ta_rsi_os30&ft=4&o=price", filters:["sh_price_o5","sh_relvol_o2","ta_change_u","ta_rsi_os30"] },
+      { id:"new_highs", label:"New Highs (momentum)", level:"Beginner", url:"https://finviz.com/screener.ashx?v=141&f=an_recom_buy,sh_price_u7,ta_change_u,ta_highlow20d_nh,ta_highlow50d_nh,ta_highlow52w_nh,ta_perf_dup&ft=4&o=-perf1w", filters:["an_recom_buy","sh_price_u7","ta_change_u","ta_highlow20d_nh","ta_highlow50d_nh","ta_highlow52w_nh","ta_perf_dup"] },
+      { id:"sma_crossover", label:"SMA 50 cross 20 (trend start)", level:"Beginner", url:"https://finviz.com/screener.ashx?v=141&f=fa_pe_profitable,sh_avgvol_o400,sh_relvol_o1,sh_short_low,ta_beta_o1,ta_sma50_cross20b&ft=4", filters:["fa_pe_profitable","sh_avgvol_o400","sh_relvol_o1","sh_short_low","ta_beta_o1","ta_sma50_cross20b"] },
+      { id:"low_pe_value", label:"Low P/E Value", level:"Beginner", url:"https://finviz.com/screener.ashx?v=141&f=cap_smallunder,fa_pb_low,fa_pe_low,fa_peg_low,fa_roa_pos,fa_roe_pos,sh_price_o5&ft=4&o=-perfytd", filters:["cap_smallunder","fa_pb_low","fa_pe_low","fa_peg_low","fa_roa_pos","fa_roe_pos","sh_price_o5"] },
+      { id:"bounce_ma", label:"Bounce at Moving Average", level:"Beginner", url:"https://finviz.com/screener.ashx?v=141&f=sh_avgvol_o400,sh_curvol_o2000,sh_relvol_o1,ta_sma20_pa,ta_sma50_pb&ft=4&o=-perf1w", filters:["sh_avgvol_o400","sh_curvol_o2000","sh_relvol_o1","ta_sma20_pa","ta_sma50_pb"] },
+      { id:"high_rel_vol", label:"High Relative Volume", level:"Intermediate", url:"https://finviz.com/screener.ashx?v=131&f=fa_curratio_o1,fa_epsqoq_o15,fa_quickratio_o1,fa_salesqoq_o15,sh_avgvol_o400,sh_price_o5,sh_relvol_o1.5,ta_sma20_pa,ta_sma200_sb50,ta_sma50_sa200&ft=4&o=instown", filters:["fa_curratio_o1","fa_epsqoq_o15","fa_quickratio_o1","fa_salesqoq_o15","sh_avgvol_o400","sh_price_o5","sh_relvol_o1.5","ta_sma20_pa","ta_sma200_sb50","ta_sma50_sa200"] },
+      { id:"potential_uptrend_from_weekly_lows", label:"Potential Uptrend from Weekly Lows", level:"Intermediate", url:"https://finviz.com/screener.ashx?v=141&f=sh_avgvol_o400,ta_pattern_channelup,ta_perf_1wdown&ft=4&o=perf1w", filters:["sh_avgvol_o400","ta_pattern_channelup","ta_perf_1wdown"] },
+      { id:"weekly_earnings_gap_up", label:"Weekly Earnings Gap Up", level:"Intermediate", url:"https://finviz.com/screener.ashx?v=141&f=earningsdate_tomorrowafter,sh_avgvol_o400,sh_curvol_o50,sh_short_u25,ta_averagetruerange_o0.5,ta_gap_u2&ft=4&o=-perfytd", filters:["earningsdate_tomorrowafter","sh_avgvol_o400","sh_curvol_o50","sh_short_u25","ta_averagetruerange_o0.5","ta_gap_u2"] },
+      { id:"shorted_stocks", label:"Heavily Shorted (U.S.)", level:"Intermediate", url:"https://finviz.com/screener.ashx?v=131&f=cap_smallover,geo_usa,sh_avgvol_o500,sh_curvol_o500,sh_opt_optionshort,sh_price_o3,sh_relvol_o1,sh_short_high&o=-shortinterestshare", filters:["cap_smallover","geo_usa","sh_avgvol_o500","sh_curvol_o500","sh_opt_optionshort","sh_price_o3","sh_relvol_o1","sh_short_high"] },
+      { id:"short_squeeze", label:"Short Squeeze Setup", level:"Intermediate", url:"https://finviz.com/screener.ashx?v=131&f=sh_avgvol_o100,sh_instown_u50,sh_price_o2,sh_short_o15&ft=4&o=-shortinterestshare", filters:["sh_avgvol_o100","sh_instown_u50","sh_price_o2","sh_short_o15"] },
+      { id:"high_sales_growth", label:"High Sales Growth", level:"Intermediate", url:"https://finviz.com/screener.ashx?v=111&f=fa_debteq_u0.5,fa_roe_o15,fa_sales5years_o20,fa_salesqoq_o20,sh_avgvol_o200,sh_instown_o60,sh_price_o5,sh_short_u5&ft=4", filters:["fa_debteq_u0.5","fa_roe_o15","fa_sales5years_o20","fa_salesqoq_o20","sh_avgvol_o200","sh_instown_o60","sh_price_o5","sh_short_u5"] },
+      { id:"buy_hold_value", label:"Buy & Hold Value", level:"Intermediate", url:"https://finviz.com/screener.ashx?v=121&f=cap_microover,fa_curratio_o1.5,fa_estltgrowth_o10,fa_peg_o1,fa_roe_o15,ta_beta_o1.5,ta_sma20_pa&ft=4&o=-forwardpe", filters:["cap_microover","fa_curratio_o1.5","fa_estltgrowth_o10","fa_peg_o1","fa_roe_o15","ta_beta_o1.5","ta_sma20_pa"] },
+      { id:"undervalued_div_growth", label:"Undervalued Dividend Growth", level:"Intermediate", url:"https://finviz.com/screener.ashx?v=111&f=cap_largeover,fa_div_pos,fa_epsyoy1_o5,fa_estltgrowth_o5,fa_payoutratio_u50,fa_pe_u20,fa_peg_low&ft=4&o=-pe", filters:["cap_largeover","fa_div_pos","fa_epsyoy1_o5","fa_estltgrowth_o5","fa_payoutratio_u50","fa_pe_u20","fa_peg_low"] },
+      { id:"oversold_next_earnings_growth", label:"Oversold + Earnings in 5d + Growth", level:"Advanced", url:"https://finviz.com/screener.ashx?v=141&f=cap_smallover,earningsdate_nextdays5,fa_epsqoq_o15,fa_epsyoy_pos,fa_epsyoy1_pos,fa_grossmargin_o20,fa_netmargin_pos,fa_sales5years_o5,fa_salesqoq_pos,sh_avgvol_o750,sh_curvol_o1000,ta_perf_52w10o,ta_rsi_nob50&ft=4&o=perfytd", filters:["cap_smallover","earningsdate_nextdays5","fa_epsqoq_o15","fa_epsyoy_pos","fa_epsyoy1_pos","fa_grossmargin_o20","fa_netmargin_pos","fa_sales5years_o5","fa_salesqoq_pos","sh_avgvol_o750","sh_curvol_o1000","ta_perf_52w10o","ta_rsi_nob50"] },
+      { id:"breaking_out_quality", label:"Breaking Out (Quality balance sheet)", level:"Advanced", url:"https://finviz.com/screener.ashx?v=141&f=fa_debteq_u1,fa_roe_o20,sh_avgvol_o100,ta_highlow50d_nh,ta_sma20_pa,ta_sma200_pa,ta_sma50_pa&ft=4&o=-perf1w", filters:["fa_debteq_u1","fa_roe_o20","sh_avgvol_o100","ta_highlow50d_nh","ta_sma20_pa","ta_sma200_pa","ta_sma50_pa"] },
+      { id:"high_earnings_growth", label:"High Earnings Growth", level:"Advanced", url:"https://finviz.com/screener.ashx?v=141&f=fa_epsqoq_o25,fa_epsyoy_o25,fa_epsyoy1_o25,fa_salesqoq_o25,sh_avgvol_o400,ta_rsi_nos50,ta_sma200_pa&ft=4&o=-perfytd", filters:["fa_epsqoq_o25","fa_epsyoy_o25","fa_epsyoy1_o25","fa_salesqoq_o25","sh_avgvol_o400","ta_rsi_nos50","ta_sma200_pa"] },
+      { id:"consistent_growth_bullish", label:"Consistent Growth on Bullish Trend", level:"Advanced", url:"https://finviz.com/screener.ashx?v=141&f=fa_eps5years_pos,fa_epsqoq_o20,fa_epsyoy_o25,fa_epsyoy1_o15,fa_estltgrowth_pos,fa_roe_o15,sh_instown_o10,sh_price_o15,ta_highlow52w_a90h,ta_rsi_nos50&ft=4&o=-perfytd", filters:["fa_eps5years_pos","fa_epsqoq_o20","fa_epsyoy_o25","fa_epsyoy1_o15","fa_estltgrowth_pos","fa_roe_o15","sh_instown_o10","sh_price_o15","ta_highlow52w_a90h","ta_rsi_nos50"] },
+      { id:"canslim", label:"CANSLIM", level:"Advanced", url:"https://finviz.com/screener.ashx?v=111&f=fa_eps5years_o20,fa_epsqoq_o20,fa_epsyoy_o20,fa_sales5years_o20,fa_salesqoq_o20,sh_curvol_o200&ft=4", filters:["fa_eps5years_o20","fa_epsqoq_o20","fa_epsyoy_o20","fa_sales5years_o20","fa_salesqoq_o20","sh_curvol_o200"] }
     ];
-    function ensureScreeners(){ if(!els.scrList) return; if(els.scrList.dataset.filled) return; els.scrList.innerHTML = screenerDefs.map(s=>`<div class="scr-item" data-lvl="${s.lvl}" data-id="${s.id}">
-      <div style="flex:1;min-width:0">
-        <div class="title">${s.title}</div>
-        <div class="desc">${s.desc}</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="badge">${s.lvl}</span>
-        <button class="open-btn" type="button" data-run="${s.id}">Run</button>
-      </div>
-    </div>`).join(''); els.scrList.dataset.filled='1'; }
-    // Click handler for demo screener run buttons
-    document.addEventListener('click', e=>{ const run=e.target.closest('[data-run]'); if(!run) return; const id=run.dataset.run; showToast('Running screener: '+id+' (demo)'); });
+    const levelRank = { Beginner:0, Intermediate:1, Advanced:2 };
+    function ensureScreeners(){
+      if(!els.scrList) return;
+      if(els.scrList.dataset.filled) return;
+      const ordered=[...SCREENERS].sort((a,b)=> levelRank[a.level]-levelRank[b.level]);
+      els.scrList.innerHTML = ordered.map(s=>`<div class="scr-item" data-lvl="${s.level}" data-id="${s.id}">
+        <div style=\"flex:1;min-width:0\">
+          <div class=\"title\">${s.label}</div>
+          <div class=\"desc\" style=\"font-size:11px;opacity:.75\">${(s.filters||[]).join(' • ')}</div>
+        </div>
+        <div style=\"display:flex;align-items:center;gap:8px\">
+          <span class=\"badge\">${s.level}</span>
+          <a class=\"open-btn\" href=\"${s.url}\" target=\"_blank\" rel=\"noopener\">Open</a>
+        </div>
+      </div>`).join('');
+      els.scrList.dataset.filled='1';
+    }
 
     /* ---------- Existing code continues below (chart, autocomplete, etc.) ---------- */
     /* ---------- State ---------- */
