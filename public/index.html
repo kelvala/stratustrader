@@ -370,7 +370,10 @@
       themeToggle:q('#themeToggle'), autoFib:q('#autoFib'),
       refreshBtn:q('#refreshBtn'), maxBtn:q('#maxBtn'), wideBtn:q('#wideBtn'),
       tfCard:q('#tfCard'), tfHead:q('#tfHead'),
-      btmNav:q('#btmNav'), scrList:q('#scrList')
+      btmNav:q('#btmNav'), scrList:q('#scrList'),
+      // Added: tool buttons & sheet / input refs for GPTs & Screeners
+      toolGPTs:q('#toolGPTs'), toolScreeners:q('#toolScreeners'),
+      gptInput:q('#gptInput'), sheetGPTs:q('#sheetGPTs'), sheetScreeners:q('#sheetScreeners')
     };
 
     /* ---------- Toast ---------- */
@@ -384,50 +387,33 @@
     function toggleSheet(id){ const el=q('#'+id); if(!el) return; if(el.hidden) openSheet(id); else closeSheet(id); }
 
     document.addEventListener('click', e=>{ const btn=e.target.closest('[data-close]'); if(btn){ closeSheet(btn.getAttribute('data-close')); } });
-    els.toolGPTs?.addEventListener('click', ()=>{ toggleSheet('sheetGPTs'); });
-    // Updated: populate screeners before toggle to guarantee visibility
-    els.toolScreeners?.addEventListener('click', ()=>{ try{ ensureScreeners(); }catch{} toggleSheet('sheetScreeners'); });
+    // Restored: direct open + tab highlight (no toggle) for consistent UX across devices
+    els.toolGPTs?.addEventListener('click', ()=>{ openSheet('sheetGPTs'); highlightTab('gpts'); });
+    els.toolScreeners?.addEventListener('click', ()=>{ ensureScreeners(); openSheet('sheetScreeners'); highlightTab('screeners'); });
 
     // Escape closes top-most sheet
     document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ const open=[...document.querySelectorAll('.sheet')].filter(s=>!s.hidden).pop(); if(open){ closeSheet(open.id); highlightTab('home'); } } });
 
-    /* ---------- Bottom Nav ---------- */
-    function highlightTab(tab){ if(!els.btmNav) return; els.btmNav.querySelectorAll('.tab').forEach(t=> t.classList.toggle('active', t.dataset.tab===tab)); }
-    els.btmNav?.addEventListener('click', e=>{ const tab=e.target.closest('.tab'); if(!tab) return; const k=tab.dataset.tab; if(k==='home'){ closeSheet('sheetGPTs'); closeSheet('sheetScreeners'); highlightTab('home'); } else if(k==='gpts'){ openSheet('sheetGPTs'); highlightTab('gpts'); } else if(k==='screeners'){ openSheet('sheetScreeners'); highlightTab('screeners'); } else if(k==='settings'){ showToast('Settings coming soon'); highlightTab('settings'); } });
-
-    /* ---------- Screeners Populate ---------- */
+    /* ---------- Screeners Populate (Reverted to prior "yesterday" version) ---------- */
+    // Replaced large Finviz list with previous simpler demo list per restore request
     const screenerDefs=[
-      {id:'oversoldUpcomingEarnings', lvl:'Beginner', title:'Oversold + Earnings (≤5d) + Growth', url:'https://finviz.com/screener.ashx?v=141&f=cap_smallover,earningsdate_nextdays5,fa_epsqoq_o15,fa_epsyoy_pos,fa_epsyoy1_pos,fa_grossmargin_o20,fa_netmargin_pos,fa_sales5years_o5,fa_salesqoq_pos,sh_avgvol_o750,sh_curvol_o1000,ta_perf_52w10o,ta_rsi_nob50&ft=4&o=perfytd', desc:'Near-term earnings, improving growth metrics, recovering from oversold.'},
-      {id:'potentialUptrendFromLows', lvl:'Beginner', title:'Potential Uptrend From Weekly Lows', url:'https://finviz.com/screener.ashx?v=141&f=sh_avgvol_o400,ta_pattern_channelup,ta_perf_1wdown&ft=4&o=perf1w', desc:'Channel-up pattern after a weak week.'},
-      {id:'bounceAtMovingAverage', lvl:'Beginner', title:'Bounce at Moving Average', url:'https://finviz.com/screener.ashx?v=141&f=sh_avgvol_o400,sh_curvol_o2000,sh_relvol_o1,ta_sma20_pa,ta_sma50_pb&ft=4&o=-perf1w', desc:'Price holding 20 SMA while above / bouncing near 50.'},
-      {id:'oversoldReversal', lvl:'Beginner', title:'Oversold Reversal', url:'https://finviz.com/screener.ashx?v=111&f=sh_price_o5,sh_relvol_o2,ta_change_u,ta_rsi_os30&ft=4&o=price', desc:'RSI oversold + early price uptick + volume.'},
-      {id:'smaCrossover', lvl:'Beginner', title:'SMA 50 Crosses Below 20 (Pullback Watch)', url:'https://finviz.com/screener.ashx?v=141&f=fa_pe_profitable,sh_avgvol_o400,sh_relvol_o1,sh_short_low,ta_beta_o1,ta_sma50_cross20b&ft=4', desc:'Potential pullback/rotation opportunity.'},
-      {id:'undervaluedDividendGrowth', lvl:'Beginner', title:'Undervalued Dividend Growth', url:'https://finviz.com/screener.ashx?v=111&f=cap_largeover,fa_div_pos,fa_epsyoy1_o5,fa_estltgrowth_o5,fa_payoutratio_u50,fa_pe_u20,fa_peg_low&ft=4&o=-pe', desc:'Large caps with sustainable dividend + growth.'},
-      {id:'lowPEValue', lvl:'Beginner', title:'Low P/E Value Basket', url:'https://finviz.com/screener.ashx?v=141&f=cap_smallunder,fa_pb_low,fa_pe_low,fa_peg_low,fa_roa_pos,fa_roe_pos,sh_price_o5&ft=4&o=-perfytd', desc:'Low valuation + positive profitability set.'},
-      {id:'shortedStocks', lvl:'Intermediate', title:'Heavily Shorted Stocks', url:'https://finviz.com/screener.ashx?v=131&f=cap_smallover,geo_usa,sh_avgvol_o500,sh_curvol_o500,sh_opt_optionshort,sh_price_o3,sh_relvol_o1,sh_short_high&o=-shortinterestshare', desc:'High short interest candidates (possible volatility).'},
-      {id:'shortSqueeze', lvl:'Intermediate', title:'Short Squeeze Setup', url:'https://finviz.com/screener.ashx?v=131&f=sh_avgvol_o100,sh_instown_u50,sh_price_o2,sh_short_o15&ft=4&o=-shortinterestshare', desc:'Low institutional ownership & elevated short %.'},
-      {id:'newHighs', lvl:'Intermediate', title:'New Highs Momentum', url:'https://finviz.com/screener.ashx?v=141&f=an_recom_buy,sh_price_u7,ta_change_u,ta_highlow20d_nh,ta_highlow50d_nh,ta_highlow52w_nh,ta_perf_dup&ft=4&o=-perf1w', desc:'Multi-timeframe breakout / strength.'},
-      {id:'breakingOut', lvl:'Intermediate', title:'Fundamentally Backed Breakouts', url:'https://finviz.com/screener.ashx?v=141&f=fa_debteq_u1,fa_roe_o20,sh_avgvol_o100,ta_highlow50d_nh,ta_sma20_pa,ta_sma200_pa,ta_sma50_pa&ft=4&o=-perf1w', desc:'Quality + technical confirmations.'},
-      {id:'highEarningsGrowth', lvl:'Intermediate', title:'High Earnings Growth', url:'https://finviz.com/screener.ashx?v=141&f=fa_epsqoq_o25,fa_epsyoy_o25,fa_epsyoy1_o25,fa_salesqoq_o25,sh_avgvol_o400,ta_rsi_nos50,ta_sma200_pa&ft=4&o=-perfytd', desc:'Strong recent & forward growth + above 200 SMA.'},
-      {id:'highSalesGrowth', lvl:'Intermediate', title:'High Sales Growth (Quality)', url:'https://finviz.com/screener.ashx?v=111&f=fa_debteq_u0.5,fa_roe_o15,fa_sales5years_o20,fa_salesqoq_o20,sh_avgvol_o200,sh_instown_o60,sh_price_o5,sh_short_u5&ft=4', desc:'Sustained sales acceleration + quality factors.'},
-      {id:'buyAndHoldValue', url:'https://finviz.com/screener.ashx?v=121&f=cap_microover,fa_curratio_o1.5,fa_estltgrowth_o10,fa_peg_o1,fa_roe_o15,ta_beta_o1.5,ta_sma20_pa&ft=4&o=-forwardpe', lvl:'Intermediate', title:'Buy & Hold Value', desc:'Reasonable growth + solid value metrics.'},
-      {id:'weeklyEarningsGapUp', lvl:'Advanced', title:'Weekly Earnings Gap Up', url:'https://finviz.com/screener.ashx?v=141&f=earningsdate_tomorrowafter,sh_avgvol_o400,sh_curvol_o50,sh_short_u25,ta_averagetruerange_o0.5,ta_gap_u2&ft=4&o=-perfytd', desc:'Upcoming earnings + recent gap move.'},
-      {id:'highRelativeVolume', lvl:'Advanced', title:'High Relative Volume Focus', url:'https://finviz.com/screener.ashx?v=131&f=fa_curratio_o1,fa_epsqoq_o15,fa_quickratio_o1,fa_salesqoq_o15,sh_avgvol_o400,sh_price_o5,sh_relvol_o1.5,ta_sma20_pa,ta_sma200_sb50,ta_sma50_sa200&ft=4&o=instown', desc:'Unusual accumulation + structural positioning.'},
-      {id:'consistentGrowthBullishTrend', lvl:'Advanced', title:'Consistent Growth in Bullish Trend', url:'https://finviz.com/screener.ashx?v=141&f=fa_eps5years_pos,fa_epsqoq_o20,fa_epsyoy_o25,fa_epsyoy1_o15,fa_estltgrowth_pos,fa_roe_o15,sh_instown_o10,sh_price_o15,ta_highlow52w_a90h,ta_rsi_nos50&ft=4&o=-perfytd', desc:'High quality compounding + near range highs.'},
-      {id:'canslim', lvl:'Advanced', title:'CANSLIM Style Candidates', url:'https://finviz.com/screener.ashx?v=111&f=fa_eps5years_o20,fa_epsqoq_o20,fa_epsyoy_o20,fa_sales5years_o20,fa_salesqoq_o20,sh_curvol_o200&ft=4', desc:'Classic CANSLIM growth criteria snapshot.'}
+      {id:'highMomentum', title:'High Momentum (RSI 55-70 & Price > SMA50)', lvl:'Intermediate', desc:'Focuses on symbols showing sustained directional strength without extreme overbought.'},
+      {id:'goldenCross', title:'Golden Cross Watch (SMA50 > SMA200)', lvl:'Beginner', desc:'Potential long-term trend shifts signaled by 50/200 SMA relationship.'},
+      {id:'valueRebound', title:'Value Rebound (Price < SMA200 & RSI Rising)', lvl:'Intermediate', desc:'Look for early reversals in oversold longer-term downtrends.'},
+      {id:'volumeExpansion', title:'Volume Expansion (Today Vol > 150% Avg)', lvl:'Advanced', desc:'Unusual interest may precede directional continuation.'}
     ];
-    const levelRank={Beginner:0, Intermediate:1, Advanced:2};
-    function ensureScreeners(){ if(!els.scrList) return; if(els.scrList.dataset.filled) return; const ordered=[...screenerDefs].sort((a,b)=> levelRank[a.lvl]-levelRank[b.lvl]); els.scrList.innerHTML = ordered.map(s=>`<div class="scr-item" data-lvl="${s.lvl}" data-id="${s.id}">
-      <div style=\"flex:1;min-width:0\">
-        <div class=\"title\">${s.title}</div>
-        <div class=\"desc\">${s.desc}</div>
+    function ensureScreeners(){ if(!els.scrList) return; if(els.scrList.dataset.filled) return; els.scrList.innerHTML = screenerDefs.map(s=>`<div class="scr-item" data-lvl="${s.lvl}" data-id="${s.id}">
+      <div style="flex:1;min-width:0">
+        <div class="title">${s.title}</div>
+        <div class="desc">${s.desc}</div>
       </div>
-      <div style=\"display:flex;align-items:center;gap:8px\">
-        <span class=\"badge\">${s.lvl}</span>
-        <a class=\"open-btn\" href=\"${s.url}\" target=\"_blank\" rel=\"noopener\" data-openlink=\"${s.id}\">Open</a>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="badge">${s.lvl}</span>
+        <button class="open-btn" type="button" data-run="${s.id}">Run</button>
       </div>
     </div>`).join(''); els.scrList.dataset.filled='1'; }
-    document.addEventListener('click', e=>{ const ln=e.target.closest('[data-openlink]'); if(!ln) return; /* keep simple, no toast needed */ });
+    // Click handler for demo screener run buttons
+    document.addEventListener('click', e=>{ const run=e.target.closest('[data-run]'); if(!run) return; const id=run.dataset.run; showToast('Running screener: '+id+' (demo)'); });
 
     /* ---------- Existing code continues below (chart, autocomplete, etc.) ---------- */
     /* ---------- State ---------- */
