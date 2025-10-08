@@ -2,8 +2,16 @@ Symbol|Company
 
 OKLO|Oklo Inc
 UUUU|Energy Fuels Inc.
-
 BTC-USD|Bitcoin (spot price)
+ETH-USD|Ethereum (spot price)
+SOL-USD|Solana (spot price)
+DOGE-USD|Dogecoin (spot price)
+XRP-USD|XRP (spot price)
+ADA-USD|Cardano (spot price)
+LTC-USD|Litecoin (spot price)
+BCH-USD|Bitcoin Cash (spot price)
+BNB-USD|Binance Coin (spot price)
+
 A|Agilent Technologies
 AA|Alcoa Corporation Common Stock
 AAA|Alternative Access First Priority CLO Bond ETF

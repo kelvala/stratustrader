@@ -221,12 +221,11 @@
     <!-- Info bar -->
     <div id="info" class="info">
       <h3 id="headline" style="margin:0 0 6px 0"></h3>
-      <div id="subInfo" style="opacity:.85;font-size:13px;margin:-2px 0 6px 0"></div>
       <div style="opacity:.9;font-size:14px;line-height:1.6">
+        <div id="companyLine" style="margin:0 0 4px 0;opacity:.95"></div>
         <div id="lastLine">Last: — · Change: —</div>
         <div id="prevCloseLine">Yesterday’s Close: —</div>
         <div id="ivLine">Intrinsic Value: —</div>
-        <div id="rangeLine">Range: — · Volume: —</div>
       </div>
       <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
     </div>
@@ -364,18 +363,12 @@
     /* ---------- Elements ---------- */
     const els = {
       input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'),
-      headline:q('#headline'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'),
-      subInfo:q('#subInfo'), rangeLine:q('#rangeLine'),
+      headline:q('#headline'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'), companyLine:q('#companyLine'),
       chartCard:q('#chartCard'), chart:q('#chart'),
       timeSel:q('#timeSel'), freqSel:q('#freqSel'), toggles:q('#toggles'),
-      heightSel:q('#heightSel'), heightLabel:q('#heightLabel'),
       themeToggle:q('#themeToggle'), autoFib:q('#autoFib'),
       refreshBtn:q('#refreshBtn'), maxBtn:q('#maxBtn'), wideBtn:q('#wideBtn'),
-      tfCard:q('#tfCard'), tfHead:q('#tfHead'),
-      /* Newly added */
-      toolGPTs:q('#toolGPTs'), toolScreeners:q('#toolScreeners'),
-      sheetGPTs:q('#sheetGPTs'), sheetScreeners:q('#sheetScreeners'),
-      btmNav:q('#btmNav'), askGPT:q('#askGPT'), gptInput:q('#gptInput'), scrList:q('#scrList')
+      tfCard:q('#tfCard'), tfHead:q('#tfHead')
     };
 
     /* ---------- Toast ---------- */
@@ -667,7 +660,7 @@
           const xa = L.xaxis || {};
           const toMs = v => new Date(v).getTime();
           if (Array.isArray(xa.range) && xa.autorange === false) {
-            return [toMs(xa.range[0]), toMs(xa.range[1])];
+                       return [toMs(xa.range[0]), toMs(xa.range[1])];
           }
           if (xArr.length) return [xArr[0].getTime(), xArr[xArr.length - 1].getTime()];
           return [NaN, NaN];
@@ -770,9 +763,95 @@
         const volFmt=v=> Number.isFinite(v)? (v>1e9?(v/1e9).toFixed(2)+'B': v>1e6?(v/1e6).toFixed(2)+'M': v>1e3?(v/1e3).toFixed(2)+'K': String(v)):'—';
         const volPart=volFmt(dayVol); const avgVolPart=volFmt(avgVol3); const w52Part=(Number.isFinite(w52Low)&&Number.isFinite(w52High))? `${fmtPx(w52Low)} – ${fmtPx(w52High)}`:'—';
         if(els.rangeLine) els.rangeLine.innerHTML=`Range: <b>${rangePart}</b> · Vol: <b>${volPart}</b> (Avg: ${avgVolPart}) · 52W: <b>${w52Part}</b>`;
-        const s50=state.smaLast?.[50]; const s200=state.smaLast?.[200]; const iv=Number.isFinite(s50)&&Number.isFinite(s200)?((s50+s200)/2):(Number.isFinite(s200)?s200:Number.isFinite(s50)?s50:NaN);
-        els.ivLine.textContent=`Intrinsic Value: ${fmtPx(iv)}`;
-      }catch(err){ if(els.rangeLine && /Range:\s*—/.test(els.rangeLine.textContent||'')){ els.rangeLine.innerHTML='Range: — · Vol: —'; } }
+        /* --- Intrinsic value (very rough) --- */
+        const f = FUNDAMENTALS[ticker] || {};
+        const ivs=[]; if(Number.isFinite(f.ivGraham)) ivs.push(f.ivGraham);
+        const s50=sma50.at(-1), s200=sma200.at(-1); if(Number.isFinite(s50)&&Number.isFinite(s200)) ivs.push((s50+s200)/2);
+        const iv = ivs.length ? (ivs.reduce((a,b)=>a+b,0)/ivs.length) : null;
+        els.ivLine.textContent = `Intrinsic Value: ${iv==null ? '—' : '$'+fmt(iv)}`;
+        // --- Company info line (new) ---
+        if(els.companyLine){
+          const name = company || f.longName || ticker;
+          const parts=[];
+          if(f.sector) parts.push(f.sector);
+          if(f.industry) parts.push(f.industry);
+          if(Number.isFinite(f.eps)) parts.push(`EPS ${fmt(f.eps)}`);
+          if(Number.isFinite(f.growth)) parts.push(`Growth ${(f.growth*100).toFixed(1)}%`);
+          if(Number.isFinite(f.ivGraham)) parts.push(`Graham IV $${fmt(f.ivGraham)}`);
+          if(Number.isFinite(f.marketCap)){
+            const mc = f.marketCap;
+              const units=[['T',1e12],['B',1e9],['M',1e6],['K',1e3]];
+              let mcDisp = '$'+mc.toLocaleString();
+              for(const [u,v] of units){ if(mc>=v){ mcDisp = '$'+(mc/v).toFixed(2)+u; break; } }
+              parts.push('MktCap '+mcDisp);
+          }
+          els.companyLine.innerHTML = `<b>${escapeHTML(name)}</b>${parts.length? ' · '+parts.map(escapeHTML).join(' · '):''}`;
+        }
+      }catch(e){
+        console.error('Quote refresh error', e);
+        els.lastLine.innerHTML='Last: — · Change: —';
+        if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)';
+      }
+    }
+
+    async function getFundamentals(ticker){
+      if(isCrypto(ticker)) return {};
+      try{
+        const mods = 'price,summaryProfile,defaultKeyStatistics,financialData,earningsTrend';
+        const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(mods)}`);
+        if(!r.ok) throw new Error('summary '+r.status);
+        const j = await r.json();
+        const res = j?.quoteSummary?.result?.[0] || {};
+        const price=res.price||{}, prof=res.summaryProfile||{};
+        const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+        const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
+        let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
+        const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+        if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
+        const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
+        return { eps: +eps || null, growth: +growth || null, ivGraham, longName: price.longName || price.shortName || '', sector: prof.sector || '', industry: prof.industry || '', marketCap: price.marketCap?.raw ?? null };
+      }catch{ return {}; }
+    }
+
+    async function go(ticker, company){
+      CURRENT={...CURRENT,ticker,company};
+      els.headline.textContent=`${ticker}${company?' — '+company:''}`;
+      els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent=''; if(els.companyLine) els.companyLine.textContent='';
+      try{
+        await waitForPlotly();
+        const rows = await fetchRows(ticker, state.range, state.interval);
+        state.rows = rows;
+        await buildSMAAlignedSeries();
+        await renderChart();
+        /* --- Intrinsic value (very rough) --- */
+        const f = FUNDAMENTALS[ticker] || {};
+        const ivs=[]; if(Number.isFinite(f.ivGraham)) ivs.push(f.ivGraham);
+        const s50=sma50.at(-1), s200=sma200.at(-1); if(Number.isFinite(s50)&&Number.isFinite(s200)) ivs.push((s50+s200)/2);
+        const iv = ivs.length ? (ivs.reduce((a,b)=>a+b,0)/ivs.length) : null;
+        els.ivLine.textContent = `Intrinsic Value: ${iv==null ? '—' : '$'+fmt(iv)}`;
+        // --- Company info line (new) ---
+        if(els.companyLine){
+          const name = company || f.longName || ticker;
+          const parts=[];
+          if(f.sector) parts.push(f.sector);
+          if(f.industry) parts.push(f.industry);
+          if(Number.isFinite(f.eps)) parts.push(`EPS ${fmt(f.eps)}`);
+          if(Number.isFinite(f.growth)) parts.push(`Growth ${(f.growth*100).toFixed(1)}%`);
+          if(Number.isFinite(f.ivGraham)) parts.push(`Graham IV $${fmt(f.ivGraham)}`);
+          if(Number.isFinite(f.marketCap)){
+            const mc = f.marketCap;
+              const units=[['T',1e12],['B',1e9],['M',1e6],['K',1e3]];
+              let mcDisp = '$'+mc.toLocaleString();
+              for(const [u,v] of units){ if(mc>=v){ mcDisp = '$'+(mc/v).toFixed(2)+u; break; } }
+              parts.push('MktCap '+mcDisp);
+          }
+          els.companyLine.innerHTML = `<b>${escapeHTML(name)}</b>${parts.length? ' · '+parts.map(escapeHTML).join(' · '):''}`;
+        }
+      }catch(e){
+        console.error('Go error', e);
+        els.lastLine.innerHTML='Last: — · Change: —';
+        if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)';
+      }
     }
 
     /* ---------- Data fetch ---------- */
