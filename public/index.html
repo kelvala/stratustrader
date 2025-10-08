@@ -373,7 +373,9 @@
       btmNav:q('#btmNav'), scrList:q('#scrList'),
       // Added: tool buttons & sheet / input refs for GPTs & Screeners
       toolGPTs:q('#toolGPTs'), toolScreeners:q('#toolScreeners'),
-      gptInput:q('#gptInput'), sheetGPTs:q('#sheetGPTs'), sheetScreeners:q('#sheetScreeners')
+      gptInput:q('#gptInput'), sheetGPTs:q('#sheetGPTs'), sheetScreeners:q('#sheetScreeners'),
+      // Added: candle height slider + label
+      heightSel:q('#heightSel'), heightLabel:q('#heightLabel')
     };
 
     /* ---------- Toast ---------- */
@@ -559,8 +561,15 @@
       try{ await Plotly.relayout(els.chart, { 'yaxis.autorange':false, 'yaxis.range':[lo-pad, hi+pad] }); }catch{}
     }
 
-    // Slider bindings
-    if(els.heightSel){ els.heightSel.value=String(state.candleTight); const updLbl=()=>{ const v=+els.heightSel.value; els.heightLabel.textContent = v>=80? 'Taller' : v<=20? 'Shorter' : 'Balanced'; }; updLbl(); els.heightSel.addEventListener('input', ()=>{ state.candleTight=+els.heightSel.value; localStorage.setItem('candleTight', String(state.candleTight)); updLbl(); fitPriceAxisToCandlesStrict(); }); }
+    // Slider bindings (fixed: added missing element refs + null guards)
+    if(els.heightSel){
+      try{
+        els.heightSel.value = String(state.candleTight);
+        const updLbl = ()=>{ if(!els.heightLabel) return; const v=+els.heightSel.value; els.heightLabel.textContent = v>=80? 'Taller' : v<=20? 'Shorter' : 'Balanced'; };
+        updLbl();
+        els.heightSel.addEventListener('input', ()=>{ state.candleTight=+els.heightSel.value; localStorage.setItem('candleTight', String(state.candleTight)); updLbl(); fitPriceAxisToCandlesStrict(); });
+      }catch(e){ console.warn('Height slider init failed', e); }
+    }
 
     /* ---------- Chart bits ---------- */
     function candleTrace(rows){ return { type:'candlestick', x: rows.map(r=>new Date(r.t)), open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c), name: state.ticker, yaxis:'y', increasing:{ line:{ color: css('--c-up')||'#16a34a', width:2.4 } }, decreasing:{ line:{ color: css('--c-down')||'#dc2626', width:2.4 } }, showlegend:false, hovertemplate:'Date: %{x|%Y-%m-%d %H:%M}<br>O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>' }; }
@@ -615,6 +624,7 @@
     }
 
     // --- Auto Fib helpers ---
+   
     const FIB_PCTS=[0,0.236,0.382,0.5,0.618,0.786,1];
     function getVisibleRangeMs(){
       if(!els.chart) return [NaN,NaN];
