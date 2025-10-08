@@ -227,6 +227,7 @@
         <div id="lastLine">Last: — · Change: —</div>
         <div id="prevCloseLine">Yesterday’s Close: —</div>
         <div id="ivLine">Intrinsic Value: —</div>
+        <div id="updateLine" style="font-size:12px;opacity:.6;margin-top:2px">Updated: —</div>
       </div>
       <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
     </div>
@@ -364,7 +365,7 @@
     /* ---------- Elements ---------- */
     const els = {
       input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'),
-      headline:q('#headline'), subInfo:q('#subInfo'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'), companyLine:q('#companyLine'),
+      headline:q('#headline'), subInfo:q('#subInfo'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'), companyLine:q('#companyLine'), updateLine:q('#updateLine'),
       chartCard:q('#chartCard'), chart:q('#chart'),
       timeSel:q('#timeSel'), freqSel:q('#freqSel'), toggles:q('#toggles'),
       themeToggle:q('#themeToggle'), autoFib:q('#autoFib'),
@@ -410,7 +411,7 @@
       {id:'breakingOut', lvl:'Intermediate', title:'Fundamentally Backed Breakouts', url:'https://finviz.com/screener.ashx?v=141&f=fa_debteq_u1,fa_roe_o20,sh_avgvol_o100,ta_highlow50d_nh,ta_sma20_pa,ta_sma200_pa,ta_sma50_pa&ft=4&o=-perf1w', desc:'Quality + technical confirmations.'},
       {id:'highEarningsGrowth', lvl:'Intermediate', title:'High Earnings Growth', url:'https://finviz.com/screener.ashx?v=141&f=fa_epsqoq_o25,fa_epsyoy_o25,fa_epsyoy1_o25,fa_salesqoq_o25,sh_avgvol_o400,ta_rsi_nos50,ta_sma200_pa&ft=4&o=-perfytd', desc:'Strong recent & forward growth + above 200 SMA.'},
       {id:'highSalesGrowth', lvl:'Intermediate', title:'High Sales Growth (Quality)', url:'https://finviz.com/screener.ashx?v=111&f=fa_debteq_u0.5,fa_roe_o15,fa_sales5years_o20,fa_salesqoq_o20,sh_avgvol_o200,sh_instown_o60,sh_price_o5,sh_short_u5&ft=4', desc:'Sustained sales acceleration + quality factors.'},
-      {id:'buyAndHoldValue', lvl:'Intermediate', title:'Buy & Hold Value', url:'https://finviz.com/screener.ashx?v=121&f=cap_microover,fa_curratio_o1.5,fa_estltgrowth_o10,fa_peg_o1,fa_roe_o15,ta_beta_o1.5,ta_sma20_pa&ft=4&o=-forwardpe', desc:'Reasonable growth + solid value metrics.'},
+      {id:'buyAndHoldValue', url:'https://finviz.com/screener.ashx?v=121&f=cap_microover,fa_curratio_o1.5,fa_estltgrowth_o10,fa_peg_o1,fa_roe_o15,ta_beta_o1.5,ta_sma20_pa&ft=4&o=-forwardpe', lvl:'Intermediate', title:'Buy & Hold Value', desc:'Reasonable growth + solid value metrics.'},
       {id:'weeklyEarningsGapUp', lvl:'Advanced', title:'Weekly Earnings Gap Up', url:'https://finviz.com/screener.ashx?v=141&f=earningsdate_tomorrowafter,sh_avgvol_o400,sh_curvol_o50,sh_short_u25,ta_averagetruerange_o0.5,ta_gap_u2&ft=4&o=-perfytd', desc:'Upcoming earnings + recent gap move.'},
       {id:'highRelativeVolume', lvl:'Advanced', title:'High Relative Volume Focus', url:'https://finviz.com/screener.ashx?v=131&f=fa_curratio_o1,fa_epsqoq_o15,fa_quickratio_o1,fa_salesqoq_o15,sh_avgvol_o400,sh_price_o5,sh_relvol_o1.5,ta_sma20_pa,ta_sma200_sb50,ta_sma50_sa200&ft=4&o=instown', desc:'Unusual accumulation + structural positioning.'},
       {id:'consistentGrowthBullishTrend', lvl:'Advanced', title:'Consistent Growth in Bullish Trend', url:'https://finviz.com/screener.ashx?v=141&f=fa_eps5years_pos,fa_epsqoq_o20,fa_epsyoy_o25,fa_epsyoy1_o15,fa_estltgrowth_pos,fa_roe_o15,sh_instown_o10,sh_price_o15,ta_highlow52w_a90h,ta_rsi_nos50&ft=4&o=-perfytd', desc:'High quality compounding + near range highs.'},
@@ -438,270 +439,40 @@
     /* ---------- Utils & Formatters ---------- */
     const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
     const debounce = (fn,ms)=>{ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a),ms); }; };
-    const fmtPx = v => Number.isFinite(+v) ? `$${(+v).toFixed(2)}` : '—';
-    const fmtPct = v => Number.isFinite(+v) ? `${(+v).toFixed(2)}%` : '—';
-    const clampZero = (v,eps=1e-10)=> (Number.isFinite(v)&&Math.abs(v)<eps?0:v);
-    const median = (arr)=>{ const a=(arr||[]).map(Number).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length) return NaN; const m=Math.floor(a.length/2); return a.length%2? a[m] : (a[m-1]+a[m])/2; };
-    const $all = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
-    const sanitizeTicker = s => String(s||'').split('|')[0].trim().toUpperCase();
-    const normalizeTickerForFetch = t => sanitizeTicker(t).replace(/\s+/g,'').replace(/\.([A-Z0-9]{1,3})$/,'-$1'); // BRK.B -> BRK-B, etc.
-    function hideAC(){ if(els.list){ els.list.classList.remove('show'); els.list.innerHTML=''; } state.acMatches=[]; state.acIndex=-1; }
-    function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const html=items.slice(0,60).map((o,i)=>`<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${o.n||''}</span></div>`).join(''); els.list.innerHTML=html; els.list.classList.add('show'); }
-    function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ hideAC(); return; } // lazy retry symbols load if empty
-      if(!state.symbols.length && state.symbolsTried>0){ loadSymbols(true); }
-      const sym=state.symbols||[]; if(!sym.length){ // show loading placeholder
-        els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">Loading symbols…</div>'; els.list.classList.add('show'); return; }
-      const re=new RegExp('^'+s.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&'));
-      const pri = sym.filter(r=> re.test(r.t));
-      const sec = sym.filter(r=> !re.test(r.t) && r.t.includes(s));
-      const nameHits = sym.filter(r=> (r.n||'').toUpperCase().includes(s)&&!pri.includes(r)&&!sec.includes(r));
-      const matches=[...pri,...sec,...nameHits];
-      if(!matches.length){ els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">No matches</div>'; els.list.classList.add('show'); state.acMatches=[]; state.acIndex=-1; return; }
-      state.acMatches=matches; state.acIndex=0; renderAC(); }
-    function pickAC(i){ if(!state.acMatches?.length) return; const it=state.acMatches[i]; if(!it) return; els.input.value=it.t; hideAC(); }
+    const fmt = n => (Number.isFinite(+n)? (+n).toFixed(2): '—');
+    const fmtPxPos = v => Number.isFinite(+v)? '$'+(+v).toFixed(2): '—';
+    const escapeHTML = s => String(s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+    // ---------- Intrinsic Value models (encapsulated) ----------
+    const IV = (()=>{
+      function _isNum(x){ return Number.isFinite(+x); }
+      function medianLocal(arr){ const a=(arr||[]).map(Number).filter(Number.isFinite).sort((x,y)=>x-y); if(!a.length) return NaN; const m=Math.floor(a.length/2); return a.length%2? a[m] : (a[m-1]+a[m])/2; }
+      function emaLocal(arr,len){ let e=null,k=2/(len+1); for(const v of arr){ const n=+v; if(!Number.isFinite(n)) continue; e = e==null? n : e + k*(n-e); } return e; }
+      function vwapRows(rows){ let num=0,den=0; for(const r of rows||[]){ const v=+r.v||0; if(!v) continue; const tp=((+r.h||0)+(+r.l||0)+(+r.c||0))/3; if(!Number.isFinite(tp)) continue; num+=tp*v; den+=v; } return den>0? num/den:NaN; }
+      function vwma(close,vol,len){ let num=0,den=0,n=close.length,s=Math.max(0,n-len); for(let i=s;i<n;i++){ const c=+close[i], v=+vol[i]||0; if(!_isNum(c)||!v) continue; num+=c*v; den+=v; } return den>0? num/den:NaN; }
+      function dcfPerShare({ fcf,g,r,years=5,gt=Math.min(0.03,r-0.01),cash=0,debt=0,shares }){ if(!_isNum(fcf)||!_isNum(g)||!_isNum(r)||!_isNum(shares)||shares<=0) return NaN; const clamp=(x,a,b)=>Math.max(a,Math.min(b,x)); g=clamp(g,-0.02,0.12); r=clamp(r,0.07,0.12); gt=Math.min(0.03,r-0.01); let f=fcf,pvSum=0; for(let i=1;i<=years;i++){ f*=(1+g); pvSum+=f/Math.pow(1+r,i); } const tv=(f*(1+gt))/(r-gt); let equity=pvSum+tv/Math.pow(1+r,years); if(_isNum(cash)) equity+=cash; if(_isNum(debt)) equity-=debt; const per=equity/shares; return _isNum(per)&&per>0? per:NaN; }
+      function ddmPerShare({D1,r,g}){ if(!_isNum(D1)||!_isNum(r)||!_isNum(g)||r<=g) return NaN; const p0=D1/(r-g); return p0>0? p0:NaN; }
+      function grahamPerShare({eps,g,aaaYield}){ if(!_isNum(eps)||!_isNum(g)||!_isNum(aaaYield)||aaaYield<=0) return NaN; return eps*(8.5+2*g)*4.4/aaaYield; }
+      function anchorPerShare(rows){ if(!rows||!rows.length) return NaN; const c=rows.map(r=>+r.c), v=rows.map(r=>+r.v||0); const vwapAll=vwapRows(rows); const vwma50=vwma(c,v,50); const ema50=emaLocal(c,50); const med100=medianLocal(c.slice(-100)); const parts=[]; if(_isNum(vwapAll)) parts.push({w:.50,v:vwapAll}); if(_isNum(vwma50)) parts.push({w:.30,v:vwma50}); if(_isNum(ema50)) parts.push({w:.15,v:ema50}); if(_isNum(med100)) parts.push({w:.05,v:med100}); if(!parts.length) return NaN; const W=parts.reduce((a,p)=>a+p.w,0); return parts.reduce((a,p)=>a+p.v*(p.w/W),0); }
+      function intrinsicWeighted(fund={},rows=[],w={}){ const W={DCF:.50,DDM:.20,GRAHAM:.20,ANCHOR:.10,...w}; const vals=[]; const vDCF=dcfPerShare({ fcf:fund.fcf, g:fund.gDCF, r:fund.wacc, years:fund.years??5, gt:fund.gt, cash:fund.cash, debt:fund.debt, shares:fund.shares }); if(_isNum(vDCF)) vals.push({k:'DCF',v:vDCF,w:W.DCF}); const vDDM=ddmPerShare({ D1:fund.dividendNext, r:fund.reqReturn??fund.wacc, g:fund.divGrowth }); if(_isNum(vDDM)) vals.push({k:'DDM',v:vDDM,w:W.DDM}); const vGR=grahamPerShare({ eps:fund.epsTTM, g:(fund.growthEPS??fund.gDCF), aaaYield:fund.aaaYield }); if(_isNum(vGR)) vals.push({k:'GRAHAM',v:vGR,w:W.GRAHAM}); const vAN=anchorPerShare(rows); if(_isNum(vAN)) vals.push({k:'ANCHOR',v:vAN,w:W.ANCHOR}); if(!vals.length) return { perShare:NaN, parts:[] }; const wsum=vals.reduce((a,p)=>a+p.w,0); const perShare=vals.reduce((a,p)=>a+p.v*(p.w/wsum),0); return { perShare, parts:vals.map(p=>({model:p.k,value:p.v,weight:p.w/wsum})) }; }
+      return { intrinsicWeighted };
+    })();
 
-    // Close autocomplete when clicking outside
-    document.addEventListener('click', e=>{ if(!els.list) return; if(e.target===els.input || e.target.closest('#ac')) return; hideAC(); });
-
-    // ET helpers
-    const dtfET = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour12:false,hour:'2-digit',minute:'2-digit',weekday:'short'});
-    function isRegularSessionET(ms){ const parts=dtfET.formatToParts(new Date(ms)); const get=(t)=> parts.find(p=>p.type===t)?.value; const wd=(parts.find(p=>p.type==='weekday')?.value)||''; if(/Sat|Sun/i.test(wd)) return false; const h=+(get('hour')||'0'); const m=+(get('minute')||'0'); const hm=h+m/60; return hm>=9.5 && hm<=16.0; }
-    const isIntraday = (interval)=> /m|h/i.test(String(interval||''));
-    const padScaleFromTight = (t)=>{ t = Math.max(0, Math.min(100, +t||0)); return 1.6 - (t/100)*1.2; };
-
-    // Helper: rows currently displayed (respect intraday pre/post chip)
-    function getDisplayRows(){
-      const rows = state.rows||[];
-      const includeAH = q('.chip[data-k="SESS"]')?.classList.contains('active');
-      return (isIntraday(state.interval) && !includeAH) ? rows.filter(r=>isRegularSessionET(r.t)) : rows;
-    }
-
-    // CSV symbols for autocomplete (robust with fallbacks + retry)
-    async function loadSymbols(force){
-      if(state.symbols.length && !force) return state.symbols;
-      state.symbolsTried++;
-      const paths = ['stock_data.csv','/stock_data.csv','/public/stock_data.csv'];
-      let text = '';
-      for(const p of paths){
-        try{ const r = await fetch(p,{cache:'no-store'}); if(r.ok){ text = await r.text(); if(text) break; } }catch{/* try next */}
-      }
-      if(!text){ if(force && state.symbolsTried<4) setTimeout(()=>loadSymbols(true), 800); return state.symbols; }
+    function computeAndDisplayIntrinsic(){
       try{
-        const lines = text.split(/\r?\n/).filter(Boolean);
-        const out = []; let start=0; if(/^[\s]*symbol\s*(\||,)/i.test(lines[0]||'')) start=1;
-        for(let i=start;i<lines.length;i++){
-          const line = lines[i]; const d = line.includes('|') ? '|' : ','; const parts=line.split(d);
-          const sym=(parts[0]||'').trim().toUpperCase(); if(!sym) continue; const name=parts.slice(1).join(' ').replace(/\s*\|\s*/g,' ').trim();
-          out.push({ t:sym, n:name });
-        }
-        state.symbols = out;
-      }catch{ state.symbols=[]; }
-      if(els.input && els.input.value) updateAC(els.input.value);
-      return state.symbols;
+        const f = FUNDAMENTALS[CURRENT.ticker]||{};
+        const rowsForIV = state.rows && state.rows.length ? state.rows : [];
+        const FUND = {
+          fcf: f.freeCashFlow, gDCF: f.growthDCF, wacc: f.wacc ?? 0.09, years:5, gt: Math.min(0.03,(f.wacc??0.09)-0.01), cash:f.totalCash, debt:f.totalDebt, shares:f.sharesOutstanding,
+          dividendNext:f.nextDividend, divGrowth:f.dividendGrowth, reqReturn:f.reqReturn ?? (f.wacc ?? 0.09), epsTTM:f.eps, growthEPS:f.growthEPS, aaaYield:f.aaaYield ?? 0.055
+        };
+        const weights = { DCF:.55, DDM:.15, GRAHAM:.15, ANCHOR:.15 };
+        const iv = IV.intrinsicWeighted(FUND, rowsForIV, weights);
+        const val = Number.isFinite(iv.perShare)? iv.perShare : NaN;
+        els.ivLine.textContent = `Intrinsic Value: ${fmtPxPos(val)}`;
+        console.debug('IV breakdown', iv.parts);
+      }catch(e){ console.debug('IV compute failed', e); }
     }
 
-    /* ---------- Indicators ---------- */
-    const sma = (arr,p)=>{ if(!Array.isArray(arr)||!arr.length||!p) return []; const out=Array(arr.length).fill(null); let sum=0; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(Number.isFinite(v)) sum+=v; if(i>=p){ const w=+arr[i-p]; if(Number.isFinite(w)) sum-=w; } if(i>=p-1) out[i]=sum/p; } return out; };
-    const ema = (arr,p)=>{ const out=Array(arr.length).fill(null); const k=2/(p+1); let prev=null; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(!Number.isFinite(v)) { out[i]=prev; continue; } prev = prev==null? v : (v - prev)*k + prev; out[i]=prev; } return out; };
-    const fillForward = (arr)=>{ let last=null; return arr.map(v=>{ if(Number.isFinite(v)){ last=v; return v; } return Number.isFinite(last)? last : null; }); };
-    const fillBackward = (arr)=>{ const out=arr.slice(); const fi=out.findIndex(Number.isFinite); if(fi>0){ const v=out[fi]; for(let i=0;i<fi;i++) out[i]=v; } return out; };
-    const mapByTs = (rows, values)=>{ const m=new Map(); for(let i=0;i<rows.length;i++){ const t=rows[i]?.t; const v=values[i]; if(Number.isFinite(v)) m.set(t, v); } return m; };
-
-    // Build SMA series aligned to state.rows; when < period, back/forward fill; when missing, try extended pull
-    async function buildSMAAlignedSeries(){
-      const rows = state.rows||[]; state.smaSeries = state.smaSeries || {}; state.smaLast = state.smaLast || {}; if(!rows.length){ state.smaSeries={}; state.smaLast={}; return; }
-      const closes = rows.map(r=>r.c);
-      const periods = [20,50,200];
-      const pickRange=(interval,p)=>{ switch(interval){ case '1m':return '5d'; case '5m':return '1mo'; case '15m':return '3mo'; case '60m':return '6mo'; case '1wk':return '10y'; case '1mo': return 'max'; case '3mo': return 'max'; case '1y': return 'max'; default: return p>=200? '3y':'1y'; } };
-      async function alignFromExtended(p){ const extR = pickRange(state.interval, p); try{ const ext = await fetchRows(state.ticker, extR, state.interval); if(Array.isArray(ext)&&ext.length){ const yExt = sma(ext.map(r=>r.c), p); const mapP = mapByTs(ext, yExt); const aligned = rows.map(r=> mapP.get(r.t) ?? null); return fillBackward(fillForward(aligned)); } }catch{} return null; }
-      for(const p of periods){ let y = sma(closes, p); if(y.some(Number.isFinite)) y=fillBackward(fillForward(y)); else { const extAligned = await alignFromExtended(p); y = extAligned || Array(rows.length).fill(closes.filter(Number.isFinite).at(-1) ?? null); }
-        state.smaSeries[p]=y; const last = y.filter(Number.isFinite).at(-1); if(Number.isFinite(last)) state.smaLast[p]=last; }
-    }
-
-    /* ---------- Price axis fit (uses slider) ---------- */
-    async function fitPriceAxisToCandlesStrict(){
-      if (!els.chart) return;
-      const d = els.chart.data || []; const c = d.find(t => t && t.type === 'candlestick'); if (!c || !c.x?.length) return;
-      const toMs = v=> new Date(v).getTime(); const L=els.chart._fullLayout||els.chart.layout||{}; const xa=L.xaxis||{};
-      let x0ms, x1ms; if(Array.isArray(xa.range) && xa.autorange===false){ x0ms=toMs(xa.range[0]); x1ms=toMs(xa.range[1]); } else { x0ms=toMs(c.x[0]); x1ms=toMs(c.x[c.x.length-1]); }
-      const cxms=c.x.map(toMs); let i0=0; while(i0<cxms.length && cxms[i0]<x0ms) i0++; let i1=cxms.length-1; while(i1>i0 && cxms[i1]>x1ms) i1--; if(i1<=i0) return;
-      let hi=-Infinity, lo=Infinity; for(let i=i0;i<=i1;i++){ const h=c.high[i], l=c.low[i]; if(Number.isFinite(h)) hi=Math.max(hi,h); if(Number.isFinite(l)) lo=Math.min(lo,l); }
-      if(!Number.isFinite(hi)||!Number.isFinite(lo)) return; if(hi===lo){ hi+=1; lo-=1; }
-      const basePad = Math.max((hi-lo)*0.08, 0.01); const pad = basePad * padScaleFromTight(state.candleTight);
-      try{ await Plotly.relayout(els.chart, { 'yaxis.autorange':false, 'yaxis.range':[lo-pad, hi+pad] }); }catch{}
-    }
-
-    // Slider bindings
-    if(els.heightSel){ els.heightSel.value=String(state.candleTight); const updLbl=()=>{ const v=+els.heightSel.value; els.heightLabel.textContent = v>=80? 'Taller' : v<=20? 'Shorter' : 'Balanced'; }; updLbl(); els.heightSel.addEventListener('input', ()=>{ state.candleTight=+els.heightSel.value; localStorage.setItem('candleTight', String(state.candleTight)); updLbl(); fitPriceAxisToCandlesStrict(); }); }
-
-    /* ---------- Chart bits ---------- */
-    function candleTrace(rows){ return { type:'candlestick', x: rows.map(r=>new Date(r.t)), open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c), name: state.ticker, yaxis:'y', increasing:{ line:{ color: css('--c-up')||'#16a34a', width:2.4 } }, decreasing:{ line:{ color: css('--c-down')||'#dc2626', width:2.4 } }, showlegend:false, hovertemplate:'Date: %{x|%Y-%m-%d %H:%M}<br>O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>' }; }
-    function volTrace(rows){ const x=rows.map(r=>new Date(r.t)); const y=rows.map(r=>r.v||0); const cols=rows.map(r=> (r.c>=r.o)? 'rgba(34,197,94,0.5)':'rgba(239,68,68,0.5)'); return { type:'bar', x, y, name:'Volume', marker:{ color: cols }, yaxis:'y2', opacity:0.45, hoverinfo:'skip' }; }
-    function rsiArr(rows, period=14){ const c=rows.map(r=>r.c); const gains=[], losses=[]; for(let i=1;i<c.length;i++){ const d=c[i]-c[i-1]; gains.push(Math.max(0,d)); losses.push(Math.max(0,-d)); } const avgG=ema(gains,period); const avgL=ema(losses,period); const rsi=Array(c.length).fill(null); for(let i=1;i<c.length;i++){ const gi=avgG[i-1], li=avgL[i-1]; if(Number.isFinite(gi)&&Number.isFinite(li)){ const rs = li===0? 100 : gi/li; rsi[i]=100-(100/(1+rs)); } } return rsi; }
-    function rsiTrace(rows){ return { type:'scatter', mode:'lines', x:rows.map(r=>new Date(r.t)), y:rsiArr(rows), name:'RSI', line:{ color: css('--c-rsi')||'#a78bfa', width:1.6 }, yaxis:'y3', hoverinfo:'skip' }; }
-    function macdTraces(rows){ const c=rows.map(r=>r.c); const e12=ema(c,12), e26=ema(c,26); const macd=e12.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(e26[i]))? v-e26[i] : null); const signal=ema(macd,9); const hist=macd.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(signal[i]))? v-signal[i]: null); const x=rows.map(r=>new Date(r.t)); const cols=hist.map(v=> v==null? 'rgba(0,0,0,0)' : (v>=0? 'rgba(34,197,94,0.35)':'rgba(239,68,68,0.35)')); return [ { type:'scatter', mode:'lines', x, y:macd, name:'MACD', line:{ color: css('--c-macd')||'#38bdf8', width:1.6 }, yaxis:'y4', hoverinfo:'skip' }, { type:'scatter', mode:'lines', x, y:signal, name:'Signal', line:{ color:'#f59e0b', width:1.2, dash:'dot' }, yaxis:'y4', hoverinfo:'skip' }, { type:'bar', x, y:hist, name:'Histogram', marker:{ color: cols }, yaxis:'y4', hoverinfo:'skip' } ]; }
-    function ichiTraces(rows){
-      const high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c), x=rows.map(r=>new Date(r.t));
-      const rollingMid=(h,l,p)=>{ const out=Array(h.length).fill(null); for(let i=0;i<h.length;i++){ const s=Math.max(0,i-p+1); let hi=-Infinity, lo=Infinity; for(let j=s;j<=i;j++){ if(Number.isFinite(h[j])) hi=Math.max(hi,h[j]); if(Number.isFinite(l[j])) lo=Math.min(lo,l[j]); } if(hi>-Infinity&&lo<Infinity) out[i]=(hi+lo)/2; } return out; };
-      const tenkan=rollingMid(high,low,9), kijun=rollingMid(high,low,26), spanB=rollingMid(high,low,52);
-      const spanA=tenkan.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(kijun[i]))? (v+kijun[i])/2 : null);
-      const shift=26; const step = x.length>1? (x[1]-x[0]) : 24*3600*1000;
-      const xExt = x.concat(Array.from({length:shift}, (_,k)=> new Date(x[x.length-1].getTime()+(k+1)*step)));
-      const proj=(arr)=>{ const out=Array(xExt.length).fill(null); for(let i=0;i<arr.length;i++){ const v=arr[i]; if(Number.isFinite(v)) out[i+shift]=v; } return out; };
-      const a=proj(spanA), b=proj(spanB);
-      // Segmented clouds
-      const upTop=Array(xExt.length).fill(null), upBot=Array(xExt.length).fill(null);
-      const dnTop=Array(xExt.length).fill(null), dnBot=Array(xExt.length).fill(null);
-      for(let i=0;i<xExt.length;i++){
-        const A=a[i], B=b[i];
-        if(Number.isFinite(A)&&Number.isFinite(B)){
-          if(A>=B){ upTop[i]=A; upBot[i]=B; }
-          else { dnTop[i]=B; dnBot[i]=A; }
-        }
-      }
-      const cloudUpTop={type:'scatter',mode:'lines',x:xExt,y:upTop,line:{width:0},showlegend:false,hoverinfo:'skip'};
-      const cloudUpFill={type:'scatter',mode:'lines',x:xExt,y:upBot,line:{width:0},fill:'tonexty',fillcolor:css('--c-ichi-up')||'rgba(34,197,94,.45)',showlegend:false,hoverinfo:'skip'};
-      const cloudDnTop={type:'scatter',mode:'lines',x:xExt,y:dnTop,line:{width:0},showlegend:false,hoverinfo:'skip'};
-      const cloudDnFill={type:'scatter',mode:'lines',x:xExt,y:dnBot,line:{width:0},fill:'tonexty',fillcolor:css('--c-ichi-down')||'rgba(239,68,68,.40)',showlegend:false,hoverinfo:'skip'};
-      // Span lines for visual edges
-      const spanALine={type:'scatter',mode:'lines',x:xExt,y:a,name:'Span A',line:{color:css('--c-ichi-spanA')||'#22c55e',width:1.2,dash:'dot'},hoverinfo:'skip',showlegend:false};
-      const spanBLine={type:'scatter',mode:'lines',x:xExt,y:b,name:'Span B',line:{color:css('--c-ichi-spanB')||'#ef4444',width:1.2,dash:'dot'},hoverinfo:'skip',showlegend:false};
-      const ten={type:'scatter',mode:'lines',x,y:tenkan,name:'Tenkan',line:{color:css('--c-ichi-tenkan')||'#f59e0b',width:1.6},hoverinfo:'skip'};
-      const kij={type:'scatter',mode:'lines',x,y:kijun,name:'Kijun',line:{color:css('--c-ichi-kijun')||'#60a5fa',width:1.8},hoverinfo:'skip'};
-      const chikou=Array(x.length).fill(null); for(let i=0;i<close.length;i++){ const ii=i-shift; if(ii>=0) chikou[ii]=close[i]; }
-      const chi={type:'scatter',mode:'lines',x,y:chikou,name:'Chikou',line:{color:css('--c-ichi-chikou')||'#93c5fd',width:1.4,dash:'dot'},hoverinfo:'skip'};
-      return [cloudUpTop,cloudUpFill,cloudDnTop,cloudDnFill,spanALine,spanBLine,ten,kij,chi];
-    }
-
-    // Build Plotly layout and traces
-    function buildLayout(base){
-      return Object.assign({}, base, {
-        hovermode:'x unified',
-        hoverlabel:{
-          bgcolor: css('--panel')||'#0b1220',
-          bordercolor: css('--border')||'#2b3548',
-          font:{ color: css('--text')||'#e5e7eb', size:12 }
-        },
-        uirevision:`${state.ticker}|${state.range}|${state.interval}`
-      });
-    }
-
-    // --- Auto Fib helpers ---
-    const FIB_PCTS=[0,0.236,0.382,0.5,0.618,0.786,1];
-    function getVisibleRangeMs(){
-      if(!els.chart) return [NaN,NaN];
-      const L=els.chart._fullLayout||els.chart.layout||{}; const xa=L.xaxis||{};
-      const toMs=v=> new Date(v).getTime();
-      if(Array.isArray(xa.range) && xa.autorange===false){ return [toMs(xa.range[0]), toMs(xa.range[1])]; }
-      const rows=getDisplayRows(); if(!rows.length) return [NaN,NaN];
-      return [rows[0].t, rows[rows.length-1].t];
-    }
-    function computeHiLoInRange(rows,x0,x1){
-      let hi=-Infinity, lo=Infinity, hiIdx=-1, loIdx=-1;
-      for(let i=0;i<rows.length;i++){
-        const t=rows[i].t; if(t<x0||t>x1) continue; const H=rows[i].h, L=rows[i].l;
-        if(Number.isFinite(H) && H>hi){ hi=H; hiIdx=i; }
-        if(Number.isFinite(L) && L<lo){ lo=L; loIdx=i; }
-      }
-      if(!(hi<Infinity && lo>-Infinity) || hi===lo) return null;
-      const dir = (hiIdx>loIdx)? 'up' : 'down';
-      const span = hi-lo;
-      const levels = FIB_PCTS.map(p=> hi - span*p);
-      return {hi,lo,dir,levels};
-    }
-    function makeFibTraces(x0,x1,levels){
-      const x=[new Date(x0), new Date(x1)];
-      const color=css('--c-fib')||'#f59e0b';
-      return levels.map((lv,i)=>{ const pct=Math.round(FIB_PCTS[i]*1000)/10; const label=`${(+lv).toFixed(2)} (${pct}%)`; return ({
-        type:'scatter', mode:'lines+text', x, y:[lv,lv], name:`Fib ${pct}%`,
-        line:{ color, width:1, dash:'dot' }, yaxis:'y', hoverinfo:'skip', showlegend:false,
-        text:[label,label], textposition:['middle left','middle right'], textfont:{color:color, size:10},
-        meta:{kind:'AUTOFIB', pct:FIB_PCTS[i]}
-      }); });
-    }
-    function updateAutoFib(){
-      if(!els.chart) return;
-      if(!q('.chip[data-k="AUTOFIB"]')?.classList.contains('active')) return;
-      const rows=getDisplayRows(); if(!rows.length || !Array.isArray(state.fibIdx) || !state.fibIdx.length) return;
-      const [x0,x1]=getVisibleRangeMs(); if(!Number.isFinite(x0)||!Number.isFinite(x1)) return;
-      const s=computeHiLoInRange(rows,x0,x1); if(!s) return;
-      const xArr=[new Date(x0), new Date(x1)];
-      for(let i=0;i<state.fibIdx.length && i<s.levels.length;i++){
-        const lv=s.levels[i]; const pct=Math.round(FIB_PCTS[i]*1000)/10; const label=`${(+lv).toFixed(2)} (${pct}%)`;
-        try{ Plotly.restyle(els.chart, { x:[xArr], y:[[lv, lv]], text:[[label,label]], textposition:[[ 'middle left','middle right' ]]}, [state.fibIdx[i]]); }catch{}
-      }
-    }
-    const updateAutoFibDebounced = debounce(updateAutoFib, 50);
-
-    async function renderChart(){
-      const rows = state.rows||[]; if(!rows.length||!els.chart) return;
-      const rowsDisplay = getDisplayRows();
-      const traces = [];
-      traces.push(candleTrace(rowsDisplay));
-      // SMA 20/50/200 mapped from aligned series so they span full width
-      const map20 = mapByTs(state.rows, state.smaSeries?.[20]||[]);
-      const map50 = mapByTs(state.rows, state.smaSeries?.[50]||[]);
-      const map200= mapByTs(state.rows, state.smaSeries?.[200]||[]);
-      const xArr = rowsDisplay.map(r=>new Date(r.t));
-      const tSMA20 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map20.get(r.t) ?? null))), name:'SMA 20', line:{ color: css('--c-sma20')||'#22c55e', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA20"]')?.classList.contains('active')||false };
-      const tSMA50 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map50.get(r.t) ?? null))), name:'SMA 50', line:{ color: css('--c-sma50')||'#60a5fa', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA50"]')?.classList.contains('active')||false };
-      const tSMA200= { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map200.get(r.t) ?? null))), name:'SMA 200', line:{ color: css('--c-sma200')||'#f59e0b', width:2.0 }, yaxis:'y', visible: q('.chip[data-k="SMA200"]')?.classList.contains('active')||false };
-      traces.push(tSMA20,tSMA50,tSMA200);
-      // Other overlays
-      const volOn = q('.chip[data-k="VOL"]')?.classList.contains('active')||false; if(volOn) traces.push(volTrace(rowsDisplay));
-      const rsiOn = q('.chip[data-k="RSI"]')?.classList.contains('active')||false; if(rsiOn) traces.push(rsiTrace(rowsDisplay));
-      const macdOn= q('.chip[data-k="MACD"]')?.classList.contains('active')||false; if(macdOn) traces.push(...macdTraces(rowsDisplay));
-      const ichiOn= q('.chip[data-k="ICHI"]')?.classList.contains('active')||false; if(ichiOn) traces.push(...ichiTraces(rowsDisplay));
-
-      // Auto Fib
-      state.fibIdx = [];
-      const fibOn = q('.chip[data-k="AUTOFIB"]')?.classList.contains('active') || false;
-      if (fibOn) {
-        const [vx0, vx1] = (function() {
-          // try current visible range if available, else bounds of rowsDisplay
-          const L = els.chart._fullLayout || els.chart.layout || {};
-          const xa = L.xaxis || {};
-          const toMs = v => new Date(v).getTime();
-          if (Array.isArray(xa.range) && xa.autorange === false) {
-                       return [toMs(xa.range[0]), toMs(xa.range[1])];
-          }
-          if (xArr.length) return [xArr[0].getTime(), xArr[xArr.length - 1].getTime()];
-          return [NaN, NaN];
-        })();
-        const stats = computeHiLoInRange(rowsDisplay, vx0, vx1);
-        if (stats) {
-          const start = traces.length;
-          traces.push(...makeFibTraces(vx0, vx1, stats.levels));
-          state.fibIdx = Array.from({ length: stats.levels.length }, (_, i) => start + i);
-        }
-      }
-
-      const baseLayout = {
-        margin:{l:56,r:24,t:18,b:28},
-        paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
-        showlegend:true, legend:{orientation:'h', y:-0.12},
-        xaxis:{ gridcolor:css('--grid'), showgrid:true, zeroline:false },
-        yaxis:{ gridcolor:css('--grid'), showgrid:true, zeroline:false },
-        yaxis2:{ overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false },
-        yaxis3:{ overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
-        yaxis4:{ overlaying:'y', side:'right', showgrid:false, showticklabels:false },
-        font:{ color:css('--text') }
-      };
-      const layout = buildLayout(baseLayout);
-      await Plotly.react(els.chart, traces, layout, { responsive:true, displayModeBar:false });
-      await fitPriceAxisToCandlesStrict();
-      // ensure Fib aligns to current viewport after first render
-      updateAutoFibDebounced();
-    }
-
-    // Refit y-axis on interactions
-    els.chart?.addEventListener?.('plotly_relayout', (ev)=>{
-      if(ev && (ev['xaxis.range[0]']||ev['xaxis.range[1]']||ev['xaxis.autorange']!==undefined)){
-        setTimeout(fitPriceAxisToCandlesStrict,0);
-        updateAutoFibDebounced();
-      }
-    });
-    /* ---------- Quote + subline (company info) ---------- */
     async function refreshQuoteOnce(){
       try{
         const r = await fetch(`/api/quote?ticker=${encodeURIComponent(state.ticker)}`, { cache:'no-store' }); if(!r.ok) throw 0; const j=await r.json();
@@ -744,32 +515,50 @@
         const changeHTML = Number.isFinite(chg)? `<span style="font-weight:800;color:${col}">${chg>0?'+':''}$${Math.abs(chg).toFixed(2)} (${chg>0?'+':''}${Math.abs(pct).toFixed(2)}%)</span>`:'—';
         els.lastLine.innerHTML = `Last: $${Number.isFinite(price)? price.toFixed(2):'—'} · Change: ${changeHTML}`;
         els.prevCloseLine.textContent = `Yesterday’s Close: ${Number.isFinite(prevClose)? '$'+prevClose.toFixed(2):'—'}`;
+        stampUpdate();
+        computeAndDisplayIntrinsic();
       }catch(e){ console.error('Quote refresh error', e); els.lastLine.innerHTML='Last: — · Change: —'; }
     }
 
     async function getFundamentals(ticker){
-      if(isCrypto(ticker)) return {};
+      if(/^.+-USD$/.test(ticker)) return {}; // skip crypto fundamentals
       try{
-        const mods = 'price,summaryProfile,defaultKeyStatistics,financialData,earningsTrend';
+        const mods = 'price,summaryProfile,defaultKeyStatistics,financialData,earningsTrend,summaryDetail';
         const r = await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(mods)}`);
         if(!r.ok) throw new Error('summary '+r.status);
         const j = await r.json();
         const res = j?.quoteSummary?.result?.[0] || {};
-        const price=res.price||{}, prof=res.summaryProfile||{};
-        const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{};
+        const price=res.price||{}, prof=res.summaryProfile||{}, ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{}, sd=res.summaryDetail||{};
+        // EPS & growth
         const eps = (ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw);
-        let growth=null; const trends=Array.isArray(et.trend)?et.trend:[];
-        const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
-        if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw;
-        const ivGraham = (Number.isFinite(eps) && Number.isFinite(growth)) ? eps * (8.5 + 2 * (growth*100)) : null;
-        return { eps: +eps || null, growth: +growth || null, ivGraham, longName: price.longName || price.shortName || '', sector: prof.sector || '', industry: prof.industry || '', marketCap: price.marketCap?.raw ?? null };
+        let growthEPS = fd.earningsGrowth?.raw; // EPS growth
+        // Use earningsTrend for 5y growth if present
+        const trends=Array.isArray(et.trend)?et.trend:[]; const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y'));
+        const longTermGrowth = fiveY?.growth?.raw ?? fd.growth?.raw ?? growthEPS;
+        // Cashflow & capital structure
+        const freeCashFlow = fd.freeCashflow?.raw; const totalCash = fd.totalCash?.raw; const totalDebt = fd.totalDebt?.raw; const sharesOutstanding = ek.sharesOutstanding?.raw ?? price.sharesOutstanding?.raw;
+        // Dividends
+        const nextDividend = sd.dividendRate?.raw; // approximate next annual dividend
+        const dividendGrowth = sd.dividendRate?.raw && sd.trailingAnnualDividendRate?.raw ? null : null; // placeholder if growth data not provided
+        // Approx WACC (fallback): use 9% if not provided
+        const wacc = 0.09;
+        // AAA yield fallback constant
+        const aaaYield = 0.055;
+        return {
+          eps: _num(eps), growth: _num(longTermGrowth), ivGraham: null,
+          longName: price.longName || price.shortName || '', sector: prof.sector || '', industry: prof.industry || '', marketCap: price.marketCap?.raw ?? null,
+          freeCashFlow:_num(freeCashFlow), totalCash:_num(totalCash), totalDebt:_num(totalDebt), sharesOutstanding:_num(sharesOutstanding),
+          nextDividend:_num(nextDividend), dividendGrowth:_num(dividendGrowth), wacc, growthDCF:_num(longTermGrowth), growthEPS:_num(growthEPS), aaaYield,
+          fcf:_num(freeCashFlow)
+        };
       }catch{ return {}; }
+      function _num(v){ return Number.isFinite(+v)? +v : null; }
     }
 
     async function go(ticker, company){
       CURRENT={...CURRENT,ticker,company};
       els.headline.textContent=`${ticker}${company?' — '+company:''}`;
-      els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent=''; if(els.companyLine) els.companyLine.textContent='';
+      els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent=''; if(els.companyLine) els.companyLine.textContent=''; if(els.updateLine) els.updateLine.textContent='Updated: —';
       try{
         if(!FUNDAMENTALS[ticker]){ try{ FUNDAMENTALS[ticker]=await getFundamentals(ticker); }catch{ FUNDAMENTALS[ticker]={}; } }
         await waitForPlotly();
@@ -777,20 +566,8 @@
         await buildSMAAlignedSeries();
         await renderChart();
         await refreshQuoteOnce();
-        // Intrinsic value & company info line (compute once here)
-        const f = FUNDAMENTALS[ticker] || {};
-        const s50 = state.smaSeries?.[50]?.filter(Number.isFinite).at(-1);
-        const s200= state.smaSeries?.[200]?.filter(Number.isFinite).at(-1);
-        const ivParts=[]; if(Number.isFinite(f.ivGraham)) ivParts.push(f.ivGraham); if(Number.isFinite(s50)&&Number.isFinite(s200)) ivParts.push((s50+s200)/2);
-        const iv = ivParts.length? ivParts.reduce((a,b)=>a+b,0)/ivParts.length : null;
-        els.ivLine.textContent = `Intrinsic Value: ${iv==null? '—' : '$'+fmt(iv)}`;
-        if(els.companyLine){
-          const name = company || f.longName || ticker;
-          const parts=[]; if(f.sector) parts.push(f.sector); if(f.industry) parts.push(f.industry); if(Number.isFinite(f.eps)) parts.push(`EPS ${fmt(f.eps)}`); if(Number.isFinite(f.growth)) parts.push(`Growth ${(f.growth*100).toFixed(1)}%`); if(Number.isFinite(f.ivGraham)) parts.push(`Graham IV $${fmt(f.ivGraham)}`);
-          if(Number.isFinite(f.marketCap)){
-            const mc=f.marketCap; const units=[[1e12,'T'],[1e9,'B'],[1e6,'M'],[1e3,'K']]; let mcDisp='$'+mc.toLocaleString(); for(const [v,u] of units){ if(mc>=v){ mcDisp='$'+(mc/v).toFixed(2)+u; break; } } parts.push('MktCap '+mcDisp); }
-          els.companyLine.innerHTML = `<b>${escapeHTML(name)}</b>${parts.length? ' · '+parts.map(escapeHTML).join(' · '):''}`;
-        }
+        computeAndDisplayIntrinsic();
+        scheduleQuoteAutoRefresh();
       }catch(e){ console.error('Go error', e); els.lastLine.innerHTML='Last: — · Change: —'; }
     }
 
