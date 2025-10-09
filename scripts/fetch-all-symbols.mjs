@@ -73,20 +73,35 @@ function dedupeMerge(base, more){
   return Array.from(m.entries()).map(([s,n])=>[s,n]).sort((a,b)=> a[0].localeCompare(b[0]));
 }
 
-function parseNasdaqTrader(text){
+const statusMap = new Map();
+function putStatus(sym, data){ const k = normalizeSym(sym); const cur = statusMap.get(k) || {}; statusMap.set(k, { ...cur, ...data }); }
+function writeStatusJSON(){
+  const out = {}; for(const [k,v] of statusMap){ out[k] = v; }
+  const p = path.join(root, 'public', 'symbol_status.json');
+  try{ fs.writeFileSync(p, JSON.stringify(out,null,2), 'utf8'); console.log('Wrote status map to', p, Object.keys(out).length, 'symbols'); }catch(e){ console.warn('Failed to write status map', e.message); }
+}
+
+function parseNasdaqTrader(text, exch){
   const lines = text.split(/\r?\n/).filter(Boolean);
   if(!lines.length) return [];
   const header = lines[0].split('|');
   const idxSym = header.findIndex(h=>/^(symbol|act symbol)$/i.test(h));
   const idxName= header.findIndex(h=>/^security name$/i.test(h));
   const idxTest= header.findIndex(h=>/^test issue$/i.test(h));
+  const idxFS  = header.findIndex(h=>/^financial status$/i.test(h));
   const out=[];
   for(let i=1;i<lines.length;i++){
     const L = lines[i];
     if(/file creation time/i.test(L)) continue;
     const parts = L.split('|');
-    const sym = parts[idxSym]||''; const name = parts[idxName]||''; const test = (parts[idxTest]||'').trim().toUpperCase()==='Y';
-    if(!sym || test) continue;
+    const sym = parts[idxSym]||''; const name = parts[idxName]||'';
+    const test = (parts[idxTest]||'').trim().toUpperCase();
+    const fs = (parts[idxFS]||'').trim().toUpperCase();
+    if(!sym) continue;
+    // Skip test issues from CSV, but record status map
+    const isTest = test==='Y';
+    putStatus(sym, { fs, test:isTest?'Y':'N', exch });
+    if(isTest) continue;
     out.push([sym, name]);
   }
   return out;
@@ -100,7 +115,8 @@ async function run(){
     try{
       console.log('Fetching', url);
       const txt = await fetchText(url);
-      const pairs = parseNasdaqTrader(txt);
+      const exch = url.includes('nasdaqlisted')? 'NASDAQ' : 'OTHER';
+      const pairs = parseNasdaqTrader(txt, exch);
       merged = dedupeMerge(merged, pairs);
       console.log('Merged, count=', merged.length);
     }catch(e){ console.warn('Source failed', url, e.message); }
@@ -108,12 +124,8 @@ async function run(){
   // Ensure critical user-specified tickers present
   const ensureSyms = ['UURAF','UUUU','OKLO','BTC-USD','ETH-USD','DOGE-USD'];
   const ensureNameMap = {
-    'UURAF':'Uranium Royalty Corp.',
-    'UUUU':'Energy Fuels Inc.',
-    'OKLO':'Oklo Inc.',
-    'BTC-USD':'Bitcoin USD',
-    'ETH-USD':'Ethereum USD',
-    'DOGE-USD':'Dogecoin USD'
+    'UURAF':'Uranium Royalty Corp.', 'UUUU':'Energy Fuels Inc.', 'OKLO':'Oklo Inc.',
+    'BTC-USD':'Bitcoin USD','ETH-USD':'Ethereum USD','DOGE-USD':'Dogecoin USD'
   };
   // Try to enrich names via Yahoo
   const ensurePairs = [];
@@ -130,6 +142,7 @@ async function run(){
   }
   merged = dedupeMerge(merged, ensurePairs);
   writeCSV(merged);
+  writeStatusJSON();
 }
 
 run().catch(e=>{ console.error(e); process.exit(1); });

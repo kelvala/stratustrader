@@ -1,6 +1,8 @@
 const express = require('express');
 const fetch = require('node-fetch');
 const path = require('path');
+const cron = require('node-cron');
+const { spawn } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -89,4 +91,13 @@ app.get('/api/summary', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  // Nightly symbols refresh at 2:30 AM America/New_York
+  try{
+    cron.schedule('30 2 * * *', () => {
+      console.log('[cron] Running nightly symbols refresh...');
+      const cmd = process.platform === 'win32' ? 'node' : 'node';
+      const child = spawn(cmd, ['scripts/fetch-all-symbols.mjs'], { cwd: __dirname, stdio: 'inherit', env: process.env });
+      child.on('close', (code)=>{ console.log(`[cron] symbols refresh finished with code ${code}`); });
+    }, { timezone: 'America/New_York' });
+  }catch(e){ console.warn('Cron schedule failed', e); }
 });

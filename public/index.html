@@ -636,46 +636,64 @@
     }
     function computeHiLoInRange(rows,x0,x1){
       let hi=-Infinity, lo=Infinity, hiIdx=-1, loIdx=-1;
-      for(let i=0;i<rows.length;i++){
+        },let i=0;i<rows.length;i++){
+        uirevision:`${state.ticker}|${state.range}|${state.interval}`H=r.h, L=r.l;
+      });f(Number.isFinite(H) && H>hi){ hi=H; hiIdx=i; }
+    }   if(Number.isFinite(L) && L<lo){ lo=L; loIdx=i; }
+      }
+    // --- Auto Fib helpers ---nfinity) || hi===lo) return null;
+      const dir = (hiIdx>loIdx)? 'up' : 'down';
+    const FIB_PCTS=[0,0.236,0.382,0.5,0.618,0.786,1];
+    function getVisibleRangeMs(){(p=> hi - span*p);
+      if(!els.chart) return [NaN,NaN];
+      const L=els.chart._fullLayout||els.chart.layout||{}; const xa=L.xaxis||{};
+      const toMs=v=> new Date(v).getTime();
+      if(Array.isArray(xa.range) && xa.autorange === false){ return [toMs(xa.range[0]), toMs(xa.range[1])]; }
+      const rows=getDisplayRows(); if(!rows.length) return [NaN, NaN];
+      return [rows[0].t, rows[rows.length-1].t];.round(FIB_PCTS[i]*1000)/10; const label=`${(+lv).toFixed(2)} (${pct}%)`; return ({
+    }   type:'scatter', mode:'lines+text', x, y:[lv,lv], name:`Fib ${pct}%`,
+    function computeHiLoInRange(rows,x0,x1){ yaxis:'y', hoverinfo:'skip', showlegend:false,
+      let hi=-Infinity, lo=Infinity, hiIdx=-1, loIdx=-1;'middle right'], textfont:{color:color, size:10},
+      for(let i=0;i<rows.length;i++){_PCTS[i]}
         const r=rows[i]; const t=r.t; if(t<x0||t>x1) continue; const H=r.h, L=r.l;
         if(Number.isFinite(H) && H>hi){ hi=H; hiIdx=i; }
         if(Number.isFinite(L) && L<lo){ lo=L; loIdx=i; }
-      }
-      if(!(hi<Infinity && lo>-Infinity) || hi===lo) return null;
-      const dir = (hiIdx>loIdx)? 'up' : 'down';
-      const span = hi-lo;
-      const levels = FIB_PCTS.map(p=> hi - span*p);
-      return {hi,lo,dir,levels};
-    }
-    function makeFibTraces(x0,x1,levels){
-      const x=[new Date(x0), new Date(x1)];
+      }f(!els.chart) return;
+      if(!(hi<Infinity && lo>-Infinity) || hi===lo) return null;ve')) return;
+      const dir = (hiIdx>loIdx)? 'up' : 'down';gth || !Array.isArray(state.fibIdx) || !state.fibIdx.length) return;
+      const span = hi-lo;sibleRangeMs(); if(!Number.isFinite(x0)||!Number.isFinite(x1)) return;
+      const levels = FIB_PCTS.map(p=> hi - span*p);) return;
+      return {hi,lo,dir,levels};new Date(x1)];
+    } for(let i=0;i<state.fibIdx.length && i<s.levels.length;i++){
+    function makeFibTraces(x0,x1,levels){ath.round(FIB_PCTS[i]*1000)/10; const label=`${(+lv).toFixed(2)} (${pct}%)`;
+      const x=[new Date(x0), new Date(x1)];[xArr], y:[[lv, lv]], text:[[label,label]], textposition:[[ 'middle left','middle right' ]]}, [state.fibIdx[i]]); }catch{}
       const color=css('--c-fib')||'#f59e0b';
       return levels.map((lv,i)=>{ const pct=Math.round(FIB_PCTS[i]*1000)/10; const label=`${(+lv).toFixed(2)} (${pct}%)`; return ({
         type:'scatter', mode:'lines+text', x, y:[lv,lv], name:`Fib ${pct}%`,
         line:{ color, width:1, dash:'dot' }, yaxis:'y', hoverinfo:'skip', showlegend:false,
         text:[label,label], textposition:['middle left','middle right'], textfont:{color:color, size:10},
-        meta:{kind:'AUTOFIB', pct:FIB_PCTS[i]}
-      }); });
-    }
-    function updateAutoFib(){
-      if(!els.chart) return;
+        meta:{kind:'AUTOFIB', pct:FIB_PCTS[i]}ngth||!els.chart) return;
+      }); });owsDisplay = getDisplayRows();
+    } const traces = [];
+    function updateAutoFib(){(rowsDisplay));
+      if(!els.chart) return;d from aligned series so they span full width
       if(!q('.chip[data-k="AUTOFIB"]')?.classList.contains('active')) return;
       const rows=getDisplayRows(); if(!rows.length || !Array.isArray(state.fibIdx) || !state.fibIdx.length) return;
       const [x0,x1]=getVisibleRangeMs(); if(!Number.isFinite(x0)||!Number.isFinite(x1)) return;
       const s=computeHiLoInRange(rows,x0,x1); if(!s) return;
-      const xArr=[new Date(x0), new Date(x1)];
-      for(let i=0;i<state.fibIdx.length && i<s.levels.length;i++){
-        const lv=s.levels[i]; const pct=Math.round(FIB_PCTS[i]*1000)/10; const label=`${(+lv).toFixed(2)} (${pct}%)`;
+      const xArr=[new Date(x0), new Date(x1)];ines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map20.get(r.t) ?? null))), name:'SMA 20', line:{ color: css('--c-sma20')||'#22c55e', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA20"]')?.classList.contains('active')||false };
+      for(let i=0;i<state.fibIdx.length && i<s.levels.length;i++){lForward(fillBackward(rowsDisplay.map(r=> map50.get(r.t) ?? null))), name:'SMA 50', line:{ color: css('--c-sma50')||'#60a5fa', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA50"]')?.classList.contains('active')||false };
+        const lv=s.levels[i]; const pct=Math.round(FIB_PCTS[i]*1000)/10; const label=`${(+lv).toFixed(2)} (${pct}%)`;t(r.t) ?? null))), name:'SMA 200', line:{ color: css('--c-sma200')||'#f59e0b', width:2.0 }, yaxis:'y', visible: q('.chip[data-k="SMA200"]')?.classList.contains('active')||false };
         try{ Plotly.restyle(els.chart, { x:[xArr], y:[[lv, lv]], text:[[label,label]], textposition:[[ 'middle left','middle right' ]]}, [state.fibIdx[i]]); }catch{}
-      }
-    }
-    const updateAutoFibDebounced = debounce(updateAutoFib, 50);
-
-    async function renderChart(){
+      }/ Other overlays
+    } const volOn = q('.chip[data-k="VOL"]')?.classList.contains('active')||false; if(volOn) traces.push(volTrace(rowsDisplay));
+    const updateAutoFibDebounced = debounce(updateAutoFib, 50);s('active')||false; if(rsiOn) traces.push(rsiTrace(rowsDisplay));
+      const macdOn= q('.chip[data-k="MACD"]')?.classList.contains('active')||false; if(macdOn) traces.push(...macdTraces(rowsDisplay));
+    async function renderChart(){-k="ICHI"]')?.classList.contains('active')||false; if(ichiOn) traces.push(...ichiTraces(rowsDisplay));
       const rows = state.rows||[]; if(!rows.length||!els.chart) return;
       const rowsDisplay = getDisplayRows();
       const traces = [];
-      traces.push(candleTrace(rowsDisplay));
+      traces.push(candleTrace(rowsDisplay));"]')?.classList.contains('active') || false;
       // SMA 20/50/200 mapped from aligned series so they span full width
       const map20 = mapByTs(state.rows, state.smaSeries?.[20]||[]);
       const map50 = mapByTs(state.rows, state.smaSeries?.[50]||[]);
@@ -684,44 +702,44 @@
       const tSMA20 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map20.get(r.t) ?? null))), name:'SMA 20', line:{ color: css('--c-sma20')||'#22c55e', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA20"]')?.classList.contains('active')||false };
       const tSMA50 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map50.get(r.t) ?? null))), name:'SMA 50', line:{ color: css('--c-sma50')||'#60a5fa', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA50"]')?.classList.contains('active')||false };
       const tSMA200= { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map200.get(r.t) ?? null))), name:'SMA 200', line:{ color: css('--c-sma200')||'#f59e0b', width:2.0 }, yaxis:'y', visible: q('.chip[data-k="SMA200"]')?.classList.contains('active')||false };
-      traces.push(tSMA20,tSMA50,tSMA200);
-      // Other overlays
+      traces.push(tSMA20,tSMA50,tSMA200); || els.chart.layout || {};
+      // Other overlaysxaxis || {};
       const volOn = q('.chip[data-k="VOL"]')?.classList.contains('active')||false; if(volOn) traces.push(volTrace(rowsDisplay));
       const rsiOn = q('.chip[data-k="RSI"]')?.classList.contains('active')||false; if(rsiOn) traces.push(rsiTrace(rowsDisplay));
       const macdOn= q('.chip[data-k="MACD"]')?.classList.contains('active')||false; if(macdOn) traces.push(...macdTraces(rowsDisplay));
       const ichiOn= q('.chip[data-k="ICHI"]')?.classList.contains('active')||false; if(ichiOn) traces.push(...ichiTraces(rowsDisplay));
-
-      // Auto Fib
+          if (xArr.length) return [xArr[0].getTime(), xArr[xArr.length - 1].getTime()];
+      // Auto Fib[NaN, NaN];
       state.fibIdx = [];
       const fibOn = q('.chip[data-k="AUTOFIB"]')?.classList.contains('active') || false;
-
-
-
-
-
-      if (fibOn) {
-        const [vx0, vx1] = (function() {
-          // try current visible range if available, else bounds of rowsDisplay
-          const L = els.chart._fullLayout || els.chart.layout || {};
-          const xa = L.xaxis || {};
-          const toMs = v => new Date(v).getTime();
-          if (Array.isArray(xa.range) && xa.autorange === false) {
-                       return [toMs(xa.range[0]), toMs(xa.range[1])];
-          }
-          if (xArr.length) return [xArr[0].getTime(), xArr[xArr.length - 1].getTime()];
-          return [NaN, NaN];
-        })();
-        const stats = computeHiLoInRange(rowsDisplay, vx0, vx1);
         if (stats) {
           const start = traces.length;
           traces.push(...makeFibTraces(vx0, vx1, stats.levels));
           state.fibIdx = Array.from({ length: stats.levels.length }, (_, i) => start + i);
         }
+      if (fibOn) {
+        const [vx0, vx1] = (function() {
+          // try current visible range if available, else bounds of rowsDisplay
+          const L = els.chart._fullLayout || els.chart.layout || {};
+          const xa = L.xaxis || {};)', plot_bgcolor:'rgba(0,0,0,0)',
+          const toMs = v => new Date(v).getTime();y:-0.12},
+          if (Array.isArray(xa.range) && xa.autorange === false) {alse },
+                       return [toMs(xa.range[0]), toMs(xa.range[1])];e },
+          }is2:{ overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false },
+          if (xArr.length) return [xArr[0].getTime(), xArr[xArr.length - 1].getTime()];abels:false },
+          return [NaN, NaN];'y', side:'right', showgrid:false, showticklabels:false },
+        })();{ color:css('--text') }
+        const stats = computeHiLoInRange(rowsDisplay, vx0, vx1);
+        if (stats) { buildLayout(baseLayout);
+          const start = traces.length;aces, layout, { responsive:true, displayModeBar:false });
+          traces.push(...makeFibTraces(vx0, vx1, stats.levels));
+          state.fibIdx = Array.from({ length: stats.levels.length }, (_, i) => start + i);
+        }ateAutoFibDebounced();
       }
 
-      const baseLayout = {
-        margin:{l:56,r:24,t:18,b:28},
-        paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+      const baseLayout = {eractions
+        margin:{l:56,r:24,t:18,b:28},otly_relayout', (ev)=>{
+        paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',s.autorange']!==undefined)){
         showlegend:true, legend:{orientation:'h', y:-0.12},
         xaxis:{ gridcolor:css('--grid'), showgrid:true, zeroline:false },
         yaxis:{ gridcolor:css('--grid'), showgrid:true, zeroline:false },
@@ -729,122 +747,110 @@
         yaxis3:{ overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
         yaxis4:{ overlaying:'y', side:'right', showgrid:false, showticklabels:false },
         font:{ color:css('--text') }
-      };
-      const layout = buildLayout(baseLayout);
+      };const r = await fetch(`/api/quote?ticker=${encodeURIComponent(state.ticker)}`, { cache:'no-store' }); if(!r.ok) throw 0; const j=await r.json();
+      const layout = buildLayout(baseLayout);]?.price || j?.quoteResponse?.result?.[0] || {};
       await Plotly.react(els.chart, traces, layout, { responsive:true, displayModeBar:false });
-      await fitPriceAxisToCandlesStrict();
-      // ensure Fib aligns to current viewport after first render
-      updateAutoFibDebounced();
-    }
-
-    // Refit y-axis on interactions
-    els.chart?.addEventListener?.('plotly_relayout', (ev)=>{
+      await fitPriceAxisToCandlesStrict();symbols||[]).find(s=>s.t===state.ticker); if(found?.n) compName=found.n; }
+      // ensure Fib aligns to current viewport after first renderchange || '';
+      updateAutoFibDebounced();ency || 'USD';
+    }   const regPrice = +(R.regularMarketPrice?.raw ?? R.regularMarketPrice);
+        const prevCloseRaw = +(R.regularMarketPreviousClose?.raw ?? R.regularMarketPreviousClose);
+    // Refit y-axis on interactionsarketPrice?.raw ?? R.postMarketPrice);
+    els.chart?.addEventListener?.('plotly_relayout', (ev)=>{rketPrice);
       if(ev && (ev['xaxis.range[0]']||ev['xaxis.range[1]']||ev['xaxis.autorange']!==undefined)){
-        setTimeout(fitPriceAxisToCandlesStrict,0);
-        updateAutoFibDebounced();
-      }
-    });
-    /* ---------- Quote + subline (company info) ---------- */
-    async function refreshQuoteOnce(){
-      try{
+        setTimeout(fitPriceAxisToCandlesStrict,0);?? R.preMarketTime) || 0) * 1000;
+        updateAutoFibDebounced();gularMarketTime?.raw ?? R.regularMarketTime) || 0) * 1000;
+      } const rowsAll = state.rows||[];
+    }); const dtfET = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York'});
+    /* ---------- Quote + subline (company info) ---------- */eZone:'America/New_York', hour12:true, hour:'numeric', minute:'2-digit'});
+    async function refreshQuoteOnce(){g/post/pre) actually present (avoid stale 7PM default)
+      try{nst triples=[{p:regPrice,t:regTime,s:'REG'},{p:postPrice,t:postTime,s:'POST'},{p:prePrice,t:preTime,s:'PRE'}]
         const r = await fetch(`/api/quote?ticker=${encodeURIComponent(state.ticker)}`, { cache:'no-store' }); if(!r.ok) throw 0; const j=await r.json();
         const R = j?.quoteSummary?.result?.[0]?.price || j?.quoteResponse?.result?.[0] || {};
-        let compName = R.longName || R.shortName || '';
+        let compName = R.longName || R.shortName || '';'REG'};
         if(!compName){ const found=(state.symbols||[]).find(s=>s.t===state.ticker); if(found?.n) compName=found.n; }
-        const exch = R.exchangeName || R.fullExchangeName || R.exchange || '';
-        const currency = R.currency || 'USD';
-        const regPrice = +(R.regularMarketPrice?.raw ?? R.regularMarketPrice);
+        const exch = R.exchangeName || R.fullExchangeName || R.exchange || '';ows?.at(-2)?.c ?? NaN);
+        const currency = R.currency || 'USD';mber.isFinite(prevClose))? price-prevClose:NaN;
+        const regPrice = +(R.regularMarketPrice?.raw ?? R.regularMarketPrice);!==0)? (chg/prevClose*100):NaN;
         const prevCloseRaw = +(R.regularMarketPreviousClose?.raw ?? R.regularMarketPreviousClose);
-        const postPrice = +(R.postMarketPrice?.raw ?? R.postMarketPrice);
-        const prePrice  = +(R.preMarketPrice?.raw ?? R.preMarketPrice);
-        const postTime  = +((R.postMarketTime?.raw ?? R.postMarketTime) || 0) * 1000;
-        const preTime   = +((R.preMarketTime?.raw ?? R.preMarketTime) || 0) * 1000;
-        const regTime   = +((R.regularMarketTime?.raw ?? R.regularMarketTime) || 0) * 1000;
-        const rowsAll = state.rows||[];
-        const dtfET = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York'});
+        const postPrice = +(R.postMarketPrice?.raw ?? R.postMarketPrice);e}` : state.ticker;
+        const prePrice  = +(R.preMarketPrice?.raw ?? R.preMarketPrice);.range} · ${state.interval}`,`Session: ${sessLabel}`].filter(Boolean).join(' • ');
+        const postTime  = +((R.postMarketTime?.raw ?? R.postMarketTime) || 0) * 1000;'#999');
+        const preTime   = +((R.preMarketTime?.raw ?? R.preMarketTime) || 0) * 1000;r:${col}">${chg>0?'+':''}$${Math.abs(chg).toFixed(2)} (${chg>0?'+':''}${Math.abs(pct).toFixed(2)}%)</span>`:'—';
+        const regTime   = +((R.regularMarketTime?.raw ?? R.regularMarketTime) || 0) * 1000;trade time
+        const rowsAll = state.rows||[]; $${Number.isFinite(price)? price.toFixed(2):'—'} · Change: ${changeHTML} · ${tsDisp}`;
+        const dtfET = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York'});se)? '$'+prevClose.toFixed(2):'—'}`;
         const dtfETTime = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York', hour12:true, hour:'numeric', minute:'2-digit'});
-        // pick freshest timestamp (reg/post/pre) actually present (avoid stale 7PM default)
+        // pick freshest timestamp (reg/post/pre) actually present (avoid stale 7PM default)Change: —'; }
         const triples=[{p:regPrice,t:regTime,s:'REG'},{p:postPrice,t:postTime,s:'POST'},{p:prePrice,t:preTime,s:'PRE'}]
           .filter(x=>Number.isFinite(x.p)&&x.t>0 && x.t < Date.now()+5*60*1000) // reject absurd future times
-          .sort((a,b)=>b.t-a.t);
-        const best=triples[0]||{p:regPrice,t:regTime,s:'REG'};
+          .sort((a,b)=>b.t-a.t);Display(){
+        const best=triples[0]||{p:regPrice,t:regTime,s:'REG'};NTALS[t]||{};
         const price = Number.isFinite(best.p)? best.p : (state.rows?.at(-1)?.c ?? NaN);
         let prevClose = Number.isFinite(prevCloseRaw)? prevCloseRaw : (state.rows?.at(-2)?.c ?? NaN);
         const chg=(Number.isFinite(price)&&Number.isFinite(prevClose))? price-prevClose:NaN;
         const pct=(Number.isFinite(chg)&&Number.isFinite(prevClose)&&prevClose!==0)? (chg/prevClose*100):NaN;
         const sessLabel = best.s==='PRE'?'Pre‑Market': best.s==='POST'?'After‑Hours':'Regular';
         els.headline.textContent = compName? `${state.ticker} — ${compName}` : state.ticker;
-        if(els.subInfo) els.subInfo.textContent=[exch,currency,`${state.range} · ${state.interval}`,`Session: ${sessLabel}`].filter(Boolean).join(' • ');
+        // Update status badge (load map once lazily)
+        try{ await loadSymbolStatus(); }catch{}nchor*0.4; else if(Number.isFinite(graham)) iv=graham; else if(Number.isFinite(anchor)) iv=anchor;
+        let warningFromQuote = '';
+        const shortName = (R.shortName||R.shortname||'');
+        if(shortName && /\*/.test(shortName)) warningFromQuote = 'Issuer flag present (*)';
+        renderStatusBadge(state.ticker, { warningFromQuote });ce(),60000); }
+        if(els.subInfo) els.subInfo.textContent=[exch,currency,`${state.range} • ${state.interval}`,`Session: ${sessLabel}`].filter(Boolean).join(' • ');
         const col = chg>0? css('--c-up') : chg<0? css('--c-down') : (css('--muted')||'#999');
-        const changeHTML = Number.isFinite(chg)? `<span style="font-weight:800;color:${col}">${chg>0?'+':''}$${Math.abs(chg).toFixed(2)} (${chg>0?'+':''}${Math.abs(pct).toFixed(2)}%)</span>`:'—';
-        const tsDisp = dtfETTime.format(new Date())+' ET'; // show refresh time, not stale trade time
-        els.lastLine.innerHTML = `Last: $${Number.isFinite(price)? price.toFixed(2):'—'} · Change: ${changeHTML} · ${tsDisp}`;
+        const changeHTML = Number.isFinite(chg)? `<span style="font-weight:800;color:${col}">${chg>0?'+':''}$${Math.abs(chg).toFixed(2)} (${chg>0?'+':''}${Math.abs(pct).toFixed(2)}%)</span>`:'—'; CURRENT={...CURRENT,ticker,company};
+        const tsDisp = dtfETTime.format(new Date())+' ET'; // show refresh time, not stale trade time      els.headline.textContent=`${ticker}${company?' — '+company:''}`;
+        els.lastLine.innerHTML = `Last: $${Number.isFinite(price)? price.toFixed(2):'—'} · Change: ${changeHTML} · ${tsDisp}`; els.prevCloseLine.textContent=''; els.ivLine.textContent=''; if(els.companyLine) els.companyLine.textContent='';
         els.prevCloseLine.textContent = `Yesterday’s Close: ${Number.isFinite(prevClose)? '$'+prevClose.toFixed(2):'—'}`;
-        computeIntrinsicAndDisplay();
+        els.ivLine.textContent = `Intrinsic Value: ${Number.isFinite(iv)? '$'+fmt(iv) : '—'}`;als(ticker); }catch{ FUNDAMENTALS[ticker]={}; } }
       }catch(e){ console.error('Quote refresh error', e); els.lastLine.innerHTML='Last: — · Change: —'; }
-    }
-
+    }r, state.range, state.interval); state.rows = rows;
+ await buildSMAAlignedSeries();
     function computeIntrinsicAndDisplay(){
       const t = state.ticker; if(!t) return; const f = FUNDAMENTALS[t]||{};
       let graham=null; if(Number.isFinite(f.eps) && Number.isFinite(f.growth)){
         const gPct = f.growth>3? f.growth : f.growth*100; // treat <3 as fraction
         graham = f.eps * (8.5 + 2 * gPct);
-      }
-      const s50 = state.smaSeries?.[50]?.filter(Number.isFinite).at(-1);
-      const s200= state.smaSeries?.[200]?.filter(Number.isFinite).at(-1);
-      let anchor = (Number.isFinite(s50) && Number.isFinite(s200)) ? (s50+s200)/2 : (Number.isFinite(s50)? s50 : (Number.isFinite(s200)? s200 : null));
+      }   if(els.companyLine){
+      const s50 = state.smaSeries?.[50]?.filter(Number.isFinite).at(-1);          const name = company || f.longName || ticker;
+      const s200= state.smaSeries?.[200]?.filter(Number.isFinite).at(-1);sh(`EPS ${fmt(f.eps)}`); if(Number.isFinite(f.growth)) parts.push(`Growth ${( (f.growth>3? f.growth : f.growth*100) ).toFixed(1)}%`); if(Number.isFinite(f.ivGraham)) parts.push(`Graham IV $${fmt(f.ivGraham)}`);
+      let anchor = (Number.isFinite(s50) && Number.isFinite(s200)) ? (s50+s200)/2 : (Number.isFinite(s50)? s50 : (Number.isFinite(s200)? s200 : null));          els.companyLine.innerHTML = `<b>${escapeHTML(name)}</b>${parts.length? ' · '+parts.map(escapeHTML).join(' · '):''}`;
       let iv=null; if(Number.isFinite(graham) && Number.isFinite(anchor)) iv = graham*0.6 + anchor*0.4; else if(Number.isFinite(graham)) iv=graham; else if(Number.isFinite(anchor)) iv=anchor;
-      els.ivLine.textContent = `Intrinsic Value: ${Number.isFinite(iv)? '$'+fmt(iv) : '—'}`;
+      els.ivLine.textContent = `Intrinsic Value: ${Number.isFinite(iv)? '$'+fmt(iv) : '—'}`; e); els.lastLine.innerHTML='Last: — · Change: —'; }
     }
 
-    function scheduleQuoteAutoRefresh(){ clearInterval(state.quoteTimer); state.quoteTimer=setInterval(()=>refreshQuoteOnce(),60000); }
+    function scheduleQuoteAutoRefresh(){ clearInterval(state.quoteTimer); state.quoteTimer=setInterval(()=>refreshQuoteOnce(),60000); }------- Data fetch ---------- */
 
-    async function go(ticker, company){
+    async function go(ticker, company){rForFetch(ticker);
       CURRENT={...CURRENT,ticker,company};
-      els.headline.textContent=`${ticker}${company?' — '+company:''}`;
-      els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent=''; if(els.companyLine) els.companyLine.textContent='';
+      els.headline.textContent=`${ticker}${company?' — '+company:''}`;art?ticker=${encodeURIComponent(T)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`, { cache:'no-store' });
+      els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent=''; if(els.companyLine) els.companyLine.textContent='';ait r.json(); const res=j?.chart?.result?.[0]; if(res){ const ts=res.timestamp||[]; const qd=res.indicators?.quote?.[0]||{}; const rows=[]; for(let i=0;i<ts.length;i++){ const c=qd.close?.[i]; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:qd.open?.[i], h:qd.high?.[i], l:qd.low?.[i], c:+c, v:qd.volume?.[i]||0 }); } return rows; } }
       try{
-        if(!FUNDAMENTALS[ticker]){ try{ FUNDAMENTALS[ticker]=await getFundamentals(ticker); }catch{ FUNDAMENTALS[ticker]={}; } }
+        if(!FUNDAMENTALS[ticker]){ try{ FUNDAMENTALS[ticker]=await getFundamentals(ticker); }catch{ FUNDAMENTALS[ticker]={}; } }iled');
         await waitForPlotly();
         const rows = await fetchRows(ticker, state.range, state.interval); state.rows = rows;
-        await buildSMAAlignedSeries();
-        await renderChart();
+        await buildSMAAlignedSeries();nder(){
+        await renderChart();tate.range, state.interval); await buildSMAAlignedSeries(); await renderChart(); refreshQuoteOnce(); }
         await refreshQuoteOnce();
         computeIntrinsicAndDisplay();
         scheduleQuoteAutoRefresh();
         const f = FUNDAMENTALS[ticker] || {};
-        if(els.companyLine){
-          const name = company || f.longName || ticker;
-          const parts=[]; if(f.sector) parts.push(f.sector); if(f.industry) parts.push(f.industry); if(Number.isFinite(f.eps)) parts.push(`EPS ${fmt(f.eps)}`); if(Number.isFinite(f.growth)) parts.push(`Growth ${( (f.growth>3? f.growth : f.growth*100) ).toFixed(1)}%`); if(Number.isFinite(f.ivGraham)) parts.push(`Graham IV $${fmt(f.ivGraham)}`);
-          els.companyLine.innerHTML = `<b>${escapeHTML(name)}</b>${parts.length? ' · '+parts.map(escapeHTML).join(' · '):''}`;
-        }
-      }catch(e){ console.error('Go error', e); els.lastLine.innerHTML='Last: — · Change: —'; }
-    }
+        if(els.companyLine){ls.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; const t=sanitizeTicker(raw); if(!t){ els.input.focus(); return; } state.ticker=t; localStorage.setItem('lastTicker', t); hideAC(); loadAndRender(); });
+          const name = company || f.longName || ticker;    els.input?.addEventListener('input', (e)=>{ updateAC(e.target.value); });
+          const parts=[]; if(f.sector) parts.push(f.sector); if(f.industry) parts.push(f.industry); if(Number.isFinite(f.eps)) parts.push(`EPS ${fmt(f.eps)}`); if(Number.isFinite(f.growth)) parts.push(`Growth ${( (f.growth>3? f.growth : f.growth*100) ).toFixed(1)}%`); if(Number.isFinite(f.ivGraham)) parts.push(`Graham IV $${fmt(f.ivGraham)}`); (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ hideAC(); return;} if(!state.acMatches.length){ if(e.key==='Enter'){ els.searchBtn?.click(); } return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
+          els.companyLine.innerHTML = `<b>${escapeHTML(name)}</b>${parts.length? ' · '+parts.map(escapeHTML).join(' · '):''}`;st it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });
+        }{ state.range=els.timeSel.value; loadAndRender(); });
+      }catch(e){ console.error('Go error', e); els.lastLine.innerHTML='Last: — · Change: —'; }eqSel?.addEventListener('change', ()=>{ state.interval=els.freqSel.value; loadAndRender(); });
+    }hip.classList.contains('active')?'true':'false'); renderChart(); });
 
     /* ---------- Data fetch ---------- */
-    async function fetchRows(ticker, range, interval){
-      const T = normalizeTickerForFetch(ticker);
-      try{
+    async function fetchRows(ticker, range, interval){ymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); scheduleQuoteAutoRefresh(); })();
+      const T = normalizeTickerForFetch(ticker););
+      try{  </script>
         const r = await fetch(`/api/chart?ticker=${encodeURIComponent(T)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`, { cache:'no-store' });
-        if(r.ok){ const j=await r.json(); const res=j?.chart?.result?.[0]; if(res){ const ts=res.timestamp||[]; const qd=res.indicators?.quote?.[0]||{}; const rows=[]; for(let i=0;i<ts.length;i++){ const c=qd.close?.[i]; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:qd.open?.[i], h:qd.high?.[i], l:qd.low?.[i], c:+c, v:qd.volume?.[i]||0 }); } return rows; } }
-      }catch{}
-      throw new Error('chart fetch failed');
-    }
-
-    async function loadAndRender(){
-      try{ state.rows = await fetchRows(state.ticker, state.range, state.interval); await buildSMAAlignedSeries(); await renderChart(); refreshQuoteOnce(); }
-      catch(e){ console.error('Chart error', e); els.lastLine.innerHTML='Last: — · Change: —'; if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)'; }
-    }
-
-    // UI wiring (patched search + AC close)
-    els.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; const t=sanitizeTicker(raw); if(!t){ els.input.focus(); return; } state.ticker=t; localStorage.setItem('lastTicker', t); hideAC(); loadAndRender(); });
-    els.input?.addEventListener('input', (e)=>{ updateAC(e.target.value); });
-    els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ hideAC(); return;} if(!state.acMatches.length){ if(e.key==='Enter'){ els.searchBtn?.click(); } return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
-    els.list?.addEventListener('mousedown', (e)=>{ const it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });
-    els.timeSel?.addEventListener('change', ()=>{ state.range=els.timeSel.value; loadAndRender(); });
-    els.freqSel?.addEventListener('change', ()=>{ state.interval=els.freqSel.value; loadAndRender(); });
-    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
-    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(updateAutoFibDebounced, 0); } });
+        if(r.ok){ const j=await r.json(); const res=j?.chart?.result?.[0]; if(res){ const ts=res.timestamp||[]; const qd=res.indicators?.quote?.[0]||{}; const rows=[]; for(let i=0;i<ts.length;i++){ const c=qd.close?.[i]; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:qd.open?.[i], h:qd.high?.[i], l:qd.low?.[i], c:+c, v:qd.volume?.[i]||0 }); } return rows; } }      }catch{}      throw new Error('chart fetch failed');    }    async function loadAndRender(){      try{ state.rows = await fetchRows(state.ticker, state.range, state.interval); await buildSMAAlignedSeries(); await renderChart(); refreshQuoteOnce(); }      catch(e){ console.error('Chart error', e); els.lastLine.innerHTML='Last: — · Change: —'; if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)'; }    }    // UI wiring (patched search + AC close)    els.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; const t=sanitizeTicker(raw); if(!t){ els.input.focus(); return; } state.ticker=t; localStorage.setItem('lastTicker', t); hideAC(); loadAndRender(); });    els.input?.addEventListener('input', (e)=>{ updateAC(e.target.value); });    els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ hideAC(); return;} if(!state.acMatches.length){ if(e.key==='Enter'){ els.searchBtn?.click(); } return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });    els.list?.addEventListener('mousedown', (e)=>{ const it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });    els.timeSel?.addEventListener('change', ()=>{ state.range=els.timeSel.value; loadAndRender(); });    els.freqSel?.addEventListener('change', ()=>{ state.interval=els.freqSel.value; loadAndRender(); });    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(updateAutoFibDebounced, 0); } });
 
     (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); scheduleQuoteAutoRefresh(); })();
   })();
