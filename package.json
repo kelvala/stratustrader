@@ -5,7 +5,8 @@
   "license": "MIT",
   "engines": { "node": ">=18" },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "symbols": "node ./scripts/fetch-all-symbols.mjs"
   },
   "dependencies": {
     "express": "^4.21.2",
