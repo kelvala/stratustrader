@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.042</title>
+<title>Stock Analyzer v.043</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -195,6 +195,15 @@
   /* Toast */
   #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(40px);background:var(--panel);color:var(--text);border:1px solid var(--border);padding:10px 14px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:4000;box-shadow:0 6px 24px -2px rgba(0,0,0,.45)}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* Market Overview mini-cards */
+  .mkt-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0}
+  @media (max-width:980px){ .mkt-row{grid-template-columns:1fr;gap:10px} }
+  .mkt-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .mkt-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .mkt-title{font-weight:900;letter-spacing:.4px}
+  .mkt-chg{font-weight:900}
+  .mkt-chart{height:180px}
 </style>
 </head>
 <body>
@@ -229,6 +238,22 @@
         <div id="ivLine">Intrinsic Value: —</div>
       </div>
       <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
+    </div>
+
+    <!-- Market Overview (auto-updating) -->
+    <div id="mktRow" class="mkt-row" aria-label="Market overview">
+      <div class="mkt-card">
+        <div class="mkt-head"><span class="mkt-title">DOW</span><span id="mkt-dji-chg" class="mkt-chg">—</span></div>
+        <div id="mkt-dji" class="mkt-chart"></div>
+      </div>
+      <div class="mkt-card">
+        <div class="mkt-head"><span class="mkt-title">NASDAQ</span><span id="mkt-ixic-chg" class="mkt-chg">—</span></div>
+        <div id="mkt-ixic" class="mkt-chart"></div>
+      </div>
+      <div class="mkt-card">
+        <div class="mkt-head"><span class="mkt-title">S&P 500</span><span id="mkt-gspc-chg" class="mkt-chg">—</span></div>
+        <div id="mkt-gspc" class="mkt-chart"></div>
+      </div>
     </div>
 
     <!-- Chart card -->
@@ -500,6 +525,8 @@
       const sec = sym.filter(r=> !pri.includes(r) && (contains(r)));
       const name = sym.filter(r=> !pri.includes(r) && !sec.includes(r) && nameHits(r));
       const matches=[...pri,...sec,...name];
+      // Add virtual crypto suggestion (e.g., DOGE -> DOGE-USD) when not present
+      if(!matches.some(m=>m.t===sAlt) && /[A-Z]{2,8}/.test(s) ){ matches.unshift({t:sAlt, n:'Crypto vs USD'}); }
       if(!matches.length){ els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">No matches</div>'; els.list.classList.add('show'); state.acMatches=[]; state.acIndex=-1; return; }
       state.acMatches=matches; state.acIndex=0; renderAC(); }
     function pickAC(i){ if(!state.acMatches?.length) return; const it=state.acMatches[i]; if(!it) return; els.input.value=it.t; hideAC(); }
@@ -538,6 +565,19 @@
           const sym=(parts[0]||'').trim().toUpperCase(); if(!sym) continue; const name=parts.slice(1).join(' ').replace(/\s*\|\s*/g,' ').trim();
           out.push({ t:sym, n:name });
         }
+        // Ensure common cryptos and BBBY are present even if CSV lacks them
+        const ensure=(t,n)=>{ if(!out.some(x=>x.t===t)) out.unshift({t,n}); };
+        ensure('BTC-USD','Bitcoin (USD)');
+        ensure('ETH-USD','Ethereum (USD)');
+        ensure('SOL-USD','Solana (USD)');
+        ensure('DOGE-USD','Dogecoin (USD)');
+        ensure('XRP-USD','XRP (USD)');
+        ensure('ADA-USD','Cardano (USD)');
+        ensure('LTC-USD','Litecoin (USD)');
+        ensure('BCH-USD','Bitcoin Cash (USD)');
+        ensure('BNB-USD','Binance Coin (USD)');
+        ensure('SHIB-USD','Shiba Inu (USD)');
+        ensure('BBBY','Bed Bath & Beyond (delisted)');
         state.symbols = out;
       }catch{ state.symbols=[]; }
       if(els.input && els.input.value) updateAC(els.input.value);
@@ -856,7 +896,62 @@
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(updateAutoFibDebounced, 0); } });
 
-    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); scheduleQuoteAutoRefresh(); })();
+    /* ---------- Market Overview minis (DOW / NASDAQ / S&P) ---------- */
+    const MKT = [
+      { id:'dji',  elId:'mkt-dji',  chgId:'mkt-dji-chg',  sym:'^DJI',  title:'DOW' },
+      { id:'ixic', elId:'mkt-ixic', chgId:'mkt-ixic-chg', sym:'^IXIC', title:'NASDAQ' },
+      { id:'gspc', elId:'mkt-gspc', chgId:'mkt-gspc-chg', sym:'^GSPC', title:'S&P 500' }
+    ];
+    function prevCloseFromRows(rows){
+      if(!rows||!rows.length) return null;
+      const tz='America/New_York';
+      const toDay=(ms)=> new Date(new Date(ms).toLocaleString('en-US',{timeZone:tz})).toDateString();
+      const lastDay = toDay(rows[rows.length-1].t);
+      for(let i=rows.length-2;i>=0;i--){ if(toDay(rows[i].t)!==lastDay) return rows[i].c ?? null; }
+      return null;
+    }
+    function mktLayout(prev){
+      const grid = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim()||'#283044';
+      return {
+        margin:{l:44,r:8,t:8,b:20},
+        paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+        xaxis:{showgrid:true,gridcolor:grid, tickfont:{size:10}},
+        yaxis:{showgrid:true,gridcolor:grid, zeroline:false, tickfont:{size:10}, side:'right'},
+        showlegend:false,
+        shapes: prev!=null ? [{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:prev,y1:prev,line:{color:'#ef4444',dash:'dot',width:1}}] : []
+      };
+    }
+    function mktCandle(rows){
+      return {
+        type:'candlestick',
+        x: rows.map(r=>new Date(r.t)),
+        open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c),
+        increasing:{ line:{ color: getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a', width:1.6 } },
+        decreasing:{ line:{ color: getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626', width:1.6 } },
+        hovertemplate:'%{x|%I:%M %p}<br>O %{open:.2f} · H %{high:.2f}<br>L %{low:.2f} · C %{close:.2f}<extra></extra>'
+      };
+    }
+    async function renderMktCard(card){
+      const el = document.getElementById(card.elId); if(!el) return;
+      try{
+        const rows = await fetchRows(card.sym, '1d', '5m');
+        if(!rows?.length) return;
+        const prev = prevCloseFromRows(rows) ?? rows.at(-2)?.c ?? null;
+        const last = rows.at(-1)?.c;
+        const chg = (Number.isFinite(last)&&Number.isFinite(prev)) ? last-prev : NaN;
+        const pct = (Number.isFinite(last)&&Number.isFinite(prev)&&prev!==0) ? (chg/prev*100) : NaN;
+        const col = chg>0? (getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a') : chg<0? (getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626') : '#cbd5e1';
+        const chgEl = document.getElementById(card.chgId); if(chgEl){ chgEl.style.color=col; chgEl.textContent = Number.isFinite(chg)? `${chg>0?'+':''}${chg.toFixed(2)} (${chg>0?'+':''}${pct.toFixed(2)}%)`:'—'; }
+        const layout = mktLayout(prev);
+        await Plotly.react(el, [mktCandle(rows)], layout, {displayModeBar:false, responsive:true});
+      }catch(e){ /* ignore */ }
+    }
+    async function renderAllMkt(){ await Promise.all(MKT.map(renderMktCard)); }
+    let mktTimer=null; function scheduleMkt(){ clearInterval(mktTimer); mktTimer=setInterval(renderAllMkt, 60000); }
+    window.addEventListener('resize', ()=>{ for(const c of MKT){ const el=document.getElementById(c.elId); if(el) try{ Plotly.Plots.resize(el); }catch{} } });
+
+    // Boot
+    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); scheduleQuoteAutoRefresh(); renderAllMkt(); scheduleMkt(); })();
   })();
   </script>
 </body>
