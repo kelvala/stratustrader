@@ -500,21 +500,26 @@
     const $all = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
     const sanitizeTicker = s => String(s||'').split('|')[0].trim().toUpperCase();
     const normalizeTickerForFetch = t => sanitizeTicker(t).replace(/\s+/g,'').replace(/\.([A-Z0-9]{1,3})$/,'-$1'); // BRK.B -> BRK-B, etc.
+    // Restrict -USD behavior to known crypto bases only
+    const CRYPTO_BASE = new Set(['BTC','ETH','SOL','DOGE','XRP','ADA','LTC','BCH','BNB','SHIB']);
+    function isCryptoBase(sym){ return CRYPTO_BASE.has(sym); }
     function hideAC(){ if(els.list){ els.list.classList.remove('show'); els.list.innerHTML=''; } state.acMatches=[]; state.acIndex=-1; }
     function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const html=items.slice(0,60).map((o,i)=>`<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${o.n||''}</span></div>`).join(''); els.list.innerHTML=html; els.list.classList.add('show'); }
     function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ hideAC(); return; } // lazy retry symbols load if empty
       if(!state.symbols.length && state.symbolsTried>0){ loadSymbols(true); }
       const sym=state.symbols||[]; if(!sym.length){ // show loading placeholder
         els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">Loading symbols…</div>'; els.list.classList.add('show'); return; }
-      // Normalized matching: treat '.' and '-' as equivalent (BRK.B ~ BRK-B), and allow BTC -> BTC-USD
+      // Normalized matching: treat '.' and '-' as equivalent (BRK.B ~ BRK-B). Only allow BTC->BTC-USD for crypto bases.
       const sN = s.replace(/\./g,'-');
-      const sAlt = /-USD$/.test(sN) ? sN.replace(/-USD$/,'') : sN+'-USD';
+      const base = sN.replace(/-USD$/,'');
+      const allowUSDAlt = isCryptoBase(base);
+      const sAlt = allowUSDAlt ? (/-USD$/.test(sN) ? base : (base+'-USD')) : sN; // only meaningful if crypto
       const escape = v=> v.replace(/[-/\\^$*+?.()|[\]{}]/g,'\\$&');
       const re = new RegExp('^'+escape(sN));
-      const reAlt = new RegExp('^'+escape(sAlt));
+      const reAlt = allowUSDAlt ? new RegExp('^'+escape(sAlt)) : null;
       const starts = r=>{
         const t=r.t||''; const tD=t.replace(/-/g,'.'); const tN=t.replace(/\./g,'-');
-        return re.test(t) || re.test(tN) || re.test(tD) || reAlt.test(t) || reAlt.test(tN);
+        return re.test(t) || re.test(tN) || re.test(tD) || (reAlt ? (reAlt.test(t)||reAlt.test(tN)) : false);
       };
       const contains = r=>{
         const t=r.t||''; const tD=t.replace(/-/g,'.'); const tN=t.replace(/\./g,'-');
@@ -525,8 +530,10 @@
       const sec = sym.filter(r=> !pri.includes(r) && (contains(r)));
       const name = sym.filter(r=> !pri.includes(r) && !sec.includes(r) && nameHits(r));
       const matches=[...pri,...sec,...name];
-      // Add virtual crypto suggestion (e.g., DOGE -> DOGE-USD) when not present
-      if(!matches.some(m=>m.t===sAlt) && /[A-Z]{2,8}/.test(s) ){ matches.unshift({t:sAlt, n:'Crypto vs USD'}); }
+      // Only add a virtual -USD suggestion for known crypto bases
+      if(allowUSDAlt && !matches.some(m=>m.t===sAlt)){
+        matches.unshift({t:sAlt, n:'Crypto vs USD'});
+      }
       if(!matches.length){ els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">No matches</div>'; els.list.classList.add('show'); state.acMatches=[]; state.acIndex=-1; return; }
       state.acMatches=matches; state.acIndex=0; renderAC(); }
     function pickAC(i){ if(!state.acMatches?.length) return; const it=state.acMatches[i]; if(!it) return; els.input.value=it.t; hideAC(); }
@@ -887,7 +894,13 @@
     }
 
     // UI wiring (patched search + AC close)
-    els.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; const t=sanitizeTicker(raw); if(!t){ els.input.focus(); return; } state.ticker=t; localStorage.setItem('lastTicker', t); hideAC(); loadAndRender(); });
+    els.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; let t=sanitizeTicker(raw); if(!t){ els.input.focus(); return; }
+      // Strip -USD if user typed it for a non-crypto base (e.g., ANET-USD -> ANET)
+      if(/-USD$/.test(t)){
+        const base = t.replace(/-USD$/,'');
+        if(!isCryptoBase(base)) t = base;
+      }
+      state.ticker=t; localStorage.setItem('lastTicker', t); hideAC(); loadAndRender(); });
     els.input?.addEventListener('input', (e)=>{ updateAC(e.target.value); });
     els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ hideAC(); return;} if(!state.acMatches.length){ if(e.key==='Enter'){ els.searchBtn?.click(); } return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
     els.list?.addEventListener('mousedown', (e)=>{ const it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });
