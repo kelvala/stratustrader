@@ -915,14 +915,23 @@
       { id:'ixic', elId:'mkt-ixic', chgId:'mkt-ixic-chg', sym:'^IXIC', title:'NASDAQ' },
       { id:'gspc', elId:'mkt-gspc', chgId:'mkt-gspc-chg', sym:'^GSPC', title:'S&P 500' }
     ];
-    function prevCloseFromRows(rows){
-      if(!rows||!rows.length) return null;
-      const tz='America/New_York';
-      const toDay=(ms)=> new Date(new Date(ms).toLocaleString('en-US',{timeZone:tz})).toDateString();
-      const lastDay = toDay(rows[rows.length-1].t);
-      for(let i=rows.length-2;i>=0;i--){ if(toDay(rows[i].t)!==lastDay) return rows[i].c ?? null; }
-      return null;
+
+    // NEW: helpers so minis keep last completed session after-hours
+    const toETDay = (ms)=> new Date(new Date(ms).toLocaleString('en-US',{ timeZone:'America/New_York' })).toDateString();
+    const getMktCache = (id)=>{ try{ return JSON.parse(localStorage.getItem('mkt:'+id)||'null'); }catch{ return null; } };
+    const setMktCache = (id,payload)=>{ try{ localStorage.setItem('mkt:'+id, JSON.stringify(payload)); }catch{} };
+    function lastCompletedSession(rows){
+      if(!rows?.length) return null;
+      const by = new Map();
+      for(const r of rows){ const k = toETDay(r.t); (by.get(k) || by.set(k, []).get(k)).push(r); }
+      const days = Array.from(by.values());
+      let k = days.length - 1; while(k>=0 && !(days[k]?.length)) k--; if(k<0) return null;
+      const sessionRows = days[k];
+      let prevClose = null; for(let j=k-1;j>=0;j--){ const rr = days[j]; if(rr?.length){ prevClose = rr.at(-1)?.c ?? null; break; } }
+      const lastClose = sessionRows.at(-1)?.c ?? null;
+      return { sessionRows, prevClose, lastClose };
     }
+
     function mktLayout(prev){
       const grid = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim()||'#283044';
       return {
@@ -947,22 +956,37 @@
     async function renderMktCard(card){
       const el = document.getElementById(card.elId); if(!el) return;
       try{
-        const rows = await fetchRows(card.sym, '1d', '5m');
-        if(!rows?.length) return;
-        const prev = prevCloseFromRows(rows) ?? rows.at(-2)?.c ?? null;
-        const last = rows.at(-1)?.c;
-        const chg = (Number.isFinite(last)&&Number.isFinite(prev)) ? last-prev : NaN;
-        const pct = (Number.isFinite(last)&&Number.isFinite(prev)&&prev!==0) ? (chg/prev*100) : NaN;
+        // Wider window so we can always select a completed day
+        const rows5d = await fetchRows(card.sym, '5d', '5m');
+        const sess = lastCompletedSession(rows5d);
+        if(!sess) throw new Error('no session');
+        const { sessionRows, prevClose, lastClose } = sess;
+        const chg = (Number.isFinite(lastClose)&&Number.isFinite(prevClose)) ? lastClose - prevClose : NaN;
+        const pct = (Number.isFinite(lastClose)&&Number.isFinite(prevClose)&&prevClose!==0) ? (chg/prevClose*100) : NaN;
         const col = chg>0? (getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a') : chg<0? (getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626') : '#cbd5e1';
-        const chgEl = document.getElementById(card.chgId); if(chgEl){ chgEl.style.color=col; chgEl.textContent = Number.isFinite(chg)? `${chg>0?'+':''}${chg.toFixed(2)} (${chg>0?'+':''}${pct.toFixed(2)}%)`:'—'; }
-        const layout = mktLayout(prev);
-        await Plotly.react(el, [mktCandle(rows)], layout, {displayModeBar:false, responsive:true});
-      }catch(e){ /* ignore */ }
+        const chgEl = document.getElementById(card.chgId);
+        if(chgEl){ chgEl.style.color=col; chgEl.textContent = (Number.isFinite(chg)&&Number.isFinite(pct))? `${chg>0?'+':''}${chg.toFixed(2)} (${chg>0?'+':''}${pct.toFixed(2)}%)` : '—'; }
+        await Plotly.react(el, [mktCandle(sessionRows)], mktLayout(prevClose), {displayModeBar:false, responsive:true});
+        // Cache for overnight persistence (~78 bars ≈ 6.5h at 5m)
+        setMktCache(card.id, { prev: prevClose, last: lastClose, rows: sessionRows.slice(-78), t: Date.now() });
+      }catch(e){
+        // Fallback to cache so cards never go blank after-hours
+        const cached = getMktCache(card.id);
+        if(cached?.rows?.length){
+          await Plotly.react(el, [mktCandle(cached.rows)], mktLayout(cached.prev), {displayModeBar:false, responsive:true});
+          const chgEl = document.getElementById(card.chgId);
+          if(chgEl && Number.isFinite(cached.last) && Number.isFinite(cached.prev)){
+            const chg = cached.last - cached.prev; const pct = cached.prev? chg/cached.prev*100 : 0;
+            const col = chg>0? (getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a') : chg<0? (getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626') : '#cbd5e1';
+            chgEl.style.color=col; chgEl.textContent = `${chg>0?'+':''}${chg.toFixed(2)} (${chg>0?'+':''}${pct.toFixed(2)}%)`;
+          }
+        }
+      }
     }
     async function renderAllMkt(){ await Promise.all(MKT.map(renderMktCard)); }
     let mktTimer=null; function scheduleMkt(){ clearInterval(mktTimer); mktTimer=setInterval(renderAllMkt, 60000); }
     window.addEventListener('resize', ()=>{ for(const c of MKT){ const el=document.getElementById(c.elId); if(el) try{ Plotly.Plots.resize(el); }catch{} } });
-
+    
     // Boot
     (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); scheduleQuoteAutoRefresh(); renderAllMkt(); scheduleMkt(); })();
   })();
