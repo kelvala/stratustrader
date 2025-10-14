@@ -204,12 +204,6 @@
   .mkt-title{font-weight:900;letter-spacing:.4px}
   .mkt-chg{font-weight:900}
   .mkt-chart{height:180px}
-
-  /* Overlay legend for SMA values */
-  #overlayLegend{position:absolute;left:22px;top:16px;z-index:200;pointer-events:none;font-size:13px;line-height:1.4}
-  #overlayLegend .row{display:flex;gap:8px;align-items:baseline}
-  #overlayLegend .key{font-weight:800;opacity:.9}
-  #overlayLegend .val{font-weight:800;opacity:.95}
 </style>
 </head>
 <body>
@@ -311,7 +305,6 @@
         <button class="chip" data-k="SESS" type="button" aria-pressed="true" title="Toggle pre/post-market bands">Pre/Post</button>
       </div>
 
-      <div id="overlayLegend" aria-live="polite" aria-atomic="true"></div>
       <div id="chart"></div>
     </div>
 
@@ -407,8 +400,7 @@
       toolGPTs:q('#toolGPTs'), toolScreeners:q('#toolScreeners'),
       gptInput:q('#gptInput'), sheetGPTs:q('#sheetGPTs'), sheetScreeners:q('#sheetScreeners'),
       // Added: candle height slider + label
-      heightSel:q('#heightSel'), heightLabel:q('#heightLabel'),
-      overlayLegend: document.querySelector('#overlayLegend')
+      heightSel:q('#heightSel'), heightLabel:q('#heightLabel')
     };
 
     /* ---------- Toast ---------- */
@@ -796,10 +788,10 @@
         font:{ color:css('--text') }
       };
       const layout = buildLayout(baseLayout);
-      await Plotly.newPlot(els.chart, traces, layout, { responsive:true, scrollZoom:true, displaylogo:false });
+      await Plotly.react(els.chart, traces, layout, { responsive:true, displayModeBar:false });
+      await fitPriceAxisToCandlesStrict();
       // ensure Fib aligns to current viewport after first render
       updateAutoFibDebounced();
-      renderSmaLegend();
     }
 
     // Refit y-axis on interactions
@@ -845,7 +837,7 @@
         const tsDisp = dtfETTime.format(new Date())+' ET'; // show refresh time, not stale trade time
         els.lastLine.innerHTML = `Last: $${Number.isFinite(price)? price.toFixed(2):'—'} · Change: ${changeHTML} · ${tsDisp}`;
         els.prevCloseLine.textContent = `Yesterday’s Close: ${Number.isFinite(prevClose)? '$'+prevClose.toFixed(2):'—'}`;
-        els.ivLine.textContent = `Intrinsic Value: ${Number.isFinite(iv)? '$'+fmt(iv) : '—'}`;
+        computeIntrinsicAndDisplay();
       }catch(e){ console.error('Quote refresh error', e); els.lastLine.innerHTML='Last: — · Change: —'; }
     }
 
