@@ -306,7 +306,7 @@
         <button class="chip" data-k="RSI" type="button" aria-pressed="false">RSI</button>
         <button class="chip" data-k="MACD" type="button" aria-pressed="false">MACD</button>
         <button class="chip" data-k="VOL" type="button" aria-pressed="false">Volume</button>
-        <button class="chip id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
+        <button class="chip" id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
         <button class="chip" data-k="ICHI" type="button" aria-pressed="false">Ichimoku</button>
         <button class="chip" data-k="SESS" type="button" aria-pressed="true" title="Toggle pre/post-market bands">Pre/Post</button>
         <button class="chip active" data-k="STOCH" type="button" aria-pressed="true">Stoch</button>
@@ -543,7 +543,84 @@
       }
       if(!matches.length){ els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">No matches</div>'; els.list.classList.add('show'); state.acMatches=[]; state.acIndex=-1; return; }
       state.acMatches=matches; state.acIndex=0; renderAC(); }
-    function pickAC(i){ if(!state.acMatches?.length) return; const it=state.acMatches[i]; if(!it) return; els.input.value=it.t; hideAC(); }
+    function performSearch(t, c){
+      t = sanitizeTicker(t);
+      if(!t){ showToast('Enter a ticker'); return; }
+      // Crypto base -> -USD if needed
+      const base = t.replace(/-USD$/,'');
+      if(isCryptoBase(base) && !/-USD$/.test(t)) t = base+'-USD';
+      const match = (state.symbols||[]).find(r=>r.t===t) || null;
+      const name = c || match?.n || '';
+      state.ticker = t;
+      localStorage.setItem('lastTicker', t);
+      els.input.value = t;
+      if(els.headline) els.headline.textContent = name ? `${t} — ${name}` : t;
+      if(els.companyLine) els.companyLine.textContent = name;
+      hideAC();
+      try{
+        if(typeof go === 'function') return void go(t, name);
+        if(typeof loadAndRender === 'function') return void loadAndRender();
+      }catch(err){ console.warn('search render error', err); }
+    }
+    function doSearch(){
+      const raw = sanitizeTicker(els.input?.value || '');
+      if(!raw){ showToast('Enter a ticker'); return; }
+      let t = raw, name = '';
+      const s = state.symbols||[];
+      const exact = s.find(r=>r.t===raw) || s.find(r=>r.t===raw.replace(/\./g,'-'));
+      if(exact){ t = exact.t; name = exact.n||''; }
+      else {
+        const base = raw.replace(/-USD$/,'');
+        if(isCryptoBase(base)) t = base+'-USD';
+        const f = s.find(r=>r.t===t); if(f) name=f.n||'';
+      }
+      performSearch(t, name);
+    }
+
+    // Input listeners for autocomplete + keyboard nav
+    els.input?.addEventListener('input', (e)=> updateAC(e.target.value));
+    els.input?.addEventListener('keydown', (e)=>{
+      if(!els.list) return;
+      const open = els.list.classList.contains('show');
+      if(open && (e.key==='ArrowDown' || e.key==='ArrowUp')){
+        e.preventDefault();
+        const n = (state.acMatches||[]).length;
+        if(!n) return;
+        if(e.key==='ArrowDown') state.acIndex = (state.acIndex+1)%n;
+        else state.acIndex = (state.acIndex-1+n)%n;
+        renderAC();
+        return;
+      }
+      if(open && e.key==='Enter'){
+        e.preventDefault();
+        const i = state.acIndex>=0 ? state.acIndex : 0;
+        const it = (state.acMatches||[])[i];
+        if(it){ performSearch(it.t, it.n||''); }
+        hideAC();
+        return;
+      }
+      if(e.key==='Enter'){
+        e.preventDefault();
+        doSearch();
+        return;
+      }
+      if(open && e.key==='Escape'){
+        hideAC();
+        return;
+      }
+    });
+
+    // Click selection in autocomplete list
+    els.list?.addEventListener('mousedown', (e)=>{
+      const item = e.target.closest('.ac-item'); if(!item) return;
+      e.preventDefault();
+      const t = item.getAttribute('data-t');
+      const it = (state.acMatches||[]).find(x=>x.t===t);
+      if(it) performSearch(it.t, it.n||'');
+    });
+
+    // Search button click
+    els.searchBtn?.addEventListener('click', doSearch);
 
     // Close autocomplete when clicking outside
     document.addEventListener('click', e=>{ if(!els.list) return; if(e.target===els.input || e.target.closest('#ac')) return; hideAC(); });
