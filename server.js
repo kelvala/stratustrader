@@ -43,9 +43,13 @@ app.get('/api/quote', async (req, res) => {
     return res.status(400).json({ error: 'ticker required' });
   }
 
+  // Try v10 quoteSummary first (preferred: contains rich "price" module),
+  // then fall back to v7/finance/quote (lighter, but reliable). All are Yahoo.
   const urls = [
     `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=price`,
-    `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=price`
+    `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=price`,
+    `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}`,
+    `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(ticker)}`
   ];
 
   for (const url of urls) {
@@ -54,11 +58,59 @@ app.get('/api/quote', async (req, res) => {
       if (r.ok) {
         const j = await r.json();
         return res.json(j);
+      } else {
+        console.warn(`[quote] upstream not ok ${r.status} for ${url}`);
       }
     } catch (e) {
-      console.error('Fetch error:', e);
+      console.error('[quote] Fetch error:', e?.message || e);
     }
   }
+  // Final fallback: derive a minimal quote using our own /api/chart proxy (still Yahoo data)
+  async function chartDerivedQuote(sym){
+    const localChartUrls = [
+      `/api/chart?ticker=${encodeURIComponent(sym)}&range=5d&interval=1d`,
+      `/api/chart?ticker=${encodeURIComponent(sym)}&range=1d&interval=1m`
+    ];
+    for(const path of localChartUrls){
+      try{
+        // Call our own proxy on localhost to avoid Yahoo auth quirks
+        const base = process.env.INTERNAL_ORIGIN || `http://localhost:${PORT}`;
+        const rr = await fetch(base + path, { headers: { 'user-agent': 'Mozilla/5.0' } });
+        if(!rr.ok){ console.warn(`[quote-fb] local chart not ok ${rr.status} for ${path}`); continue; }
+        const jj = await rr.json();
+        const resC = jj?.chart?.result?.[0];
+        if(!resC) continue;
+        const ts = resC.timestamp || [];
+        const qd = resC.indicators?.quote?.[0] || {};
+        const closes = Array.isArray(qd.close) ? qd.close.filter(v=>v!=null) : [];
+        if(!ts.length || !closes.length) continue;
+        const lastIdx = Math.min(ts.length-1, closes.length-1);
+        const last = +closes[lastIdx];
+        const prev = +closes[lastIdx-1] || (resC.meta?.previousClose ?? null);
+        const currency = resC.meta?.currency || 'USD';
+        const exchangeName = resC.meta?.exchangeName || resC.meta?.exchange || '';
+        return {
+          quoteResponse: {
+            result: [
+              {
+                symbol: sym,
+                regularMarketPrice: last,
+                regularMarketTime: ts[lastIdx] || null,
+                regularMarketPreviousClose: prev,
+                currency, exchangeName, fullExchangeName: exchangeName
+              }
+            ]
+          }
+        };
+      }catch(e){ console.error('[quote-fb] local chart fetch error', e?.message||e); }
+    }
+    return null;
+  }
+
+  try{
+    const derived = await chartDerivedQuote(ticker);
+    if(derived) return res.json(derived);
+  }catch(e){ console.error('[quote] derived error', e?.message||e); }
 
   res.status(502).json({ error: 'upstream quote failed' });
 });

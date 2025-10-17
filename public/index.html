@@ -544,8 +544,25 @@
     // ET helpers
     const dtfET = new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour12:false,hour:'2-digit',minute:'2-digit',weekday:'short'});
     function isRegularSessionET(ms){ const parts=dtfET.formatToParts(new Date(ms)); const get=(t)=> parts.find(p=>p.type===t)?.value; const wd=(parts.find(p=>p.type==='weekday')?.value)||''; if(/Sat|Sun/i.test(wd)) return false; const h=+(get('hour')||'0'); const m=+(get('minute')||'0'); const hm=h+m/60; return hm>=9.5 && hm<=16.0; }
-    const isIntraday = (interval)=> /m|h/i.test(String(interval||''));
+  // Intraday means explicit minute/hour intervals like '1m','5m','15m','60m','1h'.
+  // Do NOT treat '1mo'/'3mo' as intraday. Previous /m|h/ regex incorrectly matched '3mo'.
+  const isIntraday = (interval)=> /^(\d{1,2}m|\d{1,2}h)$/i.test(String(interval||''));
     const padScaleFromTight = (t)=>{ t = Math.max(0, Math.min(100, +t||0)); return 1.6 - (t/100)*1.2; };
+
+    // Convert a Yahoo-style range (e.g., '10y','5y','3mo','1y','max','ytd') to a [t0, t1] time window in ms.
+    function rangeToWindow(range, lastMs){
+      const now = Number.isFinite(lastMs) ? lastMs : Date.now();
+      const s = String(range||'').toLowerCase();
+      if(s==='max') return [NaN, now];
+      if(s==='ytd'){
+        const d = new Date(now); const y = d.getUTCFullYear(); const jan1 = Date.UTC(y,0,1); return [jan1, now];
+      }
+      const m = s.match(/^(\d+)(d|mo|y)$/);
+      if(!m) return [NaN, now];
+      const n = +m[1]; const u = m[2];
+      const ms = u==='d' ? n*24*3600*1000 : u==='mo' ? n*30*24*3600*1000 : u==='y' ? n*365*24*3600*1000 : 0;
+      return [now - ms, now];
+    }
 
     // Helper: rows currently displayed (respect intraday pre/post chip)
     function getDisplayRows(){
@@ -883,7 +900,135 @@
       const T = normalizeTickerForFetch(ticker);
       try{
         const r = await fetch(`/api/chart?ticker=${encodeURIComponent(T)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`, { cache:'no-store' });
-        if(r.ok){ const j=await r.json(); const res=j?.chart?.result?.[0]; if(res){ const ts=res.timestamp||[]; const qd=res.indicators?.quote?.[0]||{}; const rows=[]; for(let i=0;i<ts.length;i++){ const c=qd.close?.[i]; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:qd.open?.[i], h:qd.high?.[i], l:qd.low?.[i], c:+c, v:qd.volume?.[i]||0 }); } return rows; } }
+        if(r.ok){
+          const j = await r.json();
+          const res = j?.chart?.result?.[0];
+          if(res){
+            const ts = res.timestamp || [];
+            const qd = res.indicators?.quote?.[0] || {};
+            // Yahoo sometimes returns nulls for OHLC on long ranges (5y/10y) with 3mo/1y intervals.
+            // Merge close from quote.close and adjclose per index, preferring quote.close when present; fallback to adjclose.
+            const adjClose = res.indicators?.adjclose?.[0]?.adjclose || [];
+            const closeArr = Array.from({length: ts.length}, (_, i) => {
+              const qc = qd.close ? qd.close[i] : null;
+              if (Number.isFinite(qc)) return +qc;
+              const ac = adjClose ? adjClose[i] : null;
+              return Number.isFinite(ac) ? +ac : NaN;
+            });
+
+            let rows = [];
+            for(let i=0;i<ts.length;i++){
+              const cRaw = closeArr[i];
+              const c = Number.isFinite(cRaw) ? +cRaw : NaN;
+              if(!Number.isFinite(c)) continue;
+              const o = Number.isFinite(qd.open?.[i]) ? +qd.open[i] : c;
+              const h = Number.isFinite(qd.high?.[i]) ? +qd.high[i] : c;
+              const l = Number.isFinite(qd.low?.[i])  ? +qd.low[i]  : c;
+              const v = Number.isFinite(qd.volume?.[i]) ? +qd.volume[i] : 0;
+              // Ensure hi/lo envelope always contains open/close
+              const hi = Math.max(h, o, c);
+              const lo = Math.min(l, o, c);
+              rows.push({ t: ts[i]*1000, o, h:hi, l:lo, c, v });
+            }
+            // Sort by time and collapse duplicate timestamps (keep last occurrence)
+            rows.sort((a,b)=>a.t-b.t);
+            if(rows.length){
+              const byT = new Map();
+              for(const r of rows){ byT.set(r.t, r); }
+              rows = Array.from(byT.values()).sort((a,b)=>a.t-b.t);
+            }
+            // Fallback: if target interval is coarse (3mo/1y) and Yahoo returned too few bars,
+            // rebuild from daily data aggregated to quarterly/yearly to keep the chart meaningful.
+            const uniqueBars = rows.length;
+            const isCoarse = (interval==='3mo' || interval==='1y');
+            const isLongRange = (()=>{
+              if(range==='max') return true;
+              const m = String(range||'').match(/^(\d+)([a-z]+)$/i);
+              if(!m) return false;
+              const n=+m[1], u=m[2];
+              if(u==='y') return n>=5;
+              if(u==='mo') return n>=60;
+              if(u==='d') return n>=1825; // ~5y
+              return false;
+            })();
+            const needsAggregate = (isCoarse && (uniqueBars < 8 || isLongRange));
+            if(!needsAggregate) return rows;
+
+            // Helper: aggregate daily rows to quarterly/yearly buckets
+            function aggregateOHLC(dailyRows, target){
+              if(!Array.isArray(dailyRows) || !dailyRows.length) return rows; // fallback to original if empty
+              const buckets = new Map();
+              for(const r of dailyRows){
+                const d = new Date(r.t);
+                const y = d.getUTCFullYear();
+                let key, startKey;
+                if(target==='3mo'){
+                  const q = Math.floor(d.getUTCMonth()/3); // 0..3
+                  key = `${y}-${q}`;
+                  startKey = Date.UTC(y, q*3, 1);
+                } else { // '1y'
+                  key = `${y}`;
+                  startKey = Date.UTC(y, 0, 1);
+                }
+                let b = buckets.get(key);
+                if(!b){ b = { t: startKey, o: r.o, h: r.h, l: r.l, c: r.c, v: r.v }; buckets.set(key,b); }
+                // update
+                b.h = Math.max(b.h, r.h);
+                b.l = Math.min(b.l, r.l);
+                b.c = r.c; // last close
+                b.v = (b.v||0) + (r.v||0);
+              }
+              return Array.from(buckets.values()).sort((a,b)=>a.t-b.t);
+            }
+
+            // Fetch daily and aggregate (try multiple ranges in case Yahoo restricts long windows)
+            try{
+              const tryRanges = [range, 'max', '10y', '5y', '3y', '1y'];
+              for(const R of tryRanges){
+                const url = `/api/chart?ticker=${encodeURIComponent(T)}&range=${encodeURIComponent(R)}&interval=1d`;
+                let j2=null;
+                try{
+                  const r2 = await fetch(url, { cache:'no-store' });
+                  if(!r2.ok) { console.warn('daily agg: not ok', R, r2.status); continue; }
+                  j2 = await r2.json();
+                }catch(e){ console.warn('daily agg: fetch fail', R, e?.message||e); continue; }
+                const res2 = j2?.chart?.result?.[0];
+                if(!res2) { console.warn('daily agg: no result for', R); continue; }
+                const ts2 = res2.timestamp || [];
+                const qd2 = res2.indicators?.quote?.[0] || {};
+                const ac2 = res2.indicators?.adjclose?.[0]?.adjclose || [];
+                const close2 = Array.from({length: ts2.length}, (_, i) => {
+                  const qc = qd2.close ? qd2.close[i] : null; if(Number.isFinite(qc)) return +qc; const aa = ac2 ? ac2[i] : null; return Number.isFinite(aa)? +aa : NaN; });
+                const daily = [];
+                for(let i=0;i<ts2.length;i++){
+                  const c2 = close2[i]; if(!Number.isFinite(c2)) continue;
+                  const o2 = Number.isFinite(qd2.open?.[i]) ? +qd2.open[i] : c2;
+                  const h2 = Number.isFinite(qd2.high?.[i]) ? +qd2.high[i] : c2;
+                  const l2 = Number.isFinite(qd2.low?.[i])  ? +qd2.low[i]  : c2;
+                  const v2 = Number.isFinite(qd2.volume?.[i]) ? +qd2.volume[i] : 0;
+                  const hi2 = Math.max(h2, o2, c2);
+                  const lo2 = Math.min(l2, o2, c2);
+                  daily.push({ t: ts2[i]*1000, o:o2, h:hi2, l:lo2, c:c2, v:v2 });
+                }
+                if(daily.length){
+                  let agg = aggregateOHLC(daily, interval);
+                  // Trim to requested visible window if applicable
+                  const lastT = agg.at(-1)?.t || Date.now();
+                  const [t0,t1] = rangeToWindow(range, lastT);
+                  if(Number.isFinite(t0)) agg = agg.filter(r=> r.t>=t0 && r.t<=t1);
+                  if(agg.length){
+                    try{ console.info('Using daily aggregation:', { fromRange:R, bars:agg.length }); }catch{}
+                    try{ if(typeof showToast==='function') showToast('Built '+(interval==='3mo'?'quarterly':'yearly')+' from daily'); }catch{}
+                    return agg;
+                  }
+                }
+              }
+              console.warn('daily agg: all attempts failed, using coarse rows');
+            }catch{ /* ignore and fall through */ }
+
+            return rows;
+          }
+        }
       }catch{}
       throw new Error('chart fetch failed');
     }
