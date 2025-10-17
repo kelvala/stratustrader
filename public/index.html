@@ -512,10 +512,14 @@
     function isCryptoBase(sym){ return CRYPTO_BASE.has(sym); }
     function hideAC(){ if(els.list){ els.list.classList.remove('show'); els.list.innerHTML=''; } state.acMatches=[]; state.acIndex=-1; }
     function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const html=items.slice(0,60).map((o,i)=>`<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${o.n||''}</span></div>`).join(''); els.list.innerHTML=html; els.list.classList.add('show'); }
-    function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ hideAC(); return; } // lazy retry symbols load if empty
-      if(!state.symbols.length && state.symbolsTried>0){ loadSymbols(true); }
-      const sym=state.symbols||[]; if(!sym.length){ // show loading placeholder
-        els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">Loading symbols…</div>'; els.list.classList.add('show'); return; }
+    function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ hideAC(); return; }
+      // Ensure symbols are being loaded on first use
+      if(!state.symbols.length){
+        loadSymbols();
+        if(els.list){ els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">Loading symbols…</div>'; els.list.classList.add('show'); }
+        return;
+      }
+      const sym=state.symbols||[];
       // Normalized matching: treat '.' and '-' as equivalent (BRK.B ~ BRK-B). Only allow BTC->BTC-USD for crypto bases.
       const sN = s.replace(/\./g,'-');
       const base = sN.replace(/-USD$/,'');
@@ -642,7 +646,8 @@
     async function loadSymbols(force){
       if(state.symbols.length && !force) return state.symbols;
       state.symbolsTried++;
-      const paths = ['stock_data.csv','/stock_data.csv','/public/stock_data.csv'];
+      // Prefer absolute path first when served from /public
+      const paths = ['/stock_data.csv','stock_data.csv','/public/stock_data.csv'];
       let text = '';
       for(const p of paths){
         try{ const r = await fetch(p,{cache:'no-store'}); if(r.ok){ text = await r.text(); if(text) break; } }catch{/* try next */}
@@ -674,6 +679,9 @@
       if(els.input && els.input.value) updateAC(els.input.value);
       return state.symbols;
     }
+
+    // Kick off symbols load on startup so search works immediately
+    loadSymbols().catch(()=>{});
 
     /* ---------- Indicators ---------- */
     function SMA(vals,w){ if(!vals?.length || !w) return []; const out=Array(vals.length).fill(null); let sum=0; for(let i=0;i<vals.length;i++){ const v=+vals[i]; if(Number.isFinite(v)) sum+=v; if(i>=w){ const w=+vals[i-w]; if(Number.isFinite(w)) sum-=w; } if(i>=w-1) out[i]=sum/w; } return out; }
