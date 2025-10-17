@@ -694,12 +694,13 @@
       // Try proxy first (works on Vercel and locally)
       try{
         const r=await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=${encodeURIComponent(modules)}`,{cache:'no-store'});
-        if(r.ok){ const j=await r.json(); const res=j?.quoteSummary?.result?.[0]||{}; const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{}; const eps=(ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw); let growth=null; const trends=Array.isArray(et.trend)?et.trend:[]; const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y')); if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw; const ivGraham=(Number.isFinite(eps)&&Number.isFinite(growth)) ? eps*(8.5+2*(growth*100)) : null; return { eps:+eps||null, growth:+growth||null, ivGraham }; }
+        if(r.ok){ const j=await r.json(); const res=j?.quoteSummary?.result?.[0]||{}; const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{}; const eps=(ek?.trailingEps?.raw ?? fd?.epsTrailingTwelveMonths?.raw); let growth=null; const trends=Array.isArray(et?.trend)?et.trend:[]; const fiveY=trends.find(t=>(t?.period||'').toLowerCase().includes('5y')); if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd?.growth?.raw!=null) growth=fd.growth.raw; const ivGraham=(Number.isFinite(eps)&&Number.isFinite(growth)) ? eps*(8.5+2*(growth*100)) : null; return { eps:(Number.isFinite(eps)?+eps:null), growth:(Number.isFinite(growth)?+growth:null), ivGraham };
+        }
       }catch{}
       // Fallback direct Yahoo (helpful in local dev)
       try{
         const r=await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}`,{referrerPolicy:'no-referrer'});
-        if(!r.ok) throw 0; const j=await r.json(); const res=j?.quoteSummary?.result?.[0]||{}; const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{}; const eps=(ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw); let growth=null; const trends=Array.isArray(et.trend)?et.trend:[]; const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y')); if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw; const ivGraham=(Number.isFinite(eps)&&Number.isFinite(growth)) ? eps*(8.5+2*(growth*100)) : null; return { eps:+eps||null, growth:+growth||null, ivGraham };
+        if(!r.ok) throw 0; const j=await r.json(); const res=j?.quoteSummary?.result?.[0]||{}; const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{}; const eps=(ek?.trailingEps?.raw ?? fd?.epsTrailingTwelveMonths?.raw); let growth=null; const trends=Array.isArray(et?.trend)?et.trend:[]; const fiveY=trends.find(t=>(t?.period||'').toLowerCase().includes('5y')); if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd?.growth?.raw!=null) growth=fd.growth.raw; const ivGraham=(Number.isFinite(eps)&&Number.isFinite(growth)) ? eps*(8.5+2*(growth*100)) : null; return { eps:(Number.isFinite(eps)?+eps:null), growth:(Number.isFinite(growth)?+growth:null), ivGraham };
       }catch{}
       return {};
     }
@@ -718,7 +719,7 @@
         const trace={ type:'scatter', x, y:c, mode:'lines', line:{ color:'#93c5fd', width:1.6 } };
         const layout={ margin:{l:28,r:8,t:2,b:20}, xaxis:{ type:'date', showgrid:false, tickfont:{size:10} }, yaxis:{ showgrid:false, tickfont:{size:10} }, paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor, plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor, height:180 };
         await Plotly.newPlot(el,[trace],layout,{displaylogo:false,staticPlot:true,responsive:true});
-      }catch{}
+      }catch(e){ /* ignore; will stay blank if proxy blocked */ }
     }
     async function renderMarketOverview(){
       await Promise.all([
@@ -738,11 +739,7 @@
       p.searchParams.set('includePrePost', includePrePost? 'true':'false');
       return p.toString();
     }
-    async function fetchYahooChart(ticker, range, interval, includePrePost=true){
-      const url = yahooUrl(ticker, range, interval, includePrePost);
-      const r = await fetch(url,{cache:'no-store', referrerPolicy:'no-referrer'});
-      if(!r.ok) throw new Error('fetch failed');
-      const j = await r.json();
+    async function parseYahooChartJson(j){
       const res = j?.chart?.result?.[0];
       if(!res?.timestamp || !res?.indicators?.quote?.[0]) return [];
       const ts = res.timestamp.map(t=>t*1000);
@@ -751,12 +748,24 @@
       const out=[]; for(let i=0;i<ts.length;i++){ const t=ts[i]; const oo=o[i], hh=h[i], ll=l[i], cc=c[i], vv=v[i]; if(t==null) continue; out.push({ t, o:oo??null, h:hh??null, l:ll??null, c:cc??null, v:vv??null }); }
       return out.filter(r=> Number.isFinite(r.c) && Number.isFinite(r.h) && Number.isFinite(r.l));
     }
-
-    function periodKey(t, type){ const d=new Date(t); if(type==='1wk'){ const day=(d.getUTCDay()+6)%7; const start=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()-day)); return +start; } if(type==='1mo'){ return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1); } if(type==='3mo'){ const q=Math.floor(d.getUTCMonth()/3); return Date.UTC(d.getUTCFullYear(), q*3, 1); } if(type==='1y'){ return Date.UTC(d.getUTCFullYear(), 0, 1); } return t; }
-    function resampleOHLC(rows, type){ if(!['1wk','1mo','3mo','1y'].includes(type)) return rows; const g=new Map(); for(const r of rows){ const k=periodKey(r.t,type); let b=g.get(k); if(!b){ b={ t:k, o:r.o, h:r.h, l:r.l, c:r.c, v:r.v||0 }; g.set(k,b); } else { b.h=Math.max(b.h, r.h); b.l=Math.min(b.l, r.l); b.c=r.c; b.v=(b.v||0)+(r.v||0); } } return [...g.values()].sort((a,b)=>a.t-b.t); }
+    async function fetchChartProxy(ticker, range, interval){
+      const url = `/api/chart?ticker=${encodeURIComponent(normalizeTickerForFetch(ticker))}&range=${encodeURIComponent(range||'6mo')}&interval=${encodeURIComponent(interval||'1d')}`;
+      const r = await fetch(url,{cache:'no-store'});
+      if(!r.ok) throw new Error('proxy failed');
+      const j = await r.json();
+      return parseYahooChartJson(j);
+    }
+    async function fetchYahooChart(ticker, range, interval, includePrePost=true){
+      const url = yahooUrl(ticker, range, interval, includePrePost);
+      const r = await fetch(url,{cache:'no-store', referrerPolicy:'no-referrer'});
+      if(!r.ok) throw new Error('fetch failed');
+      const j = await r.json();
+      return parseYahooChartJson(j);
+    }
 
     async function fetchChart(ticker, range, interval){
-      return await fetchYahooChart(ticker, range, interval, true);
+      try { return await fetchChartProxy(ticker, range, interval); }
+      catch { try { return await fetchYahooChart(ticker, range, interval, true); } catch { return []; } }
     }
 
     async function fetchFullHistory(ticker, range, interval){
@@ -767,9 +776,9 @@
         // Use longest allowed range for given intraday interval
         const map={ '1m':'7d', '5m':'60d', '15m':'60d', '60m':'730d' };
         const reqRange = map[interval] || '60d';
-        rows = await fetchYahooChart(t, reqRange, interval, incAH);
+        rows = await fetchChart(t, reqRange, interval);
       } else {
-        rows = await fetchYahooChart(t, 'max', '1d', incAH);
+        rows = await fetchChart(t, 'max', '1d');
         // Resample for weekly/monthly/quarterly/yearly
         rows = resampleOHLC(rows, interval);
       }
