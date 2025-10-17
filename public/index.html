@@ -495,6 +495,9 @@
     const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0 };
     const FUNDAMENTALS = {}; // cache fundamentals per ticker
     let traceMap = {}; // map chips -> trace indices
+    // Extra state for overlays/zoom
+    state.fibIds = [];
+    state.lastXRange = null;
 
     /* ---------- Utils & Formatters ---------- */
     const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -510,6 +513,7 @@
     // Restrict -USD behavior to known crypto bases only
     const CRYPTO_BASE = new Set(['BTC','ETH','SOL','DOGE','XRP','ADA','LTC','BCH','BNB','SHIB']);
     function isCryptoBase(sym){ return CRYPTO_BASE.has(sym); }
+    const isCryptoTicker = (t)=> /-USD$/i.test(String(t||''));
     function hideAC(){ if(els.list){ els.list.classList.remove('show'); els.list.innerHTML=''; } state.acMatches=[]; state.acIndex=-1; }
     function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const html=items.slice(0,60).map((o,i)=>`<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${o.n||''}</span></div>`).join(''); els.list.innerHTML=html; els.list.classList.add('show'); }
     function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ hideAC(); return; }
@@ -683,105 +687,142 @@
     // Kick off symbols load on startup so search works immediately
     loadSymbols().catch(()=>{});
 
-    /* ---------- Indicators ---------- */
-    function SMA(vals,w){ if(!vals?.length || !w) return []; const out=Array(vals.length).fill(null); let sum=0; for(let i=0;i<vals.length;i++){ const v=+vals[i]; if(Number.isFinite(v)) sum+=v; if(i>=w){ const w=+vals[i-w]; if(Number.isFinite(w)) sum-=w; } if(i>=w-1) out[i]=sum/w; } return out; }
-    function EMA(vals,span){ const out=Array(vals.length).fill(null); const k=2/(span+1); let prev=null; for(let i=0;i<vals.length;i++){ const v=+vals[i]; if(!Number.isFinite(v)) { out[i]=prev; continue; } prev = prev==null? v : (v - prev)*k + prev; out[i]=prev; } return out; }
-    function RSI(values, period=14){
-      const gains = Array(values.length).fill(0);
-      const losses = Array(values.length).fill(0);
-      for(let i = 1; i < values.length; i++) {
-        const diff = values[i] - values[i - 1];
-        if(diff > 0) gains[i] = diff;
-        else if(diff < 0) losses[i] = -diff;
-      }
-      const avgGain = EMA(gains, period);
-      const avgLoss = EMA(losses, period);
-      const rs = avgGain.map((g, i) => (avgLoss[i] !== 0) ? g / avgLoss[i] : 0);
-      return rs.map(r => 100 - (100 / (1 + r)));
-    }
-    function MACD(closes,f=12,s=26,sig=9){
-      const e12=EMA(closes,f), e26=EMA(closes,s);
-      const macd=e12.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(e26[i]))? v-e26[i] : null);
-      const signal=EMA(macd,sig);
-      const hist=macd.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(signal[i]))? v-signal[i]: null);
-      return { macd, signal, hist };
-    }
-    // Stochastics (%K, %D)
-    function STOCH(high, low, close, kPeriod=14, dPeriod=3){
-      const n=close.length; const k=new Array(n).fill(null), d=new Array(n).fill(null);
-      const winH=[], winL=[];
-      for(let i=0;i<n;i++){
-        const h=high[i], l=low[i], c=close[i];
-        winH.push(h); winL.push(l);
-        if(winH.length>kPeriod){ winH.shift(); winL.shift(); }
-        if(i>=kPeriod-1){
-          const hh=Math.max(...winH.filter(Number.isFinite));
-          const ll=Math.min(...winL.filter(Number.isFinite));
-          const denom = (hh-ll);
-          k[i] = (Number.isFinite(c) && Number.isFinite(hh) && Number.isFinite(ll) && denom!==0) ? 100*((c-ll)/denom) : (i>0?k[i-1]:null);
-        }
-      }
-      // SMA for %D
-      let acc=0, cnt=0; for(let i=0;i<n;i++){
-        const v=k[i]; if(Number.isFinite(v)){ acc+=v; cnt++; }
-        if(i>=dPeriod){ const old=k[i-dPeriod]; if(Number.isFinite(old)){ acc-=old; cnt--; } }
-        d[i] = (i>=dPeriod-1 && cnt>0) ? acc/cnt : null;
-      }
-      return { k, d };
+    /* ---------- Fundamentals (intrinsic value) ---------- */
+    async function getFundamentals(ticker){
+      if(isCryptoTicker(ticker)) return {};
+      const modules='defaultKeyStatistics,financialData,earningsTrend';
+      // Try proxy first (works on Vercel and locally)
+      try{
+        const r=await fetch(`/api/summary?ticker=${encodeURIComponent(ticker)}&modules=${encodeURIComponent(modules)}`,{cache:'no-store'});
+        if(r.ok){ const j=await r.json(); const res=j?.quoteSummary?.result?.[0]||{}; const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{}; const eps=(ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw); let growth=null; const trends=Array.isArray(et.trend)?et.trend:[]; const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y')); if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw; const ivGraham=(Number.isFinite(eps)&&Number.isFinite(growth)) ? eps*(8.5+2*(growth*100)) : null; return { eps:+eps||null, growth:+growth||null, ivGraham }; }
+      }catch{}
+      // Fallback direct Yahoo (helpful in local dev)
+      try{
+        const r=await fetch(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${encodeURIComponent(modules)}`,{referrerPolicy:'no-referrer'});
+        if(!r.ok) throw 0; const j=await r.json(); const res=j?.quoteSummary?.result?.[0]||{}; const ek=res.defaultKeyStatistics||{}, fd=res.financialData||{}, et=res.earningsTrend||{}; const eps=(ek.trailingEps?.raw ?? fd.epsTrailingTwelveMonths?.raw); let growth=null; const trends=Array.isArray(et.trend)?et.trend:[]; const fiveY=trends.find(t=>(t.period||'').toLowerCase().includes('5y')); if(fiveY?.growth?.raw!=null) growth=fiveY.growth.raw; else if(fd.growth?.raw!=null) growth=fd.growth.raw; const ivGraham=(Number.isFinite(eps)&&Number.isFinite(growth)) ? eps*(8.5+2*(growth*100)) : null; return { eps:+eps||null, growth:+growth||null, ivGraham };
+      }catch{}
+      return {};
     }
 
-    /* ---------- Fetch & chart helpers ---------- */
-    const sleep = (ms)=> new Promise(r=>setTimeout(r,ms));
-    async function waitForPlotly(timeout=12000){ const t0=Date.now(); while(!(window.Plotly&&Plotly.newPlot)){ if(Date.now()-t0>timeout) throw new Error('Plotly failed to load'); await sleep(25); } }
-    function toET(d){ return new Date(d.toLocaleString('en-US',{timeZone:'America/New_York'})); }
-    function normalizePair(range, interval){
-      if(['1m','5m','15m','60m'].includes(interval)){
-        const minFor={ '1m':'1d','5m':'5d','15m':'10d','60m':'1mo' };
-        const order=['1d','2d','5d','10d','1mo','2mo','3mo','6mo','ytd','1y','2y','3y','4y','5y','10y','max'];
-        const idx=v=>Math.max(0,order.indexOf(v));
-        const minRange=minFor[interval]; if(idx(range)<idx(minRange)) range=minRange;
-        return { range, interval };
-      }
-      const map={'1d':'1d','1wk':'1wk','1mo':'1mo','3mo':'3mo','1y':'1mo'}; // Yahoo lacks 1y bars
-      return { range, interval: map[state.interval]||'1d' };
+    /* ---------- Market overview (DOW / NASDAQ / S&P 500) ---------- */
+    async function renderMini(symbol, elId, chgId){
+      try{
+        const rows=await fetchChart(symbol,'6mo','1d');
+        const el=q('#'+elId); const chgEl=q('#'+chgId);
+        if(!rows?.length || !el) return;
+        const x=rows.map(r=>r.t); const c=rows.map(r=>r.c);
+        // change from previous close
+        let prev=null; for(let i=c.length-2;i>=0;i--){ if(Number.isFinite(c[i])){ prev=c[i]; break; } }
+        const last=c.at(-1); const pct=(prev&&Number.isFinite(last))? ((last-prev)/prev)*100 : null;
+        if(chgEl){ const col = (pct>0)? css('--c-up') : (pct<0? css('--c-down') : '#94a3b8'); chgEl.style.color=col; chgEl.textContent = Number.isFinite(pct)? (pct>0?'+':'')+fmt(pct)+'%' : '—'; }
+        const trace={ type:'scatter', x, y:c, mode:'lines', line:{ color:'#93c5fd', width:1.6 } };
+        const layout={ margin:{l:28,r:8,t:2,b:20}, xaxis:{ type:'date', showgrid:false, tickfont:{size:10} }, yaxis:{ showgrid:false, tickfont:{size:10} }, paper_bgcolor:getComputedStyle(els.chartCard).backgroundColor, plot_bgcolor:getComputedStyle(els.chartCard).backgroundColor, height:180 };
+        await Plotly.newPlot(el,[trace],layout,{displaylogo:false,staticPlot:true,responsive:true});
+      }catch{}
     }
-    function historyRangeFor(interval, range){
-      if(interval==='1m') return '7d';
-      if(['5m','15m','60m'].includes(interval)) return '2mo';
-      const map={'1d':'1y','2d':'1y','5d':'1y','10d':'1y','1mo':'1y','2mo':'2y','3mo':'2y','6mo':'2y','ytd':'2y','1y':'3y','2y':'5y','3y':'5y','4y':'10y','5y':'10y','10y':'max','max':'max'};
-      return map[range]||'3y';
+    async function renderMarketOverview(){
+      await Promise.all([
+        renderMini('^DJI','mkt-dji','mkt-dji-chg'),
+        renderMini('^IXIC','mkt-ixic','mkt-ixic-chg'),
+        renderMini('^GSPC','mkt-gspc','mkt-gspc-chg')
+      ]);
     }
+
+    /* ---------- Data & Indicator Utilities (added) ---------- */
+    async function waitForPlotly(){ let n=0; while(!(window.Plotly)){ await new Promise(r=>setTimeout(r,50)); if((n+=1)>200) break; } }
+
+    function yahooUrl(ticker, range, interval, includePrePost=true){
+      const p = new URL(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(normalizeTickerForFetch(ticker))}`);
+      p.searchParams.set('range', range||'6mo');
+      p.searchParams.set('interval', interval||'1d');
+      p.searchParams.set('includePrePost', includePrePost? 'true':'false');
+      return p.toString();
+    }
+    async function fetchYahooChart(ticker, range, interval, includePrePost=true){
+      const url = yahooUrl(ticker, range, interval, includePrePost);
+      const r = await fetch(url,{cache:'no-store', referrerPolicy:'no-referrer'});
+      if(!r.ok) throw new Error('fetch failed');
+      const j = await r.json();
+      const res = j?.chart?.result?.[0];
+      if(!res?.timestamp || !res?.indicators?.quote?.[0]) return [];
+      const ts = res.timestamp.map(t=>t*1000);
+      const qd = res.indicators.quote[0];
+      const o = qd.open||[], h=qd.high||[], l=qd.low||[], c=qd.close||[], v=qd.volume||[];
+      const out=[]; for(let i=0;i<ts.length;i++){ const t=ts[i]; const oo=o[i], hh=h[i], ll=l[i], cc=c[i], vv=v[i]; if(t==null) continue; out.push({ t, o:oo??null, h:hh??null, l:ll??null, c:cc??null, v:vv??null }); }
+      return out.filter(r=> Number.isFinite(r.c) && Number.isFinite(r.h) && Number.isFinite(r.l));
+    }
+
+    function periodKey(t, type){ const d=new Date(t); if(type==='1wk'){ const day=(d.getUTCDay()+6)%7; const start=new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()-day)); return +start; } if(type==='1mo'){ return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1); } if(type==='3mo'){ const q=Math.floor(d.getUTCMonth()/3); return Date.UTC(d.getUTCFullYear(), q*3, 1); } if(type==='1y'){ return Date.UTC(d.getUTCFullYear(), 0, 1); } return t; }
+    function resampleOHLC(rows, type){ if(!['1wk','1mo','3mo','1y'].includes(type)) return rows; const g=new Map(); for(const r of rows){ const k=periodKey(r.t,type); let b=g.get(k); if(!b){ b={ t:k, o:r.o, h:r.h, l:r.l, c:r.c, v:r.v||0 }; g.set(k,b); } else { b.h=Math.max(b.h, r.h); b.l=Math.min(b.l, r.l); b.c=r.c; b.v=(b.v||0)+(r.v||0); } } return [...g.values()].sort((a,b)=>a.t-b.t); }
+
     async function fetchChart(ticker, range, interval){
-      const { range:rr, interval:ii } = normalizePair(range, interval);
-      const common = `range=${encodeURIComponent(rr)}&interval=${encodeURIComponent(ii)}&includePrePost=true&events=div,splits&formatted=false&lang=en-US&region=US&corsDomain=finance.yahoo.com`;
-      const urls=[
-        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?${common}`,
-        `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?${common}`
-      ];
-      for(const u of urls){
-        try{ const r=await fetch(u,{ referrerPolicy:'no-referrer' }); if(r.ok){ const j=await r.json(); const res=j?.chart?.result?.[0]; if(res){ const q=res.indicators?.quote?.[0]||{}; const ts=res.timestamp||[]; const rows=[]; for(let i=0;i<ts.length;i++){ const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i]; const adj=res.indicators?.adjclose?.[0]?.adjclose; const cRaw=(adj && adj[i]!=null) ? adj[i] : q.close?.[i]; const c=Number.isFinite(+cRaw)?+cRaw:null; const v=Number.isFinite(q.volume?.[i])?+q.volume[i]:0; if([o,h,l,c].every(Number.isFinite)) rows.push({ t: new Date(ts[i]*1000), o:+o, h:+h, l:+l, c:+c, v }); } return rows; } } }catch{} }
-      // proxy fallback
-      try{ const pr=await fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(rr)}&interval=${encodeURIComponent(ii)}`,{cache:'no-store'}); if(pr.ok){ const j=await pr.json(); const res=j?.chart?.result?.[0]; if(res){ const q=res.indicators?.quote?.[0]||{}; const ts=res.timestamp||[]; const rows=[]; for(let i=0;i<ts.length;i++){ const o=q.open?.[i], h=q.high?.[i], l=q.low?.[i]; const adj=res.indicators?.adjclose?.[0]?.adjclose; const cRaw=(adj && adj[i]!=null) ? adj[i] : q.close?.[i]; const c=Number.isFinite(+cRaw)?+cRaw:null; const v=Number.isFinite(q.volume?.[i])?+q.volume[i]:0; if([o,h,l,c].every(Number.isFinite)) rows.push({ t:new Date(ts[i]*1000), o:+o, h:+h, l:+l, c:+c, v }); } return rows; } } }catch{}
-      return [];
+      return await fetchYahooChart(ticker, range, interval, true);
     }
-    async function fetchFullHistory(ticker, range, interval){ const R = historyRangeFor(interval, range); return fetchChart(ticker, R, interval); }
-    function getVisibleData(fullRows, range, interval){
-      const intraday=['1m','5m','15m','60m'].includes(interval);
-      if(intraday){ const m=/^(\d+)d$/.exec(range); const want=m?+m[1]:5; const out=[]; let sessions=0, cur=null; for(let i=fullRows.length-1;i>=0;i--){ const d=toET(fullRows[i].t); const key=d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); if(key!==cur){ sessions++; cur=key; if(sessions>want) break; } out.push(fullRows[i]); } return out.reverse(); }
-      if(range==='ytd'){ const jan1=new Date(new Date().getFullYear(),0,1); return fullRows.filter(r=> toET(r.t)>=toET(jan1)); }
-      const days={'1d':1,'2d':2,'5d':5,'10d':10,'1mo':31,'2mo':62,'3mo':93,'6mo':182,'1y':365,'2y':730,'3y':1095,'4y':1460,'5y':1825,'10y':3650,'max':36500}[range]||365;
-      const cutoff=new Date(Date.now()-days*864e5);
-      return fullRows.filter(r=> toET(r.t)>=toET(cutoff));
-    }
-    function prevDailyCloseFromIntraday(rows){ if(!rows.length) return null; const lastDay=toET(rows.at(-1).t).toDateString(); for(let i=rows.length-2;i>=0;i--){ const d=toET(rows[i].t).toDateString(); if(d!==lastDay) return rows[i].c??null; } return null; }
-    function applyChartTheme(){ try{ const bg=getComputedStyle(els.chartCard).backgroundColor; const grid=css('--grid'); const txt=css('--text'); Plotly.relayout(els.chart,{ paper_bgcolor:bg, plot_bgcolor:bg, 'xaxis.gridcolor':grid, 'yaxis.gridcolor':grid, 'yaxis2.gridcolor':grid, 'yaxis3.gridcolor':grid, 'yaxis4.gridcolor':grid, 'xaxis.tickfont.color':txt, 'yaxis.tickfont.color':txt, 'yaxis2.tickfont.color':txt, 'yaxis3.tickfont.color':txt, 'yaxis4.tickfont.color':txt }); }catch{} }
-    function getAxisState(){ const L=els.chart && (els.chart._fullLayout||els.chart.layout); const g=ax=>({ range:(L?.[ax]?.range)?[...L[ax].range]:null, autorange:L?.[ax]?.autorange!==false }); return { x:g('xaxis'), y:g('yaxis'), y2:g('yaxis2'), y3:g('yaxis3'), y4:g('yaxis4') }; }
-    function relayoutPreserve(payload){ const S=getAxisState(); const keep=(k,s)=>{ if(!s) return {}; const out={}; if(s.range){ out[`${k}.range`]=s.range; out[`${k}.autorange`]=false; } else if(s.autorange){ out[`${k}.autorange`]=true; } return out; }; return Plotly.relayout(els.chart,{ ...payload, ...keep('xaxis',S.x), ...keep('yaxis',S.y), ...keep('yaxis2',S.y2), ...keep('yaxis3',S.y3), ...keep('yaxis4',S.y4) }); }
-    const getCandleTrace=()=>{ const d=els.chart?.data||[]; const i=d.findIndex(t=>t&&t.type==='candlestick'); return i>=0?d[i]:null; };
-    const addOrUpdateAutoFibTraces = (async function(){ let lock=false; return async function(){ if(lock) return; const chip=q('.chip[data-k="AUTOFIB"]'); if(!chip||!chip.classList.contains('active')) return; const c=getCandleTrace(); if(!c) return; const x=c.x, hi=c.high, lo=c.low; if(!x?.length) return; const L=els.chart._fullLayout||els.chart.layout||{}, xa=L.xaxis||{}; const x0=(Array.isArray(xa.range)&&xa.autorange===false)?xa.range[0]:x[0]; const x1=(Array.isArray(xa.range)&&xa.autorange===false)?xa.range[1]:x[x.length-1]; let i0=Math.max(0,x.findIndex(d=>d>=x0)); let i1=x.findIndex(d=>d>x1); if(i1===-1) i1=x.length; if(i1<=i0) return; let H=-Infinity,LW=Infinity; for(let i=i0;i<i1;i++){ if(Number.isFinite(hi[i])) H=Math.max(H,hi[i]); if(Number.isFinite(lo[i])) LW=Math.min(LW,lo[i]); } if(!Number.isFinite(H)||!Number.isFinite(LW)||H===LW) return; const lvls=[1,.786,.618,.5,.382,.236,0], color=css('--c-rsi')||'#8b5cf6', prices=lvls.map(p=>H-(H-LW)*p); const shapes=prices.map(y=>({type:'line',xref:'x',yref:'y',x0:x0,x1:x1,y0:y,y1:y,line:{color,width:1.25,dash:'dot'},layer:'above',opacity:.95})); const anns=prices.map((y,i)=>({x:x1,y,xref:'x',yref:'y',xanchor:'right',yanchor:'middle',text:`${(lvls[i]*100).toFixed(1)}%  ${y.toFixed(2)}`,showarrow:false,font:{size:11,color}})); try{ lock=true; await relayoutPreserve({ shapes, annotations:anns }); } finally { lock=false; } }; })();
-    function clearAutoFib(){ try{ relayoutPreserve({ shapes:[], annotations:[] }); }catch{} }
-    async function fitPriceAxisToCandlesStrict(){ const d=els.chart?.data||[]; const c=d.find(t=>t&&t.type==='candlestick'); if(!c||!c.x?.length) return; const L=els.chart._fullLayout||els.chart.layout||{}, xa=L.xaxis||{}; const toMs=v=>new Date(v).getTime(); let x0ms, x1ms; if(Array.isArray(xa.range)&&xa.autorange===false){ x0ms=toMs(xa.range[0]); x1ms=toMs(xa.range[1]); } else { x0ms=toMs(c.x[0]); x1ms=toMs(c.x[c.x.length-1]); } const cx=c.x.map(toMs); let i0=0; while(i0<cx.length && cx[i0]<x0ms) i0++; let i1=cx.length-1; while(i1>i0 && cx[i1]>x1ms) i1--; let hi=-Infinity, lo=Infinity; for(let i=i0;i<=i1;i++){ const h=c.high[i], l=c.low[i]; if(Number.isFinite(h)) hi=Math.max(hi,h); if(Number.isFinite(l)) lo=Math.min(lo,l); } if(!Number.isFinite(hi)||!Number.isFinite(lo)) return; if(hi===lo){ hi+=1; lo-=1; } const pad=Math.max((hi-lo)*0.08,0.5); try{ await relayoutPreserve({ 'yaxis.autorange':false, 'yaxis.rangemode':'normal', 'yaxis.range':[lo-pad, hi+pad] }); }catch{} }
 
+    async function fetchFullHistory(ticker, range, interval){
+      const t = normalizeTickerForFetch(ticker);
+      const incAH = true; // fetch everything; filter later
+      let rows=[];
+      if(isIntraday(interval)){
+        // Use longest allowed range for given intraday interval
+        const map={ '1m':'7d', '5m':'60d', '15m':'60d', '60m':'730d' };
+        const reqRange = map[interval] || '60d';
+        rows = await fetchYahooChart(t, reqRange, interval, incAH);
+      } else {
+        rows = await fetchYahooChart(t, 'max', '1d', incAH);
+        // Resample for weekly/monthly/quarterly/yearly
+        rows = resampleOHLC(rows, interval);
+      }
+      return rows;
+    }
+
+    function getVisibleData(rows, range, interval){
+      if(range==='max') return rows;
+      const now = Date.now();
+      const day=86400000;
+      const map={ '1d':1*day, '2d':2*day, '5d':5*day, '10d':10*day, '1mo':30*day, '2mo':60*day, '3mo':90*day, '6mo':182*day, 'ytd':'ytd', '1y':365*day, '2y':2*365*day, '3y':3*365*day, '4y':4*365*day, '5y':5*365*day, '10y':10*365*day };
+      let dur = map[range];
+      if(dur==='ytd'){
+        const d = new Date(); const start = Date.UTC(d.getUTCFullYear(),0,1); return rows.filter(r=> r.t>=start);
+      }
+      if(!dur) return rows;
+      const from = now - dur;
+      const out = rows.filter(r=> r.t>=from);
+      return out.length? out : rows.slice(-Math.max(50, Math.min(400, rows.length)));
+    }
+
+    function SMA(arr, n){ n = Math.max(1, n|0); const out=[]; let s=0, q=[]; for(const v of arr){ const val=Number(v); q.push(val); s+=val; if(q.length>n) s-=q.shift(); out.push(q.length<n? (s/q.length) : (s/n)); } return out; }
+    function EMA(arr, n){ n=Math.max(1,n|0); const k=2/(n+1); const out=[]; let ema=null; for(const v of arr){ const val=Number(v); ema = (ema==null)? val : (val*k + ema*(1-k)); out.push(ema); } return out; }
+    function RSI(closes, n=14){ const out=[]; let gains=0, losses=0; for(let i=1;i<closes.length;i++){ const ch = closes[i]-closes[i-1]; gains += Math.max(0,ch); losses += Math.max(0,-ch); if(i>=n){ const prev=closes[i-n]; const ch2 = closes[i-n+1]-prev; gains -= Math.max(0,ch2); losses -= Math.max(0,-ch2); } const rs = losses===0? 100 : (gains/(losses||1)); const rsi = 100 - 100/(1+rs); out.push(Math.max(0, Math.min(100, rsi))); }
+      // pad to same length
+      return [out[0]??50, ...out];
+    }
+    function MACD(closes, fast=12, slow=26, signal=9){ const emaF=EMA(closes,fast), emaS=EMA(closes,slow); const macd=emaF.map((v,i)=> v-emaS[i]); const sig=EMA(macd, signal); const hist=macd.map((v,i)=> v - sig[i]); return { macd, signal:sig, hist }; }
+    function STOCH(high, low, close, kPeriod=14, dPeriod=3){ const k=[]; for(let i=0;i<close.length;i++){ const start=Math.max(0, i-kPeriod+1); const hh = Math.max(...high.slice(start,i+1)); const ll = Math.min(...low.slice(start,i+1)); const val = (hh-ll)===0? 50 : ((close[i]-ll)/(hh-ll))*100; k.push(val); } const d=SMA(k, dPeriod); return { k, d } }
+
+    // Ichimoku indicator
+    function rollingMid(high, low, len, i){ const s=Math.max(0,i-len+1); const hh=Math.max(...high.slice(s,i+1)); const ll=Math.min(...low.slice(s,i+1)); return (hh+ll)/2; }
+    function ICHIMOKU(high, low, close, conv=9, base=26, spanB=52, disp=26){
+      const n = close.length;
+      const tenkan = Array(n).fill(null);
+      const kijun  = Array(n).fill(null);
+      const spanA  = Array(n).fill(null);
+      const spanBv = Array(n).fill(null);
+      const chikou = Array(n).fill(null);
+      for(let i=0;i<n;i++){
+        tenkan[i] = rollingMid(high, low, conv, i);
+        kijun[i]  = rollingMid(high, low, base, i);
+        const sa = (tenkan[i] + kijun[i]) / 2;
+        // shift forward by disp: store at i+disp if exists
+        if(i+disp < n) spanA[i+disp] = sa; // Senkou Span A
+        const sb = rollingMid(high, low, spanB, i);
+        if(i+disp < n) spanBv[i+disp] = sb; // Senkou Span B
+        if(i-disp >= 0) chikou[i-disp] = close[i]; // Chikou back
+      }
+      return { tenkan, kijun, spanA, spanB:spanBv, chikou };
+    }
+
+    /* ---------- Main fetch/render ---------- */
     async function go(ticker, company){
       await waitForPlotly();
       const range = els.timeSel?.value || '6mo';
@@ -794,14 +835,22 @@
         return;
       }
       const vis = getVisibleData(fullRows, range, interval);
-      const startIdx = fullRows.length - vis.length;
-      const x = vis.map(r=>r.t);
-      const open = vis.map(r=>r.o), high=vis.map(r=>r.h), low=vis.map(r=>r.l), close=vis.map(r=>r.c), vol=vis.map(r=>r.v);
+      state.rows = vis; // store before filtering for pre/post toggle
+      // Apply pre/post toggle for intraday rendering
+      const dispRows = getDisplayRows();
+      const x = dispRows.map(r=>r.t);
+      const open = dispRows.map(r=>r.o), high=dispRows.map(r=>r.h), low=dispRows.map(r=>r.l), close=dispRows.map(r=>r.c), vol=dispRows.map(r=>r.v);
 
-      // Indicators
+      // Indicators computed on displayed rows
       const rsiVals = RSI(close,14);
       const macd = MACD(close,12,26,9);
       const st = STOCH(high, low, close, 14, 3);
+      // Ichimoku values
+      const ichi = ICHIMOKU(high, low, close, 9, 26, 52, 26);
+
+      // Fundamentals / Intrinsic (Graham) + SMA blend
+      if(!FUNDAMENTALS[ticker]){ try{ FUNDAMENTALS[ticker]=await getFundamentals(ticker); }catch{ FUNDAMENTALS[ticker]={}; } }
+      const f = FUNDAMENTALS[ticker]||{};
 
       // Last/Change & previous close
       const last = close.at(-1);
@@ -809,14 +858,22 @@
       const ref = prevClose!=null ? prevClose : (close.length>=2? close.at(-2): null);
       const dayChg = ref!=null ? last-ref : null;
       const dayPct = (ref && ref!==0) ? (dayChg/ref)*100 : null;
-      const upClr=css('--c-up'), dnClr=css('--c-down');
+           const upClr=css('--c-up'), dnClr=css('--c-down');
       const chgClr = (dayChg>0)?upClr:(dayChg<0?dnClr:'#cbd5e1');
       const signChg = dayChg>0?'+':dayChg<0?'-':'';
       const signPct = dayPct>0?'+':dayPct<0?'-':'';
       if(els.headline) els.headline.textContent = company ? `${ticker} — ${company}` : ticker;
       if(els.companyLine) els.companyLine.textContent = company||'';
-      if(els.lastLine) els.lastLine.innerHTML = `Last: <b>${fmtPx(last)}</b> · ` + (dayChg==null? 'Change: —' : `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}${fmtPx(Math.abs(dayChg))} <span style="opacity:.85">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
+      if(els.lastLine) els.lastLine.innerHTML = `Last: <b>${fmtPx(last)}</b> · ` + (dayChg==null? 'Change: —' : `<span style="font-weight:800;color:${chgClr}">Change: ${signChg}${fmtPx(Math.abs(dayChg))} <span style=\"opacity:.85\">(${signPct}${fmt(Math.abs(dayPct))}%)</span></span>`);
       if(els.prevCloseLine) els.prevCloseLine.textContent = `Yesterday’s Close: ${prevClose==null? '—' : fmtPx(prevClose)}`;
+      // Intrinsic display
+      try{
+        const sAll50=SMA(fullRows.map(r=>r.c),50), sAll200=SMA(fullRows.map(r=>r.c),200);
+        const s50=sAll50.at(-1), s200=sAll200.at(-1);
+        const ivs=[]; if(Number.isFinite(f.ivGraham)) ivs.push(f.ivGraham); if(Number.isFinite(s50)&&Number.isFinite(s200)) ivs.push((s50+s200)/2);
+        const iv = ivs.length? (ivs.reduce((a,b)=>a+b,0)/ivs.length) : null;
+        if(els.ivLine) els.ivLine.textContent = `Intrinsic Value: ${iv==null? '—' : fmtPx(iv)}`;
+      }catch{ if(els.ivLine) els.ivLine.textContent = 'Intrinsic Value: —'; }
 
       // Chart layout
       const layout={
@@ -840,42 +897,94 @@
       const trMACD = { type:'scatter', x, y:macd.macd, mode:'lines', name:'MACD', line:{ color: css('--c-macd'), width:2 }, yaxis:'y4' };
       const trSignal = { type:'scatter', x, y:macd.signal, mode:'lines', name:'Signal', line:{ color:'#f59e0b', width:1.5, dash:'dot' }, yaxis:'y4' };
       const trHist = { type:'bar', x, y:macd.hist, name:'MACD Hist', marker:{ color:'#64748b', opacity:0.5 }, yaxis:'y4', opacity:0.5 };
-      // Simple SMAs computed on full history then aligned
-      const sAll20=SMA(fullRows.map(r=>r.c),20), sAll50=SMA(fullRows.map(r=>r.c),50), sAll200=SMA(fullRows.map(r=>r.c),200);
-      const align=(arr)=>{ const out=arr.slice(Math.max(0,startIdx), Math.max(0,startIdx)+vis.length); while(out.length<vis.length) out.unshift(null); const fi=out.findIndex(v=>Number.isFinite(v)); if(fi>0){ const v=out[fi]; for(let i=0;i<fi;i++) out[i]=v; } for(let i=1;i<out.length;i++) if(out[i]==null && Number.isFinite(out[i-1])) out[i]=out[i-1]; return out; };
-      const trSMA20={ type:'scatter', x, y:align(sAll20), mode:'lines', name:'SMA 20', line:{ color: css('--c-sma20'), width:2 }, yaxis:'y' };
-      const trSMA50={ type:'scatter', x, y:align(sAll50), mode:'lines', name:'SMA 50', line:{ color: css('--c-sma50'), width:2 }, yaxis:'y' };
-      const trSMA200={ type:'scatter', x, y:align(sAll200), mode:'lines', name:'SMA 200', line:{ color: css('--c-sma200'), width:2 }, yaxis:'y' };
+      // Simple SMAs computed on displayed rows
+      const trSMA20={ type:'scatter', x, y:SMA(close,20), mode:'lines', name:'SMA 20', line:{ color: css('--c-sma20'), width:2 }, yaxis:'y' };
+      const trSMA50={ type:'scatter', x, y:SMA(close,50), mode:'lines', name:'SMA 50', line:{ color: css('--c-sma50'), width:2 }, yaxis:'y' };
+      const trSMA200={ type:'scatter', x, y:SMA(close,200), mode:'lines', name:'SMA 200', line:{ color: css('--c-sma200'), width:2 }, yaxis:'y' };
       // Stoch lines in RSI pane
       const trStochK = { type:'scatter', x, y:st.k, mode:'lines', name:'Stoch %K', line:{ color:'#14b8a6', width:2 }, yaxis:'y2' };
       const trStochD = { type:'scatter', x, y:st.d, mode:'lines', name:'Stoch %D', line:{ color:'#f59e0b', width:1.5, dash:'dot' }, yaxis:'y2' };
       const trStoch80 = { type:'scatter', x, y:Array(x.length).fill(80), mode:'lines', name:'Stoch 80', line:{ color:'#94a3b8', width:1, dash:'dot' }, yaxis:'y2', showlegend:false, hoverinfo:'skip' };
       const trStoch20 = { type:'scatter', x, y:Array(x.length).fill(20), mode:'lines', name:'Stoch 20', line:{ color:'#94a3b8', width:1, dash:'dot' }, yaxis:'y2', showlegend:false, hoverinfo:'skip' };
+      // Ichimoku traces on price pane
+      const trTenkan = { type:'scatter', x, y:ichi.tenkan, mode:'lines', name:'Tenkan', line:{ color: css('--c-ichi-tenkan'), width:1.6 }, yaxis:'y' };
+      const trKijun  = { type:'scatter', x, y:ichi.kijun,  mode:'lines', name:'Kijun',  line:{ color: css('--c-ichi-kijun'),  width:1.6 }, yaxis:'y' };
+      const trSpanA  = { type:'scatter', x, y:ichi.spanA,  mode:'lines', name:'Span A', line:{ color: css('--c-ichi-spanA'),  width:1 }, yaxis:'y' };
+      const trSpanB  = { type:'scatter', x, y:ichi.spanB,  mode:'lines', name:'Span B', line:{ color: css('--c-ichi-spanB'),  width:1 }, yaxis:'y', fill:'tonexty', fillcolor: css('--c-ichi-up'), opacity:0.4 };
+      const trChikou = { type:'scatter', x, y:ichi.chikou, mode:'lines', name:'Chikou', line:{ color: css('--c-ichi-chikou'), width:1 }, yaxis:'y' };
 
-      const traces=[ trCandles, trSMA20, trSMA50, trSMA200, trVol, trRSI, trRSI70, trRSI30, trMACD, trSignal, trHist, trStochK, trStochD, trStoch80, trStoch20 ];
+      const traces=[ trCandles, trSMA20, trSMA50, trSMA200, trVol, trRSI, trRSI70, trRSI30, trMACD, trSignal, trHist, trStochK, trStochD, trStoch80, trStoch20, trTenkan, trKijun, trSpanA, trSpanB, trChikou ];
       await Plotly.newPlot(els.chart, traces, layout, { responsive:true, scrollZoom:true, displaylogo:false });
       applyChartTheme();
       // Map chips -> traces
-      traceMap = { SMA20:1, SMA50:2, SMA200:3, VOL:4, RSI:[5,6,7], MACD:[8,9,10], STOCH:[11,12,13,14], AUTOFIB:[] };
+      traceMap = { SMA20:1, SMA50:2, SMA200:3, VOL:4, RSI:[5,6,7], MACD:[8,9,10], STOCH:[11,12,13,14], ICHI:[15,16,17,18,19], AUTOFIB:[] };
       applyVisibilityFromChips();
-      // Fib on interactions
+      // Listen for zoom/pan
       try{ els.chart.removeAllListeners?.('plotly_relayout'); }catch{}
-      els.chart.on?.('plotly_relayout', ()=>{ const chip=q('.chip[data-k="AUTOFIB"]'); if(chip && chip.classList.contains('active')) addOrUpdateAutoFibTraces(); fitPriceAxisToCandlesStrict(); });
+      els.chart.on?.('plotly_relayout', (ev)=>{ state.lastXRange = currentXRange(); const chip=q('.chip[data-k="AUTOFIB"]'); if(chip && chip.classList.contains('active')) addOrUpdateAutoFibTraces(); fitPriceAxisToCandlesStrict(); });
       await fitPriceAxisToCandlesStrict();
       const fibChip=q('.chip[data-k="AUTOFIB"]'); if(fibChip?.classList.contains('active')) addOrUpdateAutoFibTraces();
+
+      // Update sub header (time/freq + timestamp ET)
+      try{ const nowET = new Date(new Date().toLocaleString('en-US',{timeZone:'America/New_York'})); if(els.subInfo) els.subInfo.textContent = `${range} • ${interval} • ${nowET.toLocaleString('en-US',{hour:'2-digit',minute:'2-digit'})} ET`; }catch{}
+      // Render market mini-cards (once per search)
+      renderMarketOverview().catch(()=>{});
     }
 
     function applyVisibilityFromChips(){ if(!els.chart||!window.Plotly) return; Object.entries(traceMap||{}).forEach(([k,idx])=>{ const chip=els.toggles?.querySelector(`.chip[data-k="${k}"]`); if(!chip) return; const vis = chip.classList.contains('active') ? true : 'legendonly'; const ids = Array.isArray(idx)? idx : [idx]; if(ids.length) { try{ Plotly.restyle(els.chart, { visible:vis }, ids); }catch{} } if(k==='AUTOFIB'){ if(chip.classList.contains('active')) addOrUpdateAutoFibTraces(); else clearAutoFib(); } }); }
 
     // Chip toggles
-    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; const k=chip.dataset.k; const now=!chip.classList.contains('active'); chip.classList.toggle('active', now); chip.setAttribute('aria-pressed', now?'true':'false'); if(k==='AUTOFIB'){ if(now) addOrUpdateAutoFibTraces(); else clearAutoFib(); } const idx=traceMap[k]; if(idx!=null){ const ids=Array.isArray(idx)?idx:[idx]; const vis= now? true : 'legendonly'; try{ Plotly.restyle(els.chart,{visible:vis},ids); }catch{} } });
+    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; const k=chip.dataset.k; const now=!chip.classList.contains('active'); chip.classList.toggle('active', now); chip.setAttribute('aria-pressed', now?'true':'false'); if(k==='AUTOFIB'){ if(now) addOrUpdateAutoFibTraces(); else clearAutoFib(); } const idx=traceMap[k]; if(idx!=null){ const ids=Array.isArray(idx)?idx:[idx]; const vis= now? true : 'legendonly'; try{ Plotly.restyle(els.chart,{visible:vis},ids); }catch{} } if(k==='SESS'){ // refit if pre/post changed
+        restyleForSession();
+      } });
 
-    // Time / frequency changes
-    els.timeSel?.addEventListener('change', ()=>{ if(state.ticker) go(state.ticker, els.companyLine?.textContent||''); });
-    els.freqSel?.addEventListener('change', ()=>{ if(state.ticker) go(state.ticker, els.companyLine?.textContent||''); });
+    function restyleForSession(){
+      if(!els.chart||!state.rows?.length) return;
+      const dispRows = getDisplayRows();
+      const x = dispRows.map(r=>r.t);
+      const open = dispRows.map(r=>r.o), high=dispRows.map(r=>r.h), low=dispRows.map(r=>r.l), close=dispRows.map(r=>r.c), vol=dispRows.map(r=>r.v);
+      const rsiVals = RSI(close,14);
+      const macd = MACD(close,12,26,9);
+      const st = STOCH(high, low, close, 14, 3);
+      const ichi = ICHIMOKU(high, low, close, 9, 26, 52, 26);
+      try{
+        Plotly.restyle(els.chart, { x:[x], open:[open], high:[high], low:[low], close:[close] }, [0]);
+        Plotly.restyle(els.chart, { x:[x], y:[SMA(close,20)] }, [1]);
+        Plotly.restyle(els.chart, { x:[x], y:[SMA(close,50)] }, [2]);
+        Plotly.restyle(els.chart, { x:[x], y:[SMA(close,200)] }, [3]);
+        Plotly.restyle(els.chart, { x:[x], y:[vol] }, [4]);
+        Plotly.restyle(els.chart, { x:[x], y:[rsiVals] }, [5]);
+        Plotly.restyle(els.chart, { x:[x], y:[Array(x.length).fill(70)] }, [6]);
+        Plotly.restyle(els.chart, { x:[x], y:[Array(x.length).fill(30)] }, [7]);
+        Plotly.restyle(els.chart, { x:[x], y:[macd.macd] }, [8]);
+        Plotly.restyle(els.chart, { x:[x], y:[macd.signal] }, [9]);
+        Plotly.restyle(els.chart, { x:[x], y:[macd.hist] }, [10]);
+        Plotly.restyle(els.chart, { x:[x], y:[st.k] }, [11]);
+        Plotly.restyle(els.chart, { x:[x], y:[st.d] }, [12]);
+        Plotly.restyle(els.chart, { x:[x], y:[Array(x.length).fill(80)] }, [13]);
+        Plotly.restyle(els.chart, { x:[x], y:[Array(x.length).fill(20)] }, [14]);
+        Plotly.restyle(els.chart, { x:[x], y:[ichi.tenkan] }, [15]);
+        Plotly.restyle(els.chart, { x:[x], y:[ichi.kijun] }, [16]);
+        Plotly.restyle(els.chart, { x:[x], y:[ichi.spanA] }, [17]);
+        Plotly.restyle(els.chart, { x:[x], y:[ichi.spanB] }, [18]);
+        Plotly.restyle(els.chart, { x:[x], y:[ichi.chikou] }, [19]);
+      }catch{}
+      fitPriceAxisToCandlesStrict();
+      const fibChip=document.querySelector('.chip[data-k="AUTOFIB"]'); if(fibChip?.classList.contains('active')) addOrUpdateAutoFibTraces(); else clearAutoFib();
+    }
 
-    // Boot initial search
-    setTimeout(()=>{ const boot = state.ticker || localStorage.getItem('lastTicker') || 'AAPL'; if(els.input) els.input.value = boot; performSearch(boot,''); }, 0);
+    // Sync initial chip state from aria-pressed
+    (function syncChips(){ const chips=$all('#toggles .chip'); chips.forEach(ch=>{ const p=ch.getAttribute('aria-pressed'); if(p==='true') ch.classList.add('active'); else ch.classList.remove('active'); }); })();
+
+    /* ---------- Events & Handlers ---------- */
+    // Global error handler (for async errors)
+    window.addEventListener('unhandledrejection', e=>{ console.error('Error:', e.reason); showToast('An error occurred. Please try again.'); });
+
+    /* ---------- Init ---------- */
+    // Kick off symbols load on startup so search works immediately
+    loadSymbols().catch(()=>{});
+    // Also draw the market cards on boot
+    renderMarketOverview().catch(()=>{});
   })();
   </script>
 </body>
