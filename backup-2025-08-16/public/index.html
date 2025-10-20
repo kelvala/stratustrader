@@ -734,9 +734,9 @@
 		function renderCustomSMAChips(){
 			if(!els.smaChips) return;
 			const list = uniqSortedNums(state.customSMAs||[]);
-			// Stable period->color mapping within session
-			state.customSMAColors = state.customSMAColors || {};
-			list.forEach((p,i)=>{ if(!state.customSMAColors[p]) state.customSMAColors[p] = CUSTOM_SMA_PALETTE[i % CUSTOM_SMA_PALETTE.length]; });
+			// Rebuild mapping each render so colors are distinct and ordered by period
+			state.customSMAColors = {};
+			list.forEach((p,i)=>{ state.customSMAColors[p] = CUSTOM_SMA_PALETTE[i % CUSTOM_SMA_PALETTE.length]; });
 			els.smaChips.innerHTML = list.map(p=>{
 				const col = state.customSMAColors[p] || CUSTOM_SMA_PALETTE[0];
 				return `<button class="chip" data-k="SMA${p}" data-period="${p}" type="button" aria-pressed="true" title="Toggle SMA ${p}" style="border-color:${col};color:${col}">SMA ${p}</button>`;
@@ -749,7 +749,8 @@
 		async function buildSMAAlignedSeries(){
 			const rows = state.rows||[]; state.smaSeries = state.smaSeries || {}; state.smaLast = state.smaLast || {}; if(!rows.length){ state.smaSeries={}; state.smaLast={}; return; }
 			const closes = rows.map(r=>r.c);
-			const periods = [20,50,200];
+			// Include base and any custom SMAs so customs also benefit from extended-data alignment
+			const periods = uniqSortedNums([20,50,200, ...((state.customSMAs||[]))]).slice(0, 24);
 			const pickRange=(interval,p)=>{ switch(interval){ case '1m':return '5d'; case '5m':return '1mo'; case '15m':return '3mo'; case '60m':return '6mo'; case '1wk':return '10y'; case '1mo': return 'max'; case '3mo': return 'max'; case '1y': return 'max'; default: return p>=200? '3y':'1y'; } };
 			async function alignFromExtended(p){ const extR = pickRange(state.interval, p); try{ const ext = await fetchRows(state.ticker, extR, state.interval); if(Array.isArray(ext)&&ext.length){ const yExt = sma(ext.map(r=>r.c), p); const mapP = mapByTs(ext, yExt); const aligned = rows.map(r=> mapP.get(r.t) ?? null); return fillBackward(fillForward(aligned)); } }catch{} return null; }
 			for(const p of periods){ let y = sma(closes, p); if(y.some(Number.isFinite)) y=fillBackward(fillForward(y)); else { const extAligned = await alignFromExtended(p); y = extAligned || Array(rows.length).fill(closes.filter(Number.isFinite).at(-1) ?? null); }
@@ -905,13 +906,11 @@
 			// Dynamic custom SMA traces (from chips)
 			const customList = Array.from(document.querySelectorAll('#smaCustomChips .chip[data-period]'));
 			if(customList.length){
-				const closes = state.rows.map(r=>r.c);
 				for(const chip of customList){
 					const p = +chip.dataset.period; if(!Number.isFinite(p)) continue;
-					// compute series aligned to full rows then map to displayed rows
-					const full = sma(closes, p);
-					const fullAligned = fillForward(fillBackward(full));
-					const mapP = mapByTs(state.rows, fullAligned);
+					// use precomputed aligned SMA series (includes extended-data fallback)
+					const series = Array.isArray(state.smaSeries?.[p])? state.smaSeries[p] : [];
+					const mapP = mapByTs(state.rows, series);
 					const y = rowsDisplay.map(r=> mapP.get(r.t) ?? null);
 					const col = (state.customSMAColors && state.customSMAColors[p]) || CUSTOM_SMA_PALETTE[0];
 					traces.push({ type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(y)), name:`SMA ${p}`, line:{ color: col, width:1.6, dash:'dot' }, yaxis:'y', visible: chip.classList.contains('active') });
