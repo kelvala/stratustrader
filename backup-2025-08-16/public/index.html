@@ -206,8 +206,14 @@
 	#toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(40px);background:var(--panel);color:var(--text);border:1px solid var(--border);padding:10px 14px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:4000;box-shadow:0 6px 24px -2px rgba(0,0,0,.45)}
 	#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-	/* Market Overview mini-cards removed for Finviz-like layout */
-	.mkt-row{display:none!important}
+	/* Market Overview mini-cards */
+	.mkt-row{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:12px;margin:12px 0}
+	@media (max-width:920px){ .mkt-row{grid-template-columns:1fr;gap:10px} }
+	.mkt-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px;box-shadow:0 1px 10px rgba(0,0,0,.15) inset}
+	.mkt-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+	.mkt-name{font-weight:900;letter-spacing:.4px}
+	.mkt-chg{font-weight:900}
+	.mkt-mini{height:160px}
 </style>
 </head>
 <body>
@@ -244,7 +250,21 @@
 			<img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
 		</div>
 
-		<!-- Market Overview removed -->
+		<!-- Market Overview -->
+		<div class="mkt-row" id="mktRow">
+			<div class="mkt-card">
+				<div class="mkt-head"><div class="mkt-name">DOW</div><div class="mkt-chg" id="mktDowChg">—</div></div>
+				<div id="mktDow" class="mkt-mini"></div>
+			</div>
+			<div class="mkt-card">
+				<div class="mkt-head"><div class="mkt-name">NASDAQ</div><div class="mkt-chg" id="mktNasChg">—</div></div>
+				<div id="mktNas" class="mkt-mini"></div>
+			</div>
+			<div class="mkt-card">
+				<div class="mkt-head"><div class="mkt-name">S&P 500</div><div class="mkt-chg" id="mktSPChg">—</div></div>
+				<div id="mktSP" class="mkt-mini"></div>
+			</div>
+		</div>
 
 		<!-- Chart card -->
 		<div id="chartCard">
@@ -436,7 +456,7 @@
 		function applyMaxToggle(){ const cc=els.chartCard; if(!cc) return; const now = cc.classList.toggle('max'); const txt=els.maxBtn?.querySelector('.tool-txt'); if(txt) txt.textContent = now? 'Restore':'Max'; els.maxBtn?.setAttribute('aria-pressed', now?'true':'false'); document.body.style.overflow = now? 'hidden' : ''; if(now){ setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },120); } else { setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },60); } }
 		els.maxBtn?.addEventListener('click', applyMaxToggle);
 
-		async function manualRefresh(){ els.refreshBtn?.setAttribute('data-busy','1'); try{ await loadAndRender(); showToast('Refreshed'); } catch{ showToast('Refresh failed'); } finally { els.refreshBtn?.removeAttribute('data-busy'); } }
+		async function manualRefresh(){ els.refreshBtn?.setAttribute('data-busy','1'); try{ await loadAndRender(); await renderMarketOverview(); showToast('Refreshed'); } catch{ showToast('Refresh failed'); } finally { els.refreshBtn?.removeAttribute('data-busy'); } }
 		els.refreshBtn?.addEventListener('click', manualRefresh);
 
 		// Keyboard shortcuts (optional): W=wide, M=max, R=refresh when focused on body & not typing
@@ -992,6 +1012,39 @@
 
 		function scheduleQuoteAutoRefresh(){ clearInterval(state.quoteTimer); state.quoteTimer=setInterval(()=>refreshQuoteOnce(),60000); }
 
+		/* ---------- Market Overview minis (DOW/NASDAQ/S&P) ---------- */
+		async function fetchMini(symbol){
+			// Use 1d range with 5m candles
+			const range='1d';
+			const interval='5m';
+			try{
+				const r = await fetch(`/api/chart?ticker=${encodeURIComponent(symbol)}&range=${range}&interval=${interval}`, { cache:'no-store' });
+				if(!r.ok) throw 0; const j=await r.json(); const res=j?.chart?.result?.[0]; if(!res) throw 0;
+				const ts=res.timestamp||[]; const qd=res.indicators?.quote?.[0]||{}; const rows=[];
+				for(let i=0;i<ts.length;i++){
+					const o=+qd.open?.[i]||NaN, h=+qd.high?.[i]||NaN, l=+qd.low?.[i]||NaN, c=+qd.close?.[i]||NaN; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:o||c, h:Math.max(h||c,o||c,c), l:Math.min(l||c,o||c,c), c });
+				}
+				rows.sort((a,b)=>a.t-b.t);
+				return rows;
+			}catch{ return []; }
+		}
+		function dayChange(rows){ if(rows.length<2) return {abs:0,pct:0}; const open=rows[0].o; const last=rows.at(-1).c; if(!Number.isFinite(open)||!Number.isFinite(last)||open===0) return {abs:0,pct:0}; const abs=last-open; const pct=abs/open*100; return {abs,pct,last}; }
+		async function renderMini(elId, chgId, symbol){
+			const el=q('#'+elId); if(!el) return; const rows=await fetchMini(symbol); if(!rows.length) { el.innerHTML=''; return; }
+			const x=rows.map(r=>new Date(r.t)), o=rows.map(r=>r.o), h=rows.map(r=>r.h), l=rows.map(r=>r.l), c=rows.map(r=>r.c);
+			const data=[{type:'candlestick',x,open:o,high:h,low:l,close:c,showlegend:false,increasing:{line:{color:'#16a34a'}},decreasing:{line:{color:'#dc2626'}},hoverinfo:'skip'}];
+			const layout={margin:{l:28,r:8,t:6,b:22},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',xaxis:{showgrid:true,gridcolor:css('--grid'),zeroline:false},yaxis:{showgrid:true,gridcolor:css('--grid'),zeroline:false},height:160,displayModeBar:false};
+			await Plotly.react(el, data, layout, {displayModeBar:false,responsive:true});
+			const dc=dayChange(rows); const chgEl=q('#'+chgId); if(chgEl){ const col= dc.abs>=0? (css('--c-up')||'#16a34a') : (css('--c-down')||'#dc2626'); chgEl.style.color=col; chgEl.textContent = `${dc.abs>=0?'+':''}${dc.abs.toFixed(2)} (${dc.pct>=0?'+':''}${dc.pct.toFixed(2)}%)`; }
+		}
+		async function renderMarketOverview(){
+			await Promise.all([
+				renderMini('mktDow','mktDowChg','^DJI'),
+				renderMini('mktNas','mktNasChg','^IXIC'),
+				renderMini('mktSP','mktSPChg','^GSPC')
+			]);
+		}
+
 		async function go(ticker, company){
 			CURRENT={...CURRENT,ticker,company};
 			els.headline.textContent=`${ticker}${company?' — '+company:''}`;
@@ -1238,7 +1291,7 @@
 		/* Market Overview minis removed */
     
 		// Boot
-	(async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; renderCustomSMAChips(); await loadAndRender(); scheduleQuoteAutoRefresh(); /* Market minis disabled */ })();
+	(async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; renderCustomSMAChips(); await loadAndRender(); await renderMarketOverview(); scheduleQuoteAutoRefresh(); })();
 	})();
 	</script>
 </body>
