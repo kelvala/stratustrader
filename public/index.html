@@ -20,7 +20,6 @@
     --c-up:#16a34a;--c-down:#dc2626;
     --c-sma20:#22c55e;--c-sma50:#60a5fa;--c-sma200:#f59e0b; /* back to yellowish 200 SMA */
     --c-rsi:#a78bfa;--c-macd:#38bdf8;--c-vol:#10b981;
-  --c-div:#eab308; /* dividends marker color (amber) */
     --grid:#283044;
     --lvl-beginner:#22c55e; --lvl-intermediate:#f59e0b; --lvl-advanced:#ef4444;
     --tf-bg:#1c1f35; --tf-head:#1a214e; --tf-glow:#3b82f6;
@@ -84,8 +83,6 @@
   .control label{display:block;font-size:13px;font-weight:800;margin-bottom:6px;color:#cbd5ff}
   .control select{width:100%;background:var(--field-bg);color:var(--field-text);border:1px solid var(--border);border-radius:10px;padding:10px}
   .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
-  /* Generic SMA chip styling (fallback for custom SMAs) */
-  .chip[data-k^="SMA"]{border-color:var(--c-sma50);color:var(--c-sma50);}
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:800;opacity:.98;user-select:none;transition:background .15s,color .15s,border-color .15s; -webkit-text-fill-color: currentColor; color: currentColor; background: color-mix(in srgb, var(--panel), #ffffff 3%);} 
   .chip:not(.active){filter: saturate(0.95) brightness(1.02);} 
   /* Chip base colors (fixed typos) */
@@ -96,7 +93,6 @@
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);} 
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);} 
-  .chip[data-k="DIV"]{border-color:var(--c-div);color:var(--c-div);} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip[data-k="SESS"]{border-color:#93c5fd;color:#93c5fd}
@@ -108,7 +104,6 @@
   .chip.active[data-k="RSI"]{background:rgba(167,139,250,.12)}
   .chip.active[data-k="MACD"]{background:rgba(56,189,248,.12)}
   .chip.active[data-k="VOL"]{background:rgba(16,185,129,.12)}
-  .chip.active[data-k="DIV"]{background:rgba(234,179,8,.14)}
   .chip.active[data-k="AUTOFIB"]{background:rgba(139,92,246,.12)}
   .chip.active[data-k="ICHI"]{background:rgba(96,165,250,.12)}
   .chip.active[data-k="SESS"]{background:rgba(147,197,253,.12)}
@@ -123,11 +118,6 @@
   .chip:focus-visible{outline:2px solid currentColor;outline-offset:3px}
   .section-sep{margin:20px -16px 16px;padding:0 16px}
   .section-sep .rule{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.9}
-  /* SMA controls row */
-  .sma-ctrls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 4px}
-  .sma-ctrls select,.sma-ctrls input{background:var(--field-bg);color:var(--field-text);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
-  .sma-ctrls input{width:92px}
-  .sma-ctrls small{opacity:.7}
   .sheet{position:fixed;left:0;right:0;bottom:0;top:auto;background:transparent;display:flex;justify-content:center;z-index:2000}
   .sheet[hidden]{display:none!important}
   .sheet-inner{width:min(760px,100%);background:var(--panel);border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.35);padding:14px;animation:sheetUp .18s ease-out;padding-bottom:max(14px, env(safe-area-inset-bottom))}
@@ -207,28 +197,13 @@
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
   /* Market Overview mini-cards */
-  .mkt-row{display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:12px;margin:12px 0}
-  @media (max-width:920px){ .mkt-row{grid-template-columns:1fr;gap:10px} }
-  .mkt-card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px;box-shadow:0 1px 10px rgba(0,0,0,.15) inset}
-  .mkt-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-  .mkt-name{font-weight:900;letter-spacing:.4px}
+  .mkt-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0}
+  @media (max-width:980px){ .mkt-row{grid-template-columns:1fr;gap:10px} }
+  .mkt-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .mkt-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .mkt-title{font-weight:900;letter-spacing:.4px}
   .mkt-chg{font-weight:900}
-  .mkt-mini{height:160px}
-
-  /* Mini gauges row under market overview (subtle Finviz-like) */
-  .mkt-gauges{display:grid;grid-template-columns:repeat(5,minmax(180px,1fr));gap:10px;margin:6px 0 2px}
-  @media (max-width:1160px){ .mkt-gauges{grid-template-columns:repeat(3,minmax(180px,1fr));} }
-  @media (max-width:820px){ .mkt-gauges{grid-template-columns:repeat(2,minmax(180px,1fr));} }
-  @media (max-width:520px){ .mkt-gauges{grid-template-columns:1fr;gap:8px} }
-  .g-card{background:color-mix(in srgb, var(--panel), var(--bg) 52%);border:1px solid color-mix(in srgb, var(--border), #ffffff 18%);border-radius:10px;padding:6px 8px}
-  .g-head{display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin-bottom:4px}
-  .g-title{font-weight:600;letter-spacing:0;opacity:.88;font-size:12px;white-space:normal;overflow:visible;text-overflow:unset}
-  .g-metrics{font-weight:600;font-size:11px;color:var(--muted);opacity:.9;white-space:nowrap}
-  .g-metrics .g-up{color:var(--c-up)}
-  .g-metrics .g-dn{color:var(--c-down)}
-  .g-bar{position:relative;height:5px;border-radius:5px;background:color-mix(in srgb, var(--metric-bg), #ffffff 8%);border:1px solid color-mix(in srgb, var(--metric-border), #ffffff 20%);overflow:hidden}
-  .g-fill-left{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg, rgba(34,197,94,.52), rgba(34,197,94,.30));}
-  .g-fill-right{position:absolute;right:0;top:0;bottom:0;background:linear-gradient(90deg, rgba(239,68,68,.30), rgba(239,68,68,.52));}
+  .mkt-chart{height:180px}
 </style>
 </head>
 <body>
@@ -252,30 +227,6 @@
       </div>
     </div>
 
-    <!-- Mini gauges under Market Overview -->
-    <div class="mkt-gauges" id="mktGauges">
-      <div class="g-card" id="g-advance">
-        <div class="g-head"><div class="g-title">Advancing vs Declining</div><div class="g-metrics" id="g-advance-m">—</div></div>
-        <div class="g-bar"><div class="g-fill-left" id="g-advance-l" style="width:0%"></div><div class="g-fill-right" id="g-advance-r" style="width:0%"></div></div>
-      </div>
-      <div class="g-card" id="g-newhigh">
-        <div class="g-head"><div class="g-title">New High vs New Low</div><div class="g-metrics" id="g-newhigh-m">—</div></div>
-        <div class="g-bar"><div class="g-fill-left" id="g-newhigh-l" style="width:0%"></div><div class="g-fill-right" id="g-newhigh-r" style="width:0%"></div></div>
-      </div>
-      <div class="g-card" id="g-sma50">
-        <div class="g-head"><div class="g-title">Above vs Below SMA50</div><div class="g-metrics" id="g-sma50-m">—</div></div>
-        <div class="g-bar"><div class="g-fill-left" id="g-sma50-l" style="width:0%"></div><div class="g-fill-right" id="g-sma50-r" style="width:0%"></div></div>
-      </div>
-      <div class="g-card" id="g-sma200">
-        <div class="g-head"><div class="g-title">Above vs Below SMA200</div><div class="g-metrics" id="g-sma200-m">—</div></div>
-        <div class="g-bar"><div class="g-fill-left" id="g-sma200-l" style="width:0%"></div><div class="g-fill-right" id="g-sma200-r" style="width:0%"></div></div>
-      </div>
-      <div class="g-card" id="g-sentiment">
-        <div class="g-head"><div class="g-title">Intraday Sentiment</div><div class="g-metrics" id="g-sentiment-m">—</div></div>
-        <div class="g-bar"><div class="g-fill-left" id="g-sentiment-l" style="width:0%"></div><div class="g-fill-right" id="g-sentiment-r" style="width:0%"></div></div>
-      </div>
-    </div>
-
     <!-- Info bar -->
     <div id="info" class="info">
       <h3 id="headline" style="margin:0 0 4px 0"></h3>
@@ -289,19 +240,19 @@
       <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
     </div>
 
-    <!-- Market Overview -->
-    <div class="mkt-row" id="mktRow">
+    <!-- Market Overview (auto-updating) -->
+    <div id="mktRow" class="mkt-row" aria-label="Market overview">
       <div class="mkt-card">
-        <div class="mkt-head"><div class="mkt-name">DOW</div><div class="mkt-chg" id="mktDowChg">—</div></div>
-        <div id="mktDow" class="mkt-mini"></div>
+        <div class="mkt-head"><span class="mkt-title">DOW</span><span id="mkt-dji-chg" class="mkt-chg">—</span></div>
+        <div id="mkt-dji" class="mkt-chart"></div>
       </div>
       <div class="mkt-card">
-        <div class="mkt-head"><div class="mkt-name">NASDAQ</div><div class="mkt-chg" id="mktNasChg">—</div></div>
-        <div id="mktNas" class="mkt-mini"></div>
+        <div class="mkt-head"><span class="mkt-title">NASDAQ</span><span id="mkt-ixic-chg" class="mkt-chg">—</span></div>
+        <div id="mkt-ixic" class="mkt-chart"></div>
       </div>
       <div class="mkt-card">
-        <div class="mkt-head"><div class="mkt-name">S&P 500</div><div class="mkt-chg" id="mktSPChg">—</div></div>
-        <div id="mktSP" class="mkt-mini"></div>
+        <div class="mkt-head"><span class="mkt-title">S&P 500</span><span id="mkt-gspc-chg" class="mkt-chg">—</span></div>
+        <div id="mkt-gspc" class="mkt-chart"></div>
       </div>
     </div>
 
@@ -349,30 +300,10 @@
         <button class="chip" data-k="RSI" type="button" aria-pressed="false">RSI</button>
         <button class="chip" data-k="MACD" type="button" aria-pressed="false">MACD</button>
         <button class="chip" data-k="VOL" type="button" aria-pressed="false">Volume</button>
-  <button class="chip" data-k="DIV" type="button" aria-pressed="false" title="Show dividend events">Dividends</button>
         <button class="chip" id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
         <button class="chip" data-k="ICHI" type="button" aria-pressed="false">Ichimoku</button>
         <button class="chip" data-k="SESS" type="button" aria-pressed="true" title="Toggle pre/post-market bands">Pre/Post</button>
       </div>
-
-      <!-- Custom SMA controls + dynamic chips -->
-      <div class="sma-ctrls" id="smaCtrls">
-        <label for="smaPreset" style="font-weight:800;opacity:.9">SMA</label>
-        <select id="smaPreset" title="Quick add common SMAs">
-          <option value="">Presets…</option>
-          <option>10</option>
-          <option>20</option>
-          <option>30</option>
-          <option>50</option>
-          <option>100</option>
-          <option>150</option>
-          <option>200</option>
-        </select>
-        <input id="smaCustom" type="number" min="2" max="600" step="1" placeholder="Custom" title="Enter any SMA period" />
-        <button id="smaAddBtn" class="btn inline" type="button" title="Add SMA period">Add SMA</button>
-        <small id="smaHint">Tip: click a chip to toggle; double‑click to remove custom.</small>
-      </div>
-      <div class="toggle-row" id="smaCustomChips"></div>
 
       <div id="chart"></div>
     </div>
@@ -469,8 +400,7 @@
       toolGPTs:q('#toolGPTs'), toolScreeners:q('#toolScreeners'),
       gptInput:q('#gptInput'), sheetGPTs:q('#sheetGPTs'), sheetScreeners:q('#sheetScreeners'),
       // Added: candle height slider + label
-      heightSel:q('#heightSel'), heightLabel:q('#heightLabel'),
-      smaPreset:q('#smaPreset'), smaCustom:q('#smaCustom'), smaAddBtn:q('#smaAddBtn'), smaChips:q('#smaCustomChips')
+      heightSel:q('#heightSel'), heightLabel:q('#heightLabel')
     };
 
     /* ---------- Toast ---------- */
@@ -495,7 +425,7 @@
     function applyMaxToggle(){ const cc=els.chartCard; if(!cc) return; const now = cc.classList.toggle('max'); const txt=els.maxBtn?.querySelector('.tool-txt'); if(txt) txt.textContent = now? 'Restore':'Max'; els.maxBtn?.setAttribute('aria-pressed', now?'true':'false'); document.body.style.overflow = now? 'hidden' : ''; if(now){ setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },120); } else { setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },60); } }
     els.maxBtn?.addEventListener('click', applyMaxToggle);
 
-  async function manualRefresh(){ els.refreshBtn?.setAttribute('data-busy','1'); try{ await loadAndRender(); await renderMarketOverview(); showToast('Refreshed'); } catch{ showToast('Refresh failed'); } finally { els.refreshBtn?.removeAttribute('data-busy'); } }
+    async function manualRefresh(){ els.refreshBtn?.setAttribute('data-busy','1'); try{ await loadAndRender(); showToast('Refreshed'); } catch{ showToast('Refresh failed'); } finally { els.refreshBtn?.removeAttribute('data-busy'); } }
     els.refreshBtn?.addEventListener('click', manualRefresh);
 
     // Keyboard shortcuts (optional): W=wide, M=max, R=refresh when focused on body & not typing
@@ -556,11 +486,8 @@
     /* ---------- Existing code continues below (chart, autocomplete, etc.) ---------- */
     /* ---------- State ---------- */
     let CURRENT = { ticker:null, company:"", prevClose:null };
-  const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0, divs:[], earns:[],
-    customSMAs: (()=>{ try{ const a=JSON.parse(localStorage.getItem('customSMAs')||'[]'); return Array.isArray(a)? a.filter(n=>Number.isFinite(+n)).slice(0,12) : []; }catch{return [];} })()
-  };
+    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0 };
     const FUNDAMENTALS = {}; // cache fundamentals per ticker
-  const EARN_CACHE = {}; // cache earnings history per ticker
 
     /* ---------- Utils & Formatters ---------- */
     const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -681,77 +608,18 @@
       return state.symbols;
     }
 
-    // Fetch earnings history from summary endpoint (robust to Yahoo variations)
-    async function fetchEarningsHistory(ticker){
-      const T = sanitizeTicker(ticker);
-      if(EARN_CACHE[T]) return EARN_CACHE[T];
-      try{
-        const r = await fetch(`/api/summary?ticker=${encodeURIComponent(T)}&modules=earningsHistory`, { cache:'no-store' });
-        if(!r.ok) throw 0;
-        const j = await r.json();
-        const hist = j?.quoteSummary?.result?.[0]?.earningsHistory?.history || [];
-        const out = [];
-        const toMs = (d)=>{
-          if(!d) return NaN;
-          if(typeof d==='number') return d*1000;
-          if(typeof d==='string') { const p=Date.parse(d); return Number.isFinite(p)? p : NaN; }
-          if(typeof d==='object' && Number.isFinite(d.raw)) return d.raw*1000;
-          return NaN;
-        };
-        for(const it of hist){
-          let tms = toMs(it?.date) || toMs(it?.earningsDate) || toMs(it?.startdatetime) || toMs(it?.startDate);
-          if(!Number.isFinite(tms)) continue;
-          const act = +(it?.epsActual?.raw ?? it?.epsActual ?? NaN);
-          const est = +(it?.epsEstimate?.raw ?? it?.epsEstimate ?? NaN);
-          const sp  = +(it?.surprisePercent?.raw ?? it?.surprisePercent ?? NaN);
-          out.push({ t:tms, act, est, sp });
-        }
-        if(!out.length){
-          // Fallback to calendarEvents for at least dates
-          try{
-            const r2 = await fetch(`/api/summary?ticker=${encodeURIComponent(T)}&modules=calendarEvents`, { cache:'no-store' });
-            if(r2.ok){ const j2 = await r2.json(); const ev = j2?.quoteSummary?.result?.[0]?.calendarEvents?.earnings?.earningsDate; const arr = Array.isArray(ev)? ev : (ev?[ev]:[]); for(const d of arr){ const tms = toMs(d); if(Number.isFinite(tms)) out.push({ t:tms, act:NaN, est:NaN, sp:NaN }); } }
-          }catch{}
-        }
-        out.sort((a,b)=>a.t-b.t);
-        EARN_CACHE[T] = out;
-        return out;
-      }catch{ EARN_CACHE[T] = []; return []; }
-    }
-
     /* ---------- Indicators ---------- */
     const sma = (arr,p)=>{ if(!Array.isArray(arr)||!arr.length||!p) return []; const out=Array(arr.length).fill(null); let sum=0; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(Number.isFinite(v)) sum+=v; if(i>=p){ const w=+arr[i-p]; if(Number.isFinite(w)) sum-=w; } if(i>=p-1) out[i]=sum/p; } return out; };
     const ema = (arr,p)=>{ const out=Array(arr.length).fill(null); const k=2/(p+1); let prev=null; for(let i=0;i<arr.length;i++){ const v=+arr[i]; if(!Number.isFinite(v)) { out[i]=prev; continue; } prev = prev==null? v : (v - prev)*k + prev; out[i]=prev; } return out; };
     const fillForward = (arr)=>{ let last=null; return arr.map(v=>{ if(Number.isFinite(v)){ last=v; return v; } return Number.isFinite(last)? last : null; }); };
     const fillBackward = (arr)=>{ const out=arr.slice(); const fi=out.findIndex(Number.isFinite); if(fi>0){ const v=out[fi]; for(let i=0;i<fi;i++) out[i]=v; } return out; };
     const mapByTs = (rows, values)=>{ const m=new Map(); for(let i=0;i<rows.length;i++){ const t=rows[i]?.t; const v=values[i]; if(Number.isFinite(v)) m.set(t, v); } return m; };
-  const uniqSortedNums = arr=> Array.from(new Set((arr||[]).map(n=>+n).filter(n=>Number.isFinite(n)))).sort((a,b)=>a-b);
-  // Palette for custom SMAs (cycled). Chosen to be distinct and readable in dark UI.
-  const CUSTOM_SMA_PALETTE = ['#f97316','#a78bfa','#06b6d4','#f472b6','#84cc16','#14b8a6','#e879f9','#22d3ee','#fb7185'];
-
-  // Custom SMA chips rendering and interactions
-  function persistCustomSMAs(){ localStorage.setItem('customSMAs', JSON.stringify(state.customSMAs||[])); }
-  function renderCustomSMAChips(){
-    if(!els.smaChips) return;
-    const list = uniqSortedNums(state.customSMAs||[]);
-    // Stable period->color mapping within session
-    // Rebuild mapping each render so colors are distinct and ordered by period
-    state.customSMAColors = {};
-    list.forEach((p,i)=>{ state.customSMAColors[p] = CUSTOM_SMA_PALETTE[i % CUSTOM_SMA_PALETTE.length]; });
-    els.smaChips.innerHTML = list.map(p=>{
-      const col = state.customSMAColors[p] || CUSTOM_SMA_PALETTE[0];
-      return `<button class="chip" data-k="SMA${p}" data-period="${p}" type="button" aria-pressed="true" title="Toggle SMA ${p}" style="border-color:${col};color:${col}">SMA ${p}</button>`;
-    }).join('');
-  }
-  function addCustomSMA(p){ p=+p; if(!Number.isFinite(p)||p<2||p>600) return showToast('Enter 2..600'); state.customSMAs = uniqSortedNums([...(state.customSMAs||[]), p]); persistCustomSMAs(); renderCustomSMAChips(); buildSMAAlignedSeries(/* will include base only; custom handled in render */); renderChart(); }
-  function removeCustomSMA(p){ p=+p; state.customSMAs = (state.customSMAs||[]).filter(x=>+x!==p); persistCustomSMAs(); renderCustomSMAChips(); renderChart(); }
 
     // Build SMA series aligned to state.rows; when < period, back/forward fill; when missing, try extended pull
     async function buildSMAAlignedSeries(){
       const rows = state.rows||[]; state.smaSeries = state.smaSeries || {}; state.smaLast = state.smaLast || {}; if(!rows.length){ state.smaSeries={}; state.smaLast={}; return; }
       const closes = rows.map(r=>r.c);
-      // Include base and any custom SMAs so customs also benefit from extended-data alignment
-      const periods = uniqSortedNums([20,50,200, ...((state.customSMAs||[]))]).slice(0, 24);
+      const periods = [20,50,200];
       const pickRange=(interval,p)=>{ switch(interval){ case '1m':return '5d'; case '5m':return '1mo'; case '15m':return '3mo'; case '60m':return '6mo'; case '1wk':return '10y'; case '1mo': return 'max'; case '3mo': return 'max'; case '1y': return 'max'; default: return p>=200? '3y':'1y'; } };
       async function alignFromExtended(p){ const extR = pickRange(state.interval, p); try{ const ext = await fetchRows(state.ticker, extR, state.interval); if(Array.isArray(ext)&&ext.length){ const yExt = sma(ext.map(r=>r.c), p); const mapP = mapByTs(ext, yExt); const aligned = rows.map(r=> mapP.get(r.t) ?? null); return fillBackward(fillForward(aligned)); } }catch{} return null; }
       for(const p of periods){ let y = sma(closes, p); if(y.some(Number.isFinite)) y=fillBackward(fillForward(y)); else { const extAligned = await alignFromExtended(p); y = extAligned || Array(rows.length).fill(closes.filter(Number.isFinite).at(-1) ?? null); }
@@ -767,9 +635,6 @@
       const cxms=c.x.map(toMs); let i0=0; while(i0<cxms.length && cxms[i0]<x0ms) i0++; let i1=cxms.length-1; while(i1>i0 && cxms[i1]>x1ms) i1--; if(i1<=i0) return;
       let hi=-Infinity, lo=Infinity; for(let i=i0;i<=i1;i++){ const h=c.high[i], l=c.low[i]; if(Number.isFinite(h)) hi=Math.max(hi,h); if(Number.isFinite(l)) lo=Math.min(lo,l); }
       if(!Number.isFinite(hi)||!Number.isFinite(lo)) return; if(hi===lo){ hi+=1; lo-=1; }
-  // Include overlay marker y-values (Earnings/Dividends) in bounds when they exist in viewport
-  const includeScatterY=(name)=>{ const t=(d||[]).find(tt=>tt && tt.type==='scatter' && tt.name===name); if(!t||!Array.isArray(t.x)||!Array.isArray(t.y)) return; for(let k=0;k<t.x.length;k++){ const tx=toMs(t.x[k]); const ty=t.y[k]; if(tx>=x0ms && tx<=x1ms && Number.isFinite(ty)){ hi=Math.max(hi, ty); lo=Math.min(lo, ty); } } };
-  includeScatterY('Earnings'); includeScatterY('Dividends');
       const basePad = Math.max((hi-lo)*0.08, 0.01); const pad = basePad * padScaleFromTight(state.candleTight);
       try{ await Plotly.relayout(els.chart, { 'yaxis.autorange':false, 'yaxis.range':[lo-pad, hi+pad] }); }catch{}
     }
@@ -898,66 +763,11 @@
       const tSMA50 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map50.get(r.t) ?? null))), name:'SMA 50', line:{ color: css('--c-sma50')||'#60a5fa', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA50"]')?.classList.contains('active')||false };
       const tSMA200= { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map200.get(r.t) ?? null))), name:'SMA 200', line:{ color: css('--c-sma200')||'#f59e0b', width:2.0 }, yaxis:'y', visible: q('.chip[data-k="SMA200"]')?.classList.contains('active')||false };
       traces.push(tSMA20,tSMA50,tSMA200);
-      // Dynamic custom SMA traces (from chips)
-      const customList = Array.from(document.querySelectorAll('#smaCustomChips .chip[data-period]'));
-      if(customList.length){
-        for(const chip of customList){
-          const p = +chip.dataset.period; if(!Number.isFinite(p)) continue;
-          // use precomputed aligned SMA series (includes extended-data fallback)
-          const series = Array.isArray(state.smaSeries?.[p])? state.smaSeries[p] : [];
-          const mapP = mapByTs(state.rows, series);
-          const y = rowsDisplay.map(r=> mapP.get(r.t) ?? null);
-          const col = (state.customSMAColors && state.customSMAColors[p]) || CUSTOM_SMA_PALETTE[0];
-          traces.push({ type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(y)), name:`SMA ${p}`, line:{ color: col, width:1.6, dash:'dot' }, yaxis:'y', visible: chip.classList.contains('active') });
-        }
-      }
       // Other overlays
       const volOn = q('.chip[data-k="VOL"]')?.classList.contains('active')||false; if(volOn) traces.push(volTrace(rowsDisplay));
       const rsiOn = q('.chip[data-k="RSI"]')?.classList.contains('active')||false; if(rsiOn) traces.push(rsiTrace(rowsDisplay));
       const macdOn= q('.chip[data-k="MACD"]')?.classList.contains('active')||false; if(macdOn) traces.push(...macdTraces(rowsDisplay));
       const ichiOn= q('.chip[data-k="ICHI"]')?.classList.contains('active')||false; if(ichiOn) traces.push(...ichiTraces(rowsDisplay));
-
-      // Dividends overlay markers (when toggled on)
-      function dividendTrace(rowsDisp){
-        const divs = Array.isArray(state.divs)? state.divs : [];
-        if(!divs.length || !rowsDisp.length) return null;
-        const dayKey = ms=> Math.floor(ms/86400000);
-        const byDay = new Map();
-        for(const r of rowsDisp){ byDay.set(dayKey(r.t), r); }
-        const times = rowsDisp.map(r=>r.t);
-        const findContainingIndex = (t)=>{
-          // Find bar i such that times[i] <= t < times[i+1] (or last bar)
-          const n=times.length;
-          if(n===1) return 0;
-          let lo=0, hi=n-1;
-          if(t<times[0]) return -1;
-          if(t>=times[n-1]) return n-1;
-          // linear scan is fine for small traces
-          for(let i=0;i<n-1;i++){ if(t>=times[i] && t<times[i+1]) return i; }
-          return -1;
-        };
-        const x=[], y=[], cd=[];
-        for(const d of divs){
-          let r = byDay.get(dayKey(d.t));
-          if(!r){
-            const idx = findContainingIndex(d.t);
-            if(idx>=0) r = rowsDisp[idx];
-          }
-          if(!r) continue;
-          x.push(new Date(r.t));
-          const span = (Number.isFinite(r.h)&&Number.isFinite(r.l))? (r.h - r.l) : 0;
-          // Place marker slightly ABOVE the low so it's within the bar (ensures it's always visible)
-          y.push((Number.isFinite(r.l)? r.l : r.c) + span*0.06);
-          cd.push([d.amount]);
-        }
-        if(!x.length) return null;
-        return { type:'scatter', mode:'markers', x, y, name:'Dividends', yaxis:'y',
-          marker:{ symbol:'triangle-up', size:12, color: css('--c-div')||'#eab308', opacity:0.98, line:{ width:1.2, color:'#000' } },
-          hovertemplate:'Dividend %{customdata[0]:$.2f}<extra></extra>', customdata:cd };
-      }
-      const divOn = q('.chip[data-k="DIV"]')?.classList.contains('active')||false; if(divOn){ const dt = dividendTrace(rowsDisplay); if(dt) traces.push(dt); }
-
-      /* Earnings overlay removed */
 
       // Auto Fib
       state.fibIdx = [];
@@ -987,7 +797,7 @@
         margin:{l:56,r:24,t:18,b:28},
         paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
         showlegend:true, legend:{orientation:'h', y:-0.12},
-        xaxis:{ gridcolor:css('--grid'), showgrid:true, zeroline:false, rangeslider:{ visible:false } },
+        xaxis:{ gridcolor:css('--grid'), showgrid:true, zeroline:false },
         yaxis:{ gridcolor:css('--grid'), showgrid:true, zeroline:false },
         yaxis2:{ overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false },
         yaxis3:{ overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
@@ -1063,105 +873,6 @@
 
     function scheduleQuoteAutoRefresh(){ clearInterval(state.quoteTimer); state.quoteTimer=setInterval(()=>refreshQuoteOnce(),60000); }
 
-    /* ---------- Market Overview minis (DOW/NASDAQ/S&P) ---------- */
-    async function fetchMini(symbol){
-      // Try today's regular session only (9:30–16:00 ET). If blank, fallback to last trading day within past 5 days.
-      async function fetchRange(range='1d', interval='5m'){
-        try{
-          const r = await fetch(`/api/chart?ticker=${encodeURIComponent(symbol)}&range=${range}&interval=${interval}`, { cache:'no-store' });
-          if(!r.ok) return [];
-          const j=await r.json(); const res=j?.chart?.result?.[0]; if(!res) return [];
-          const ts=res.timestamp||[]; const qd=res.indicators?.quote?.[0]||{}; const rows=[];
-          for(let i=0;i<ts.length;i++){
-            const o=+qd.open?.[i]||NaN, h=+qd.high?.[i]||NaN, l=+qd.low?.[i]||NaN, c=+qd.close?.[i]||NaN; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:o||c, h:Math.max(h||c,o||c,c), l:Math.min(l||c,o||c,c), c });
-          }
-          rows.sort((a,b)=>a.t-b.t);
-          return rows;
-        }catch{ return []; }
-      }
-      const today = (await fetchRange('1d','5m')).filter(r=> isRegularSessionET(r.t));
-      if(today.length>=3) return today;
-      // Fallback: choose last day in past 5d that has regular session bars
-      const past = await fetchRange('5d','5m'); if(!past.length) return [];
-      const dtf = new Intl.DateTimeFormat('en-US',{ timeZone:'America/New_York', year:'numeric', month:'2-digit', day:'2-digit' });
-      const key = (ms)=> dtf.format(new Date(ms));
-      const byDay = new Map();
-      for(const r of past){ const k=key(r.t); if(!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(r); }
-      const days = Array.from(byDay.keys()).sort((a,b)=> new Date(a) - new Date(b));
-      for(let i=days.length-1;i>=0;i--){ const k=days[i]; const list=(byDay.get(k)||[]).filter(rr=> isRegularSessionET(rr.t)); if(list.length>=10) return list; }
-      return [];
-    }
-    function dayChange(rows){ if(rows.length<2) return {abs:0,pct:0}; const open=rows[0].o; const last=rows.at(-1).c; if(!Number.isFinite(open)||!Number.isFinite(last)||open===0) return {abs:0,pct:0}; const abs=last-open; const pct=abs/open*100; return {abs,pct,last}; }
-    async function renderMini(elId, chgId, symbol){
-      const el=q('#'+elId); if(!el) return; const rows=await fetchMini(symbol); if(!rows.length) { el.innerHTML=''; return; }
-      const x=rows.map(r=>new Date(r.t)), o=rows.map(r=>r.o), h=rows.map(r=>r.h), l=rows.map(r=>r.l), c=rows.map(r=>r.c);
-      // Fixed x-axis 9:30–16:00 ET with trader-friendly tick marks
-      const first = rows[0]?.t, last = rows.at(-1)?.t;
-      const tz = 'America/New_York';
-      function etTs(d){ return new Date(new Intl.DateTimeFormat('en-US',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(d))+' 00:00:00').getTime(); }
-      const day0 = etTs(first || Date.now());
-      const t930 = day0 + (9*60+30)*60*1000;
-      const t1000= day0 + 10*60*60*1000;
-      const t1200= day0 + 12*60*60*1000;
-      const t1400= day0 + 14*60*60*1000;
-      const t1600= day0 + 16*60*60*1000;
-      const data=[{type:'candlestick',x,open:o,high:h,low:l,close:c,showlegend:false,increasing:{line:{color:'#16a34a'}},decreasing:{line:{color:'#dc2626'}},hoverinfo:'skip'}];
-      const layout={
-        margin:{l:28,r:8,t:6,b:22},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',
-        xaxis:{showgrid:true,gridcolor:css('--grid'),zeroline:false,fixedrange:true,rangeslider:{visible:false},
-               range:[new Date(t930), new Date(t1600)], tickvals:[new Date(t1000),new Date(t1200),new Date(t1400),new Date(t1600)], tickformat:'%I%p'},
-        yaxis:{showgrid:true,gridcolor:css('--grid'),zeroline:false,fixedrange:true},
-        height:160
-      };
-      await Plotly.react(el, data, layout, {displayModeBar:false,responsive:true, staticPlot:true});
-      const dc=dayChange(rows); const chgEl=q('#'+chgId); if(chgEl){ const col= dc.abs>=0? (css('--c-up')||'#16a34a') : (css('--c-down')||'#dc2626'); chgEl.style.color=col; chgEl.textContent = `${dc.abs>=0?'+':''}${dc.abs.toFixed(2)} (${dc.pct>=0?'+':''}${dc.pct.toFixed(2)}%)`; }
-      return rows;
-    }
-    function updateGauges(rowsMap){
-      // rowsMap: { d:[], n:[], s:[] }
-      try{
-        const all=[...(rowsMap.d||[]), ...(rowsMap.n||[]), ...(rowsMap.s||[])];
-        if(all.length<3) return;
-        let adv=0, dec=0; let nh=0, nl=0;
-        let hi=-Infinity, lo=Infinity;
-        let above50=0, below50=0; let above200=0, below200=0; // vs SMA50 / SMA200
-        // Build SMA50 incrementally
-        function sma50(arr){ const p=50; const out=[]; let sum=0, cnt=0; for(let i=0;i<arr.length;i++){ const v=arr[i]; if(Number.isFinite(v)){ sum+=v; cnt++; } if(i>=p){ const w=arr[i-p]; if(Number.isFinite(w)){ sum-=w; cnt--; } } out[i]= (i>=p-1 && cnt>0)? (sum/cnt) : null; } return out; }
-        function sma200(arr){ const p=200; const out=[]; let sum=0, cnt=0; for(let i=0;i<arr.length;i++){ const v=arr[i]; if(Number.isFinite(v)){ sum+=v; cnt++; } if(i>=p){ const w=arr[i-p]; if(Number.isFinite(w)){ sum-=w; cnt--; } } out[i]= (i>=p-1 && cnt>0)? (sum/cnt) : null; } return out; }
-        // Combine closes by index
-        const closesD=(rowsMap.d||[]).map(r=>r.c), closesN=(rowsMap.n||[]).map(r=>r.c), closesS=(rowsMap.s||[]).map(r=>r.c);
-        const s50D=sma50(closesD), s50N=sma50(closesN), s50S=sma50(closesS);
-        const s200D=sma200(closesD), s200N=sma200(closesN), s200S=sma200(closesS);
-        function scan(arr, s50, s200){ for(let i=1;i<arr.length;i++){ const prev=arr[i-1].c, cur=arr[i].c; if(Number.isFinite(prev)&&Number.isFinite(cur)){ if(cur>prev) adv++; else if(cur<prev) dec++; } if(Number.isFinite(cur)){ if(cur>hi){ hi=cur; nh++; } if(cur<lo){ lo=cur; nl++; } } const v50=s50[i]; if(Number.isFinite(v50)&&Number.isFinite(cur)){ if(cur>=v50) above50++; else below50++; } const v200=s200[i]; if(Number.isFinite(v200)&&Number.isFinite(cur)){ if(cur>=v200) above200++; else below200++; } }
-        }
-        scan(rowsMap.d||[], s50D, s200D); scan(rowsMap.n||[], s50N, s200N); scan(rowsMap.s||[], s50S, s200S);
-        const tot=adv+dec; const advPct = tot? Math.round(adv/tot*1000)/10 : 50; const decPct=100-advPct;
-        q('#g-advance-l').style.width = advPct+'%'; q('#g-advance-r').style.width = decPct+'%';
-  q('#g-advance-m').innerHTML = `<span class="g-up">Advancing ${advPct.toFixed(1)}%</span> · <span class="g-dn">Declining ${decPct.toFixed(1)}%</span>`;
-        const tn=nh+nl; const nhPct = tn? Math.round(nh/tn*1000)/10 : 50; const nlPct=100-nhPct;
-        q('#g-newhigh-l').style.width = nhPct+'%'; q('#g-newhigh-r').style.width = nlPct+'%';
-  q('#g-newhigh-m').innerHTML = `<span class="g-up">New High ${nhPct.toFixed(1)}%</span> · <span class="g-dn">New Low ${nlPct.toFixed(1)}%</span>`;
-        const tb50=above50+below50; const ab50 = tb50? Math.round(above50/tb50*1000)/10 : 50; const bl50=100-ab50;
-        q('#g-sma50-l').style.width = ab50+'%'; q('#g-sma50-r').style.width = bl50+'%';
-  q('#g-sma50-m').innerHTML = `<span class="g-up">Above ${ab50.toFixed(1)}%</span> · <span class="g-dn">Below ${bl50.toFixed(1)}%</span>`;
-        const tb200=above200+below200; const ab200 = tb200? Math.round(above200/tb200*1000)/10 : 50; const bl200=100-ab200;
-        q('#g-sma200-l').style.width = ab200+'%'; q('#g-sma200-r').style.width = bl200+'%';
-  q('#g-sma200-m').innerHTML = `<span class="g-up">Above ${ab200.toFixed(1)}%</span> · <span class="g-dn">Below ${bl200.toFixed(1)}%</span>`;
-        q('#g-sentiment-l').style.width = advPct+'%'; q('#g-sentiment-r').style.width = decPct+'%';
-  const adv0 = Math.round(advPct);
-  const dec0 = 100 - adv0;
-  q('#g-sentiment-m').innerHTML = `${adv0}% <span class="g-up">BULL</span>  ${dec0}% <span class="g-dn">BEAR</span>`;
-      }catch{}
-    }
-    async function renderMarketOverview(){
-      const [dRows, nRows, sRows] = await Promise.all([
-        renderMini('mktDow','mktDowChg','^DJI'),
-        renderMini('mktNas','mktNasChg','^IXIC'),
-        renderMini('mktSP','mktSPChg','^GSPC')
-      ]);
-      updateGauges({ d:dRows||[], n:nRows||[], s:sRows||[] });
-    }
-
     async function go(ticker, company){
       CURRENT={...CURRENT,ticker,company};
       els.headline.textContent=`${ticker}${company?' — '+company:''}`;
@@ -1169,9 +880,7 @@
       try{
         if(!FUNDAMENTALS[ticker]){ try{ FUNDAMENTALS[ticker]=await getFundamentals(ticker); }catch{ FUNDAMENTALS[ticker]={}; } }
         await waitForPlotly();
-  const rows = await fetchRows(ticker, state.range, state.interval); state.rows = rows;
-  // Load earnings history in parallel (don't block chart)
-  fetchEarningsHistory(ticker).then(list=>{ if(sanitizeTicker(state.ticker)===sanitizeTicker(ticker)){ state.earns = list; /* re-render if EARN is on */ if(document.querySelector('.chip[data-k="EARN"]')?.classList.contains('active')) renderChart(); } }).catch(()=>{});
+        const rows = await fetchRows(ticker, state.range, state.interval); state.rows = rows;
         await buildSMAAlignedSeries();
         await renderChart();
         await refreshQuoteOnce();
@@ -1195,30 +904,6 @@
           const j = await r.json();
           const res = j?.chart?.result?.[0];
           if(res){
-            // Capture dividends from the primary payload when available
-            try{
-              const raw = res?.events?.dividends || {};
-              const divs = Object.values(raw)
-                .map(e=>({ t: ((e?.date||e?.timestamp)||0)*1000, amount: +e?.amount }))
-                .filter(d=> Number.isFinite(d.t) && Number.isFinite(d.amount) && d.amount>0)
-                .sort((a,b)=>a.t-b.t);
-              if(sanitizeTicker(ticker)===sanitizeTicker(state.ticker)) state.divs = divs;
-            }catch{}
-            // Capture earnings from the primary payload when available
-            try{
-              const eraw = res?.events?.earnings || {};
-              const earns = Object.values(eraw)
-                .map(e=>{
-                  const tSec = (e?.date||e?.timestamp||e?.earningsDate||e?.startdatetime||0);
-                  const act = +(e?.epsactual ?? e?.epsActual ?? e?.actual ?? e?.reportedEPS ?? e?.eps ?? e?.reported?.EPS ?? e?.epsReported ?? NaN);
-                  const est = +(e?.epsestimate ?? e?.epsEstimate ?? e?.estimate ?? e?.EpsEstimate ?? e?.epsForecast ?? NaN);
-                  const sp  = +(e?.epssurprisepct ?? e?.surprisePercent ?? e?.surprisepct ?? e?.surprise ?? NaN);
-                  return { t: tSec*1000, act, est, sp };
-                })
-                .filter(x=> Number.isFinite(x.t) && (Number.isFinite(x.act)||Number.isFinite(x.est)||Number.isFinite(x.sp)))
-                .sort((a,b)=>a.t-b.t);
-              if(sanitizeTicker(ticker)===sanitizeTicker(state.ticker)) state.earns = earns;
-            }catch{}
             const ts = res.timestamp || [];
             const qd = res.indicators?.quote?.[0] || {};
             // Yahoo sometimes returns nulls for OHLC on long ranges (5y/10y) with 3mo/1y intervals.
@@ -1309,34 +994,6 @@
                 }catch(e){ console.warn('daily agg: fetch fail', R, e?.message||e); continue; }
                 const res2 = j2?.chart?.result?.[0];
                 if(!res2) { console.warn('daily agg: no result for', R); continue; }
-                // Fallback dividends from daily payload if not already captured
-                try{
-                  if(sanitizeTicker(ticker)===sanitizeTicker(state.ticker) && (!Array.isArray(state.divs) || !state.divs.length)){
-                    const raw2 = res2?.events?.dividends || {};
-                    const d2 = Object.values(raw2)
-                      .map(e=>({ t: ((e?.date||e?.timestamp)||0)*1000, amount: +e?.amount }))
-                      .filter(d=> Number.isFinite(d.t) && Number.isFinite(d.amount) && d.amount>0)
-                      .sort((a,b)=>a.t-b.t);
-                    if(d2.length) state.divs = d2;
-                  }
-                }catch{}
-                // Fallback earnings from daily payload if not already captured
-                try{
-                  if(sanitizeTicker(ticker)===sanitizeTicker(state.ticker) && (!Array.isArray(state.earns) || !state.earns.length)){
-                    const eraw2 = res2?.events?.earnings || {};
-                    const e2 = Object.values(eraw2)
-                      .map(e=>{
-                        const tSec = (e?.date||e?.timestamp||e?.earningsDate||e?.startdatetime||0);
-                        const act = +(e?.epsactual ?? e?.epsActual ?? e?.actual ?? e?.reportedEPS ?? e?.eps ?? e?.reported?.EPS ?? e?.epsReported ?? NaN);
-                        const est = +(e?.epsestimate ?? e?.epsEstimate ?? e?.estimate ?? e?.EpsEstimate ?? e?.epsForecast ?? NaN);
-                        const sp  = +(e?.epssurprisepct ?? e?.surprisePercent ?? e?.surprisepct ?? e?.surprise ?? NaN);
-                        return { t: tSec*1000, act, est, sp };
-                      })
-                      .filter(x=> Number.isFinite(x.t) && (Number.isFinite(x.act)||Number.isFinite(x.est)||Number.isFinite(x.sp)))
-                      .sort((a,b)=>a.t-b.t);
-                    if(e2.length) state.earns = e2;
-                  }
-                }catch{}
                 const ts2 = res2.timestamp || [];
                 const qd2 = res2.indicators?.quote?.[0] || {};
                 const ac2 = res2.indicators?.adjclose?.[0]?.adjclose || [];
@@ -1361,7 +1018,7 @@
                   if(Number.isFinite(t0)) agg = agg.filter(r=> r.t>=t0 && r.t<=t1);
                   if(agg.length){
                     try{ console.info('Using daily aggregation:', { fromRange:R, bars:agg.length }); }catch{}
-                    try{ if(typeof showToast==='function') showToast('Based on daily averages — built '+(interval==='3mo'?'quarterly':'yearly')); }catch{}
+                    try{ if(typeof showToast==='function') showToast('Built '+(interval==='3mo'?'quarterly':'yearly')+' from daily'); }catch{}
                     return agg;
                   }
                 }
@@ -1394,21 +1051,89 @@
     els.list?.addEventListener('mousedown', (e)=>{ const it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });
     els.timeSel?.addEventListener('change', ()=>{ state.range=els.timeSel.value; loadAndRender(); });
     els.freqSel?.addEventListener('change', ()=>{ state.interval=els.freqSel.value; loadAndRender(); });
-  els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
+    els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(updateAutoFibDebounced, 0); } });
 
-    // SMA controls wiring
-    els.smaPreset?.addEventListener('change', ()=>{ const v=+els.smaPreset.value; if(Number.isFinite(v)) addCustomSMA(v); els.smaPreset.value=''; });
-    els.smaAddBtn?.addEventListener('click', ()=>{ const v=+els.smaCustom.value; if(Number.isFinite(v)) addCustomSMA(v); else showToast('Enter a number'); });
-    els.smaCustom?.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const v=+els.smaCustom.value; if(Number.isFinite(v)) addCustomSMA(v); }});
-    // Toggle custom chip on click, remove on double click
-    els.smaChips?.addEventListener('click', e=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
-    els.smaChips?.addEventListener('dblclick', e=>{ const chip=e.target.closest('.chip'); if(!chip) return; const p=+chip.dataset.period; if(Number.isFinite(p)) removeCustomSMA(p); });
+    /* ---------- Market Overview minis (DOW / NASDAQ / S&P) ---------- */
+    const MKT = [
+      { id:'dji',  elId:'mkt-dji',  chgId:'mkt-dji-chg',  sym:'^DJI',  title:'DOW' },
+      { id:'ixic', elId:'mkt-ixic', chgId:'mkt-ixic-chg', sym:'^IXIC', title:'NASDAQ' },
+      { id:'gspc', elId:'mkt-gspc', chgId:'mkt-gspc-chg', sym:'^GSPC', title:'S&P 500' }
+    ];
 
-    /* Market Overview minis removed */
+    // NEW: helpers so minis keep last completed session after-hours
+    const toETDay = (ms)=> new Date(new Date(ms).toLocaleString('en-US',{ timeZone:'America/New_York' })).toDateString();
+    const getMktCache = (id)=>{ try{ return JSON.parse(localStorage.getItem('mkt:'+id)||'null'); }catch{ return null; } };
+    const setMktCache = (id,payload)=>{ try{ localStorage.setItem('mkt:'+id, JSON.stringify(payload)); }catch{} };
+    function lastCompletedSession(rows){
+      if(!rows?.length) return null;
+      const by = new Map();
+      for(const r of rows){ const k = toETDay(r.t); (by.get(k) || by.set(k, []).get(k)).push(r); }
+      const days = Array.from(by.values());
+      let k = days.length - 1; while(k>=0 && !(days[k]?.length)) k--; if(k<0) return null;
+      const sessionRows = days[k];
+      let prevClose = null; for(let j=k-1;j>=0;j--){ const rr = days[j]; if(rr?.length){ prevClose = rr.at(-1)?.c ?? null; break; } }
+      const lastClose = sessionRows.at(-1)?.c ?? null;
+      return { sessionRows, prevClose, lastClose };
+    }
+
+    function mktLayout(prev){
+      const grid = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim()||'#283044';
+      return {
+        margin:{l:44,r:8,t:8,b:20},
+        paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
+        xaxis:{showgrid:true,gridcolor:grid, tickfont:{size:10}},
+        yaxis:{showgrid:true,gridcolor:grid, zeroline:false, tickfont:{size:10}, side:'right'},
+        showlegend:false,
+        shapes: prev!=null ? [{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:prev,y1:prev,line:{color:'#ef4444',dash:'dot',width:1}}] : []
+      };
+    }
+    function mktCandle(rows){
+      return {
+        type:'candlestick',
+        x: rows.map(r=>new Date(r.t)),
+        open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c),
+        increasing:{ line:{ color: getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a', width:1.6 } },
+        decreasing:{ line:{ color: getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626', width:1.6 } },
+        hovertemplate:'%{x|%I:%M %p}<br>O %{open:.2f} · H %{high:.2f}<br>L %{low:.2f} · C %{close:.2f}<extra></extra>'
+      };
+    }
+    async function renderMktCard(card){
+      const el = document.getElementById(card.elId); if(!el) return;
+      try{
+        // Wider window so we can always select a completed day
+        const rows5d = await fetchRows(card.sym, '5d', '5m');
+        const sess = lastCompletedSession(rows5d);
+        if(!sess) throw new Error('no session');
+        const { sessionRows, prevClose, lastClose } = sess;
+        const chg = (Number.isFinite(lastClose)&&Number.isFinite(prevClose)) ? lastClose - prevClose : NaN;
+        const pct = (Number.isFinite(lastClose)&&Number.isFinite(prevClose)&&prevClose!==0) ? (chg/prevClose*100) : NaN;
+        const col = chg>0? (getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a') : chg<0? (getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626') : '#cbd5e1';
+        const chgEl = document.getElementById(card.chgId);
+        if(chgEl){ chgEl.style.color=col; chgEl.textContent = (Number.isFinite(chg)&&Number.isFinite(pct))? `${chg>0?'+':''}${chg.toFixed(2)} (${chg>0?'+':''}${pct.toFixed(2)}%)` : '—'; }
+        await Plotly.react(el, [mktCandle(sessionRows)], mktLayout(prevClose), {displayModeBar:false, responsive:true});
+        // Cache for overnight persistence (~78 bars ≈ 6.5h at 5m)
+        setMktCache(card.id, { prev: prevClose, last: lastClose, rows: sessionRows.slice(-78), t: Date.now() });
+      }catch(e){
+        // Fallback to cache so cards never go blank after-hours
+        const cached = getMktCache(card.id);
+        if(cached?.rows?.length){
+          await Plotly.react(el, [mktCandle(cached.rows)], mktLayout(cached.prev), {displayModeBar:false, responsive:true});
+          const chgEl = document.getElementById(card.chgId);
+          if(chgEl && Number.isFinite(cached.last) && Number.isFinite(cached.prev)){
+            const chg = cached.last - cached.prev; const pct = cached.prev? chg/cached.prev*100 : 0;
+            const col = chg>0? (getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a') : chg<0? (getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626') : '#cbd5e1';
+            chgEl.style.color=col; chgEl.textContent = `${chg>0?'+':''}${chg.toFixed(2)} (${chg>0?'+':''}${pct.toFixed(2)}%)`;
+          }
+        }
+      }
+    }
+    async function renderAllMkt(){ await Promise.all(MKT.map(renderMktCard)); }
+    let mktTimer=null; function scheduleMkt(){ clearInterval(mktTimer); mktTimer=setInterval(renderAllMkt, 60000); }
+    window.addEventListener('resize', ()=>{ for(const c of MKT){ const el=document.getElementById(c.elId); if(el) try{ Plotly.Plots.resize(el); }catch{} } });
     
     // Boot
-  (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; renderCustomSMAChips(); await loadAndRender(); await renderMarketOverview(); scheduleQuoteAutoRefresh(); })();
+    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); scheduleQuoteAutoRefresh(); renderAllMkt(); scheduleMkt(); })();
   })();
   </script>
 </body>
