@@ -221,9 +221,10 @@
   @media (max-width:820px){ .mkt-gauges{grid-template-columns:repeat(2,minmax(180px,1fr));} }
   @media (max-width:520px){ .mkt-gauges{grid-template-columns:1fr;gap:8px} }
   .g-card{background:color-mix(in srgb, var(--panel), var(--bg) 52%);border:1px solid color-mix(in srgb, var(--border), #ffffff 18%);border-radius:10px;padding:6px 8px}
-  .g-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px}
+  .g-head{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;margin-bottom:3px}
   .g-title{font-weight:600;letter-spacing:0;opacity:.88;font-size:12px}
-  .g-metrics{font-weight:600;font-size:11px;color:var(--muted);opacity:.9}
+  .g-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .g-metrics{font-weight:600;font-size:11px;color:var(--muted);opacity:.9;white-space:nowrap}
   .g-metrics .g-up{color:var(--c-up)}
   .g-metrics .g-dn{color:var(--c-down)}
   .g-bar{position:relative;height:5px;border-radius:5px;background:color-mix(in srgb, var(--metric-bg), #ffffff 8%);border:1px solid color-mix(in srgb, var(--metric-border), #ffffff 20%);overflow:hidden}
