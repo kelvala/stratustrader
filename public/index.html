@@ -726,10 +726,22 @@
     const fillBackward = (arr)=>{ const out=arr.slice(); const fi=out.findIndex(Number.isFinite); if(fi>0){ const v=out[fi]; for(let i=0;i<fi;i++) out[i]=v; } return out; };
     const mapByTs = (rows, values)=>{ const m=new Map(); for(let i=0;i<rows.length;i++){ const t=rows[i]?.t; const v=values[i]; if(Number.isFinite(v)) m.set(t, v); } return m; };
   const uniqSortedNums = arr=> Array.from(new Set((arr||[]).map(n=>+n).filter(n=>Number.isFinite(n)))).sort((a,b)=>a-b);
+  // Palette for custom SMAs (cycled). Chosen to be distinct and readable in dark UI.
+  const CUSTOM_SMA_PALETTE = ['#f97316','#a78bfa','#06b6d4','#f472b6','#84cc16','#14b8a6','#e879f9','#22d3ee','#fb7185'];
 
   // Custom SMA chips rendering and interactions
   function persistCustomSMAs(){ localStorage.setItem('customSMAs', JSON.stringify(state.customSMAs||[])); }
-  function renderCustomSMAChips(){ if(!els.smaChips) return; const list = uniqSortedNums(state.customSMAs||[]); els.smaChips.innerHTML = list.map(p=>`<button class="chip" data-k="SMA${p}" data-period="${p}" type="button" aria-pressed="true" title="Toggle SMA ${p}">SMA ${p}</button>`).join(''); }
+  function renderCustomSMAChips(){
+    if(!els.smaChips) return;
+    const list = uniqSortedNums(state.customSMAs||[]);
+    // Stable period->color mapping within session
+    state.customSMAColors = state.customSMAColors || {};
+    list.forEach((p,i)=>{ if(!state.customSMAColors[p]) state.customSMAColors[p] = CUSTOM_SMA_PALETTE[i % CUSTOM_SMA_PALETTE.length]; });
+    els.smaChips.innerHTML = list.map(p=>{
+      const col = state.customSMAColors[p] || CUSTOM_SMA_PALETTE[0];
+      return `<button class="chip" data-k="SMA${p}" data-period="${p}" type="button" aria-pressed="true" title="Toggle SMA ${p}" style="border-color:${col};color:${col}">SMA ${p}</button>`;
+    }).join('');
+  }
   function addCustomSMA(p){ p=+p; if(!Number.isFinite(p)||p<2||p>600) return showToast('Enter 2..600'); state.customSMAs = uniqSortedNums([...(state.customSMAs||[]), p]); persistCustomSMAs(); renderCustomSMAChips(); buildSMAAlignedSeries(/* will include base only; custom handled in render */); renderChart(); }
   function removeCustomSMA(p){ p=+p; state.customSMAs = (state.customSMAs||[]).filter(x=>+x!==p); persistCustomSMAs(); renderCustomSMAChips(); renderChart(); }
 
@@ -895,7 +907,8 @@
           const fullAligned = fillForward(fillBackward(full));
           const mapP = mapByTs(state.rows, fullAligned);
           const y = rowsDisplay.map(r=> mapP.get(r.t) ?? null);
-          traces.push({ type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(y)), name:`SMA ${p}`, line:{ color: css('--c-sma50')||'#60a5fa', width:1.4, dash:'dot' }, yaxis:'y', visible: chip.classList.contains('active') });
+          const col = (state.customSMAColors && state.customSMAColors[p]) || CUSTOM_SMA_PALETTE[0];
+          traces.push({ type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(y)), name:`SMA ${p}`, line:{ color: col, width:1.6, dash:'dot' }, yaxis:'y', visible: chip.classList.contains('active') });
         }
       }
       // Other overlays
