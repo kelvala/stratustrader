@@ -223,10 +223,12 @@
   .g-card{background:color-mix(in srgb, var(--panel), var(--bg) 52%);border:1px solid color-mix(in srgb, var(--border), #ffffff 18%);border-radius:10px;padding:6px 8px}
   .g-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px}
   .g-title{font-weight:600;letter-spacing:0;opacity:.88;font-size:12px}
-  .g-metrics{font-weight:600;font-size:11px;color:var(--muted);opacity:.8}
-  .g-bar{position:relative;height:5px;border-radius:5px;background:color-mix(in srgb, var(--metric-bg), #ffffff 10%);border:1px solid color-mix(in srgb, var(--metric-border), #ffffff 18%);overflow:hidden}
-  .g-fill-left{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg, rgba(34,197,94,.22), rgba(34,197,94,.14));}
-  .g-fill-right{position:absolute;right:0;top:0;bottom:0;background:linear-gradient(90deg, rgba(239,68,68,.14), rgba(239,68,68,.22));}
+  .g-metrics{font-weight:600;font-size:11px;color:var(--muted);opacity:.9}
+  .g-metrics .g-up{color:var(--c-up)}
+  .g-metrics .g-dn{color:var(--c-down)}
+  .g-bar{position:relative;height:5px;border-radius:5px;background:color-mix(in srgb, var(--metric-bg), #ffffff 8%);border:1px solid color-mix(in srgb, var(--metric-border), #ffffff 20%);overflow:hidden}
+  .g-fill-left{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg, rgba(34,197,94,.38), rgba(34,197,94,.24));}
+  .g-fill-right{position:absolute;right:0;top:0;bottom:0;background:linear-gradient(90deg, rgba(239,68,68,.24), rgba(239,68,68,.38));}
 </style>
 </head>
 <body>
@@ -1080,10 +1082,21 @@
     async function renderMini(elId, chgId, symbol){
       const el=q('#'+elId); if(!el) return; const rows=await fetchMini(symbol); if(!rows.length) { el.innerHTML=''; return; }
       const x=rows.map(r=>new Date(r.t)), o=rows.map(r=>r.o), h=rows.map(r=>r.h), l=rows.map(r=>r.l), c=rows.map(r=>r.c);
+      // Fixed x-axis 9:30–16:00 ET with trader-friendly tick marks
+      const first = rows[0]?.t, last = rows.at(-1)?.t;
+      const tz = 'America/New_York';
+      function etTs(d){ return new Date(new Intl.DateTimeFormat('en-US',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(d))+' 00:00:00').getTime(); }
+      const day0 = etTs(first || Date.now());
+      const t930 = day0 + (9*60+30)*60*1000;
+      const t1000= day0 + 10*60*60*1000;
+      const t1200= day0 + 12*60*60*1000;
+      const t1400= day0 + 14*60*60*1000;
+      const t1600= day0 + 16*60*60*1000;
       const data=[{type:'candlestick',x,open:o,high:h,low:l,close:c,showlegend:false,increasing:{line:{color:'#16a34a'}},decreasing:{line:{color:'#dc2626'}},hoverinfo:'skip'}];
       const layout={
         margin:{l:28,r:8,t:6,b:22},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',
-        xaxis:{showgrid:true,gridcolor:css('--grid'),zeroline:false,fixedrange:true,rangeslider:{visible:false}},
+        xaxis:{showgrid:true,gridcolor:css('--grid'),zeroline:false,fixedrange:true,rangeslider:{visible:false},
+               range:[new Date(t930), new Date(t1600)], tickvals:[new Date(t1000),new Date(t1200),new Date(t1400),new Date(t1600)], tickformat:'%I%p'},
         yaxis:{showgrid:true,gridcolor:css('--grid'),zeroline:false,fixedrange:true},
         height:160
       };
@@ -1111,18 +1124,20 @@
         scan(rowsMap.d||[], s50D, s200D); scan(rowsMap.n||[], s50N, s200N); scan(rowsMap.s||[], s50S, s200S);
         const tot=adv+dec; const advPct = tot? Math.round(adv/tot*1000)/10 : 50; const decPct=100-advPct;
         q('#g-advance-l').style.width = advPct+'%'; q('#g-advance-r').style.width = decPct+'%';
-        q('#g-advance-m').textContent = `Advancing ${advPct.toFixed(1)}% · Declining ${decPct.toFixed(1)}%`;
+  q('#g-advance-m').innerHTML = `<span class="g-up">Advancing ${advPct.toFixed(1)}%</span> · <span class="g-dn">Declining ${decPct.toFixed(1)}%</span>`;
         const tn=nh+nl; const nhPct = tn? Math.round(nh/tn*1000)/10 : 50; const nlPct=100-nhPct;
         q('#g-newhigh-l').style.width = nhPct+'%'; q('#g-newhigh-r').style.width = nlPct+'%';
-        q('#g-newhigh-m').textContent = `New High ${nhPct.toFixed(1)}% · New Low ${nlPct.toFixed(1)}%`;
+  q('#g-newhigh-m').innerHTML = `<span class="g-up">New High ${nhPct.toFixed(1)}%</span> · <span class="g-dn">New Low ${nlPct.toFixed(1)}%</span>`;
         const tb50=above50+below50; const ab50 = tb50? Math.round(above50/tb50*1000)/10 : 50; const bl50=100-ab50;
         q('#g-sma50-l').style.width = ab50+'%'; q('#g-sma50-r').style.width = bl50+'%';
-        q('#g-sma50-m').textContent = `Above ${ab50.toFixed(1)}% · Below ${bl50.toFixed(1)}%`;
+  q('#g-sma50-m').innerHTML = `<span class="g-up">Above ${ab50.toFixed(1)}%</span> · <span class="g-dn">Below ${bl50.toFixed(1)}%</span>`;
         const tb200=above200+below200; const ab200 = tb200? Math.round(above200/tb200*1000)/10 : 50; const bl200=100-ab200;
         q('#g-sma200-l').style.width = ab200+'%'; q('#g-sma200-r').style.width = bl200+'%';
-        q('#g-sma200-m').textContent = `Above ${ab200.toFixed(1)}% · Below ${bl200.toFixed(1)}%`;
+  q('#g-sma200-m').innerHTML = `<span class="g-up">Above ${ab200.toFixed(1)}%</span> · <span class="g-dn">Below ${bl200.toFixed(1)}%</span>`;
         q('#g-sentiment-l').style.width = advPct+'%'; q('#g-sentiment-r').style.width = decPct+'%';
-        q('#g-sentiment-m').textContent = `${advPct}% BULL  ${decPct}% BEAR`;
+  const adv0 = Math.round(advPct);
+  const dec0 = 100 - adv0;
+  q('#g-sentiment-m').innerHTML = `${adv0}% <span class="g-up">BULL</span>  ${dec0}% <span class="g-dn">BEAR</span>`;
       }catch{}
     }
     async function renderMarketOverview(){
