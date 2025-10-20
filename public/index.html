@@ -214,6 +214,17 @@
   .mkt-name{font-weight:900;letter-spacing:.4px}
   .mkt-chg{font-weight:900}
   .mkt-mini{height:160px}
+
+  /* Mini gauges row under market overview */
+  .mkt-gauges{display:grid;grid-template-columns:repeat(4,minmax(220px,1fr));gap:12px;margin:6px 0 2px}
+  @media (max-width:920px){ .mkt-gauges{grid-template-columns:1fr;gap:10px} }
+  .g-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px}
+  .g-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+  .g-title{font-weight:900;letter-spacing:.2px}
+  .g-metrics{font-weight:800;font-size:12px;color:var(--muted)}
+  .g-bar{position:relative;height:12px;border-radius:999px;background:var(--metric-bg);border:1px solid var(--metric-border);overflow:hidden}
+  .g-fill-left{position:absolute;left:0;top:0;bottom:0;background:rgba(34,197,94,.65)}
+  .g-fill-right{position:absolute;right:0;top:0;bottom:0;background:rgba(239,68,68,.65)}
 </style>
 </head>
 <body>
@@ -234,6 +245,26 @@
         <button class="tool-btn" id="wideBtn" aria-label="Toggle Width">↔︎ <span class="tool-txt">Wide</span></button>
         <button class="tool-btn" id="maxBtn" aria-label="Maximize">⤢ <span class="tool-txt">Max</span></button>
         <button class="tool-btn" id="refreshBtn" aria-label="Refresh">⟳ <span class="tool-txt">Refresh</span></button>
+      </div>
+    </div>
+
+    <!-- Mini gauges under Market Overview -->
+    <div class="mkt-gauges" id="mktGauges">
+      <div class="g-card" id="g-advance">
+        <div class="g-head"><div class="g-title">Advancing vs Declining</div><div class="g-metrics" id="g-advance-m">—</div></div>
+        <div class="g-bar"><div class="g-fill-left" id="g-advance-l" style="width:0%"></div><div class="g-fill-right" id="g-advance-r" style="width:0%"></div></div>
+      </div>
+      <div class="g-card" id="g-newhigh">
+        <div class="g-head"><div class="g-title">New High vs New Low</div><div class="g-metrics" id="g-newhigh-m">—</div></div>
+        <div class="g-bar"><div class="g-fill-left" id="g-newhigh-l" style="width:0%"></div><div class="g-fill-right" id="g-newhigh-r" style="width:0%"></div></div>
+      </div>
+      <div class="g-card" id="g-sma50">
+        <div class="g-head"><div class="g-title">Above vs Below SMA50</div><div class="g-metrics" id="g-sma50-m">—</div></div>
+        <div class="g-bar"><div class="g-fill-left" id="g-sma50-l" style="width:0%"></div><div class="g-fill-right" id="g-sma50-r" style="width:0%"></div></div>
+      </div>
+      <div class="g-card" id="g-sentiment">
+        <div class="g-head"><div class="g-title">Intraday Sentiment</div><div class="g-metrics" id="g-sentiment-m">—</div></div>
+        <div class="g-bar"><div class="g-fill-left" id="g-sentiment-l" style="width:0%"></div><div class="g-fill-right" id="g-sentiment-r" style="width:0%"></div></div>
       </div>
     </div>
 
@@ -1013,35 +1044,77 @@
 
     /* ---------- Market Overview minis (DOW/NASDAQ/S&P) ---------- */
     async function fetchMini(symbol){
-      // Use 1d range with 5m candles; fallback to 1d/1m when appropriate
-      const range='1d';
-      const interval='5m';
-      try{
-        const r = await fetch(`/api/chart?ticker=${encodeURIComponent(symbol)}&range=${range}&interval=${interval}`, { cache:'no-store' });
-        if(!r.ok) throw 0; const j=await r.json(); const res=j?.chart?.result?.[0]; if(!res) throw 0;
-        const ts=res.timestamp||[]; const qd=res.indicators?.quote?.[0]||{}; const rows=[];
-        for(let i=0;i<ts.length;i++){
-          const o=+qd.open?.[i]||NaN, h=+qd.high?.[i]||NaN, l=+qd.low?.[i]||NaN, c=+qd.close?.[i]||NaN; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:o||c, h:Math.max(h||c,o||c,c), l:Math.min(l||c,o||c,c), c });
-        }
-        rows.sort((a,b)=>a.t-b.t);
-        return rows;
-      }catch{ return []; }
+      // Try today's regular session only (9:30–16:00 ET). If blank, fallback to last trading day within past 5 days.
+      async function fetchRange(range='1d', interval='5m'){
+        try{
+          const r = await fetch(`/api/chart?ticker=${encodeURIComponent(symbol)}&range=${range}&interval=${interval}`, { cache:'no-store' });
+          if(!r.ok) return [];
+          const j=await r.json(); const res=j?.chart?.result?.[0]; if(!res) return [];
+          const ts=res.timestamp||[]; const qd=res.indicators?.quote?.[0]||{}; const rows=[];
+          for(let i=0;i<ts.length;i++){
+            const o=+qd.open?.[i]||NaN, h=+qd.high?.[i]||NaN, l=+qd.low?.[i]||NaN, c=+qd.close?.[i]||NaN; if(!Number.isFinite(c)) continue; rows.push({ t:ts[i]*1000, o:o||c, h:Math.max(h||c,o||c,c), l:Math.min(l||c,o||c,c), c });
+          }
+          rows.sort((a,b)=>a.t-b.t);
+          return rows;
+        }catch{ return []; }
+      }
+      const today = (await fetchRange('1d','5m')).filter(r=> isRegularSessionET(r.t));
+      if(today.length>=3) return today;
+      // Fallback: choose last day in past 5d that has regular session bars
+      const past = await fetchRange('5d','5m'); if(!past.length) return [];
+      const dtf = new Intl.DateTimeFormat('en-US',{ timeZone:'America/New_York', year:'numeric', month:'2-digit', day:'2-digit' });
+      const key = (ms)=> dtf.format(new Date(ms));
+      const byDay = new Map();
+      for(const r of past){ const k=key(r.t); if(!byDay.has(k)) byDay.set(k, []); byDay.get(k).push(r); }
+      const days = Array.from(byDay.keys()).sort((a,b)=> new Date(a) - new Date(b));
+      for(let i=days.length-1;i>=0;i--){ const k=days[i]; const list=(byDay.get(k)||[]).filter(rr=> isRegularSessionET(rr.t)); if(list.length>=10) return list; }
+      return [];
     }
     function dayChange(rows){ if(rows.length<2) return {abs:0,pct:0}; const open=rows[0].o; const last=rows.at(-1).c; if(!Number.isFinite(open)||!Number.isFinite(last)||open===0) return {abs:0,pct:0}; const abs=last-open; const pct=abs/open*100; return {abs,pct,last}; }
     async function renderMini(elId, chgId, symbol){
       const el=q('#'+elId); if(!el) return; const rows=await fetchMini(symbol); if(!rows.length) { el.innerHTML=''; return; }
       const x=rows.map(r=>new Date(r.t)), o=rows.map(r=>r.o), h=rows.map(r=>r.h), l=rows.map(r=>r.l), c=rows.map(r=>r.c);
       const data=[{type:'candlestick',x,open:o,high:h,low:l,close:c,showlegend:false,increasing:{line:{color:'#16a34a'}},decreasing:{line:{color:'#dc2626'}},hoverinfo:'skip'}];
-      const layout={margin:{l:28,r:8,t:6,b:22},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',xaxis:{showgrid:true,gridcolor:css('--grid'),zeroline:false},yaxis:{showgrid:true,gridcolor:css('--grid'),zeroline:false},height:160,displayModeBar:false};
-      await Plotly.react(el, data, layout, {displayModeBar:false,responsive:true});
+      const layout={
+        margin:{l:28,r:8,t:6,b:22},paper_bgcolor:'rgba(0,0,0,0)',plot_bgcolor:'rgba(0,0,0,0)',
+        xaxis:{showgrid:true,gridcolor:css('--grid'),zeroline:false,fixedrange:true,rangeslider:{visible:false}},
+        yaxis:{showgrid:true,gridcolor:css('--grid'),zeroline:false,fixedrange:true},
+        height:160
+      };
+      await Plotly.react(el, data, layout, {displayModeBar:false,responsive:true, staticPlot:true});
       const dc=dayChange(rows); const chgEl=q('#'+chgId); if(chgEl){ const col= dc.abs>=0? (css('--c-up')||'#16a34a') : (css('--c-down')||'#dc2626'); chgEl.style.color=col; chgEl.textContent = `${dc.abs>=0?'+':''}${dc.abs.toFixed(2)} (${dc.pct>=0?'+':''}${dc.pct.toFixed(2)}%)`; }
+      return rows;
+    }
+    function updateGauges(rowsMap){
+      try{
+        const all=[...(rowsMap.d||[]), ...(rowsMap.n||[]), ...(rowsMap.s||[])];
+        if(all.length<3) return;
+        let adv=0, dec=0; let nh=0, nl=0; let hi=-Infinity, lo=Infinity; let above=0, below=0;
+        function sma50(arr){ const p=50; const out=[]; let sum=0, cnt=0; for(let i=0;i<arr.length;i++){ const v=arr[i]; if(Number.isFinite(v)){ sum+=v; cnt++; } if(i>=p){ const w=arr[i-p]; if(Number.isFinite(w)){ sum-=w; cnt--; } } out[i]= (i>=p-1 && cnt>0)? (sum/cnt) : null; } return out; }
+        const closesD=(rowsMap.d||[]).map(r=>r.c), closesN=(rowsMap.n||[]).map(r=>r.c), closesS=(rowsMap.s||[]).map(r=>r.c);
+        const sD=sma50(closesD), sN=sma50(closesN), sS=sma50(closesS);
+        function scan(arr, s50){ for(let i=1;i<arr.length;i++){ const prev=arr[i-1].c, cur=arr[i].c; if(Number.isFinite(prev)&&Number.isFinite(cur)){ if(cur>prev) adv++; else if(cur<prev) dec++; } if(Number.isFinite(cur)){ if(cur>hi){ hi=cur; nh++; } if(cur<lo){ lo=cur; nl++; } } const sv=s50[i]; if(Number.isFinite(sv)&&Number.isFinite(cur)){ if(cur>=sv) above++; else below++; } } }
+        scan(rowsMap.d||[], sD); scan(rowsMap.n||[], sN); scan(rowsMap.s||[], sS);
+        const tot=adv+dec; const advPct = tot? Math.round(adv/tot*1000)/10 : 50; const decPct=100-advPct;
+        q('#g-advance-l').style.width = advPct+'%'; q('#g-advance-r').style.width = decPct+'%';
+        q('#g-advance-m').textContent = `Advancing ${advPct}% · Declining ${decPct}%`;
+        const tn=nh+nl; const nhPct = tn? Math.round(nh/tn*1000)/10 : 50; const nlPct=100-nhPct;
+        q('#g-newhigh-l').style.width = nhPct+'%'; q('#g-newhigh-r').style.width = nlPct+'%';
+        q('#g-newhigh-m').textContent = `New High ${nhPct}% · New Low ${nlPct}%`;
+        const tb=above+below; const abPct = tb? Math.round(above/tb*1000)/10 : 50; const blPct=100-abPct;
+        q('#g-sma50-l').style.width = abPct+'%'; q('#g-sma50-r').style.width = blPct+'%';
+        q('#g-sma50-m').textContent = `Above ${abPct}% · Below ${blPct}%`;
+        q('#g-sentiment-l').style.width = advPct+'%'; q('#g-sentiment-r').style.width = decPct+'%';
+        q('#g-sentiment-m').textContent = `${advPct}% BULL  ${decPct}% BEAR`;
+      }catch{}
     }
     async function renderMarketOverview(){
-      await Promise.all([
+      const [dRows, nRows, sRows] = await Promise.all([
         renderMini('mktDow','mktDowChg','^DJI'),
         renderMini('mktNas','mktNasChg','^IXIC'),
         renderMini('mktSP','mktSPChg','^GSPC')
       ]);
+      updateGauges({ d:dRows||[], n:nRows||[], s:sRows||[] });
     }
 
     async function go(ticker, company){
