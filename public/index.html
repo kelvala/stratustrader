@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.044</title>
+<title>Stock Analyzer v.045</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -20,6 +20,7 @@
     --c-up:#16a34a;--c-down:#dc2626;
     --c-sma20:#22c55e;--c-sma50:#60a5fa;--c-sma200:#f59e0b; /* back to yellowish 200 SMA */
     --c-rsi:#a78bfa;--c-macd:#38bdf8;--c-vol:#10b981;
+  --c-div:#eab308; /* dividends marker color (amber) */
     --grid:#283044;
     --lvl-beginner:#22c55e; --lvl-intermediate:#f59e0b; --lvl-advanced:#ef4444;
     --tf-bg:#1c1f35; --tf-head:#1a214e; --tf-glow:#3b82f6;
@@ -93,6 +94,7 @@
   .chip[data-k="RSI"]{border-color:var(--c-rsi);color:var(--c-rsi);} 
   .chip[data-k="MACD"]{border-color:var(--c-macd);color:var(--c-macd);} 
   .chip[data-k="VOL"]{border-color:var(--c-vol);color:var(--c-vol);} 
+  .chip[data-k="DIV"]{border-color:var(--c-div);color:var(--c-div);} 
   .chip[data-k="AUTOFIB"]{border-color:#8b5cf6;color:#8b5cf6}
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip[data-k="SESS"]{border-color:#93c5fd;color:#93c5fd}
@@ -104,6 +106,7 @@
   .chip.active[data-k="RSI"]{background:rgba(167,139,250,.12)}
   .chip.active[data-k="MACD"]{background:rgba(56,189,248,.12)}
   .chip.active[data-k="VOL"]{background:rgba(16,185,129,.12)}
+  .chip.active[data-k="DIV"]{background:rgba(234,179,8,.14)}
   .chip.active[data-k="AUTOFIB"]{background:rgba(139,92,246,.12)}
   .chip.active[data-k="ICHI"]{background:rgba(96,165,250,.12)}
   .chip.active[data-k="SESS"]{background:rgba(147,197,253,.12)}
@@ -118,6 +121,11 @@
   .chip:focus-visible{outline:2px solid currentColor;outline-offset:3px}
   .section-sep{margin:20px -16px 16px;padding:0 16px}
   .section-sep .rule{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.9}
+  /* SMA controls row */
+  .sma-ctrls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 4px}
+  .sma-ctrls select,.sma-ctrls input{background:var(--field-bg);color:var(--field-text);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+  .sma-ctrls input{width:92px}
+  .sma-ctrls small{opacity:.7}
   .sheet{position:fixed;left:0;right:0;bottom:0;top:auto;background:transparent;display:flex;justify-content:center;z-index:2000}
   .sheet[hidden]{display:none!important}
   .sheet-inner{width:min(760px,100%);background:var(--panel);border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.35);padding:14px;animation:sheetUp .18s ease-out;padding-bottom:max(14px, env(safe-area-inset-bottom))}
@@ -250,6 +258,7 @@
         <div id="companyLine" style="margin:0 0 4px 0;opacity:.95"></div>
         <div id="lastLine">Last: — · Change: —</div>
         <div id="prevCloseLine">Yesterday’s Close: —</div>
+        <div id="dayRangeLine">Day’s Range: —</div>
         <div id="ivLine">Intrinsic Value: —</div>
       </div>
       <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
@@ -325,10 +334,6 @@
               <option value="1y">Yearly</option>
             </select>
           </div>
-          <div class="control" style="grid-column:1 / -1">
-            <label for="heightSel">Candle height <span id="heightLabel" style="opacity:.7;margin-left:6px">Balanced</span></label>
-            <input id="heightSel" type="range" min="0" max="100" value="75" step="1" style="width:100%" />
-          </div>
         </div>
       </div>
 
@@ -339,10 +344,30 @@
         <button class="chip" data-k="RSI" type="button" aria-pressed="false">RSI</button>
         <button class="chip" data-k="MACD" type="button" aria-pressed="false">MACD</button>
         <button class="chip" data-k="VOL" type="button" aria-pressed="false">Volume</button>
+        <button class="chip" data-k="DIV" type="button" aria-pressed="false" title="Show dividend events">Dividends</button>
         <button class="chip" id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
         <button class="chip" data-k="ICHI" type="button" aria-pressed="false">Ichimoku</button>
         <button class="chip" data-k="SESS" type="button" aria-pressed="true" title="Toggle pre/post-market bands">Pre/Post</button>
       </div>
+
+      <!-- Custom SMA controls + dynamic chips -->
+      <div class="sma-ctrls" id="smaCtrls">
+        <label for="smaPreset" style="font-weight:800;opacity:.9">SMA</label>
+        <select id="smaPreset" title="Quick add common SMAs">
+          <option value="">Presets…</option>
+          <option>10</option>
+          <option>20</option>
+          <option>30</option>
+          <option>50</option>
+          <option>100</option>
+          <option>150</option>
+          <option>200</option>
+        </select>
+        <input id="smaCustom" type="number" min="2" max="600" step="1" placeholder="Custom" title="Enter any SMA period" />
+        <button id="smaAddBtn" class="btn inline" type="button" title="Add SMA period">Add SMA</button>
+        <small id="smaHint">Tip: click a chip to toggle; double‑click to remove custom.</small>
+      </div>
+      <div class="toggle-row" id="smaCustomChips"></div>
 
       <div id="chart"></div>
     </div>
@@ -438,8 +463,10 @@
       // Added: tool buttons & sheet / input refs for GPTs & Screeners
       toolGPTs:q('#toolGPTs'), toolScreeners:q('#toolScreeners'),
       gptInput:q('#gptInput'), sheetGPTs:q('#sheetGPTs'), sheetScreeners:q('#sheetScreeners'),
-      // Added: candle height slider + label
-      heightSel:q('#heightSel'), heightLabel:q('#heightLabel')
+      // Price info extra line
+      dayRangeLine:q('#dayRangeLine'),
+      // Custom SMA controls
+      smaPreset:q('#smaPreset'), smaCustom:q('#smaCustom'), smaAddBtn:q('#smaAddBtn'), smaChips:q('#smaCustomChips')
     };
 
     /* ---------- Toast ---------- */
@@ -525,7 +552,10 @@
     /* ---------- Existing code continues below (chart, autocomplete, etc.) ---------- */
     /* ---------- State ---------- */
     let CURRENT = { ticker:null, company:"", prevClose:null };
-    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0 };
+    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0,
+      divs:[],
+      customSMAs: (()=>{ try{ const a=JSON.parse(localStorage.getItem('customSMAs')||'[]'); return Array.isArray(a)? a.filter(n=>Number.isFinite(+n)).slice(0,12) : []; }catch{return [];} })()
+    };
     const FUNDAMENTALS = {}; // cache fundamentals per ticker
 
     /* ---------- Utils & Formatters ---------- */
@@ -653,12 +683,31 @@
     const fillForward = (arr)=>{ let last=null; return arr.map(v=>{ if(Number.isFinite(v)){ last=v; return v; } return Number.isFinite(last)? last : null; }); };
     const fillBackward = (arr)=>{ const out=arr.slice(); const fi=out.findIndex(Number.isFinite); if(fi>0){ const v=out[fi]; for(let i=0;i<fi;i++) out[i]=v; } return out; };
     const mapByTs = (rows, values)=>{ const m=new Map(); for(let i=0;i<rows.length;i++){ const t=rows[i]?.t; const v=values[i]; if(Number.isFinite(v)) m.set(t, v); } return m; };
+    const uniqSortedNums = arr=> Array.from(new Set((arr||[]).map(n=>+n).filter(n=>Number.isFinite(n)))).sort((a,b)=>a-b);
+    // Palette for custom SMAs (cycled). Chosen to be distinct and readable in dark UI.
+    const CUSTOM_SMA_PALETTE = ['#f97316','#a78bfa','#06b6d4','#f472b6','#84cc16','#14b8a6','#e879f9','#22d3ee','#fb7185'];
+
+    // Custom SMA chips rendering and interactions
+    function persistCustomSMAs(){ localStorage.setItem('customSMAs', JSON.stringify(state.customSMAs||[])); }
+    function renderCustomSMAChips(){
+      if(!els.smaChips) return;
+      const list = uniqSortedNums(state.customSMAs||[]);
+      // Rebuild mapping each render so colors are distinct and ordered by period
+      state.customSMAColors = {};
+      list.forEach((p,i)=>{ state.customSMAColors[p] = CUSTOM_SMA_PALETTE[i % CUSTOM_SMA_PALETTE.length]; });
+      els.smaChips.innerHTML = list.map(p=>{
+        const col = state.customSMAColors[p] || CUSTOM_SMA_PALETTE[0];
+        return `<button class="chip" data-k="SMA${p}" data-period="${p}" type="button" aria-pressed="true" title="Toggle SMA ${p}" style="border-color:${col};color:${col}">SMA ${p}</button>`;
+      }).join('');
+    }
+    function addCustomSMA(p){ p=+p; if(!Number.isFinite(p)||p<2||p>600) return showToast('Enter 2..600'); state.customSMAs = uniqSortedNums([...(state.customSMAs||[]), p]); persistCustomSMAs(); renderCustomSMAChips(); buildSMAAlignedSeries(/* include custom in alignment */); renderChart(); }
+    function removeCustomSMA(p){ p=+p; state.customSMAs = (state.customSMAs||[]).filter(x=>+x!==p); persistCustomSMAs(); renderCustomSMAChips(); renderChart(); }
 
     // Build SMA series aligned to state.rows; when < period, back/forward fill; when missing, try extended pull
     async function buildSMAAlignedSeries(){
       const rows = state.rows||[]; state.smaSeries = state.smaSeries || {}; state.smaLast = state.smaLast || {}; if(!rows.length){ state.smaSeries={}; state.smaLast={}; return; }
       const closes = rows.map(r=>r.c);
-      const periods = [20,50,200];
+      const periods = uniqSortedNums([20,50,200, ...((state.customSMAs||[]))]).slice(0, 24);
       const pickRange=(interval,p)=>{ switch(interval){ case '1m':return '5d'; case '5m':return '1mo'; case '15m':return '3mo'; case '60m':return '6mo'; case '1wk':return '10y'; case '1mo': return 'max'; case '3mo': return 'max'; case '1y': return 'max'; default: return p>=200? '3y':'1y'; } };
       async function alignFromExtended(p){ const extR = pickRange(state.interval, p); try{ const ext = await fetchRows(state.ticker, extR, state.interval); if(Array.isArray(ext)&&ext.length){ const yExt = sma(ext.map(r=>r.c), p); const mapP = mapByTs(ext, yExt); const aligned = rows.map(r=> mapP.get(r.t) ?? null); return fillBackward(fillForward(aligned)); } }catch{} return null; }
       for(const p of periods){ let y = sma(closes, p); if(y.some(Number.isFinite)) y=fillBackward(fillForward(y)); else { const extAligned = await alignFromExtended(p); y = extAligned || Array(rows.length).fill(closes.filter(Number.isFinite).at(-1) ?? null); }
@@ -678,15 +727,7 @@
       try{ await Plotly.relayout(els.chart, { 'yaxis.autorange':false, 'yaxis.range':[lo-pad, hi+pad] }); }catch{}
     }
 
-    // Slider bindings (fixed: added missing element refs + null guards)
-    if(els.heightSel){
-      try{
-        els.heightSel.value = String(state.candleTight);
-        const updLbl = ()=>{ if(!els.heightLabel) return; const v=+els.heightSel.value; els.heightLabel.textContent = v>=80? 'Taller' : v<=20? 'Shorter' : 'Balanced'; };
-        updLbl();
-        els.heightSel.addEventListener('input', ()=>{ state.candleTight=+els.heightSel.value; localStorage.setItem('candleTight', String(state.candleTight)); updLbl(); fitPriceAxisToCandlesStrict(); });
-      }catch(e){ console.warn('Height slider init failed', e); }
-    }
+    // Candle height slider removed by request (retain default padding logic)
 
     /* ---------- Chart bits ---------- */
     function candleTrace(rows){ return { type:'candlestick', x: rows.map(r=>new Date(r.t)), open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c), name: state.ticker, yaxis:'y', increasing:{ line:{ color: css('--c-up')||'#16a34a', width:2.4 } }, decreasing:{ line:{ color: css('--c-down')||'#dc2626', width:2.4 } }, showlegend:false, hovertemplate:'Date: %{x|%Y-%m-%d %H:%M}<br>O: %{open:.2f}<br>H: %{high:.2f}<br>L: %{low:.2f}<br>C: %{close:.2f}<extra></extra>' }; }
@@ -808,6 +849,42 @@
       const macdOn= q('.chip[data-k="MACD"]')?.classList.contains('active')||false; if(macdOn) traces.push(...macdTraces(rowsDisplay));
       const ichiOn= q('.chip[data-k="ICHI"]')?.classList.contains('active')||false; if(ichiOn) traces.push(...ichiTraces(rowsDisplay));
 
+      // Dynamic custom SMA traces (from chips)
+      const customList = Array.from(document.querySelectorAll('#smaCustomChips .chip[data-period]'));
+      if(customList.length){
+        const xArr = rowsDisplay.map(r=>new Date(r.t));
+        for(const chip of customList){
+          const p = +chip.dataset.period; if(!Number.isFinite(p)) continue;
+          // use precomputed aligned SMA series (includes extended-data fallback)
+          const series = Array.isArray(state.smaSeries?.[p])? state.smaSeries[p] : [];
+          const mapP = mapByTs(state.rows, series);
+          const y = rowsDisplay.map(r=> mapP.get(r.t) ?? null);
+          const col = (state.customSMAColors && state.customSMAColors[p]) || CUSTOM_SMA_PALETTE[0];
+          traces.push({ type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(y)), name:`SMA ${p}`, line:{ color: col, width:1.6, dash:'dot' }, yaxis:'y', visible: chip.classList.contains('active') });
+        }
+      }
+
+      // Dividends overlay markers (when toggled on)
+      function dividendTrace(rowsDisp){
+        const divs = Array.isArray(state.divs)? state.divs : [];
+        if(!divs.length || !rowsDisp.length) return null;
+        const dayKey = ms=> Math.floor(ms/86400000);
+        const byDay = new Map();
+        for(const r of rowsDisp){ byDay.set(dayKey(r.t), r); }
+        const times = rowsDisp.map(r=>r.t);
+        const findContainingIndex = (t)=>{
+          const n=times.length; if(n===1) return 0; if(t<times[0]) return -1; if(t>=times[n-1]) return n-1; for(let i=0;i<n-1;i++){ if(t>=times[i] && t<times[i+1]) return i; } return -1;
+        };
+        const x=[], y=[], cd=[];
+        for(const d of divs){
+          let r = byDay.get(dayKey(d.t)); if(!r){ const idx = findContainingIndex(d.t); if(idx>=0) r = rowsDisp[idx]; }
+          if(!r) continue; x.push(new Date(r.t)); const span = (Number.isFinite(r.h)&&Number.isFinite(r.l))? (r.h - r.l) : 0; y.push((Number.isFinite(r.l)? r.l : r.c) + span*0.06); cd.push([d.amount]);
+        }
+        if(!x.length) return null;
+        return { type:'scatter', mode:'markers', x, y, name:'Dividends', yaxis:'y', marker:{ symbol:'triangle-up', size:12, color: css('--c-div')||'#eab308', opacity:0.98, line:{ width:1.2, color:'#000' } }, hovertemplate:'Dividend %{customdata[0]:$.2f}<extra></extra>', customdata:cd };
+      }
+      const divOn = q('.chip[data-k="DIV"]')?.classList.contains('active')||false; if(divOn){ const dt = dividendTrace(rowsDisplay); if(dt) traces.push(dt); }
+
       // Auto Fib
       state.fibIdx = [];
       const fibOn = q('.chip[data-k="AUTOFIB"]')?.classList.contains('active') || false;
@@ -893,6 +970,22 @@
         const tsDisp = dtfETTime.format(new Date())+' ET'; // show refresh time, not stale trade time
         els.lastLine.innerHTML = `Last: $${Number.isFinite(price)? price.toFixed(2):'—'} · Change: ${changeHTML} · ${tsDisp}`;
         els.prevCloseLine.textContent = `Yesterday’s Close: ${Number.isFinite(prevClose)? '$'+prevClose.toFixed(2):'—'}`;
+        // Day's Range (prefer quote fields, fallback to rows of the latest ET day)
+        let dHi = +(R.regularMarketDayHigh?.raw ?? R.regularMarketDayHigh ?? NaN);
+        let dLo = +(R.regularMarketDayLow?.raw ?? R.regularMarketDayLow ?? NaN);
+        if(!(Number.isFinite(dHi) && Number.isFinite(dLo))){
+          try{
+            const tz='America/New_York';
+            const dtfDay = new Intl.DateTimeFormat('en-US',{ timeZone:tz, year:'numeric', month:'2-digit', day:'2-digit' });
+            const key = (ms)=> dtfDay.format(new Date(ms));
+            const rowsAll = state.rows||[]; if(rowsAll.length){
+              const k = key(rowsAll.at(-1).t);
+              let hi=-Infinity, lo=Infinity; for(const rr of rowsAll){ if(key(rr.t)!==k) continue; if(Number.isFinite(rr.h)) hi=Math.max(hi, rr.h); if(Number.isFinite(rr.l)) lo=Math.min(lo, rr.l); }
+              if(hi>-Infinity && lo<Infinity){ dHi=hi; dLo=lo; }
+            }
+          }catch{}
+        }
+        if(els.dayRangeLine){ els.dayRangeLine.textContent = `Day’s Range: ${(Number.isFinite(dLo)&&Number.isFinite(dHi))? '$'+dLo.toFixed(2)+' – $'+dHi.toFixed(2) : '—'}`; }
         computeIntrinsicAndDisplay();
       }catch(e){ console.error('Quote refresh error', e); els.lastLine.innerHTML='Last: — · Change: —'; }
     }
@@ -943,6 +1036,15 @@
           const j = await r.json();
           const res = j?.chart?.result?.[0];
           if(res){
+            // Capture dividends from the primary payload when available
+            try{
+              const raw = res?.events?.dividends || {};
+              const divs = Object.values(raw)
+                .map(e=>({ t: ((e?.date||e?.timestamp)||0)*1000, amount: +e?.amount }))
+                .filter(d=> Number.isFinite(d.t) && Number.isFinite(d.amount) && d.amount>0)
+                .sort((a,b)=>a.t-b.t);
+              state.divs = divs;
+            }catch{}
             const ts = res.timestamp || [];
             const qd = res.indicators?.quote?.[0] || {};
             // Yahoo sometimes returns nulls for OHLC on long ranges (5y/10y) with 3mo/1y intervals.
@@ -1033,6 +1135,17 @@
                 }catch(e){ console.warn('daily agg: fetch fail', R, e?.message||e); continue; }
                 const res2 = j2?.chart?.result?.[0];
                 if(!res2) { console.warn('daily agg: no result for', R); continue; }
+                // Fallback dividends from daily payload if not already captured
+                try{
+                  if(!Array.isArray(state.divs) || !state.divs.length){
+                    const raw2 = res2?.events?.dividends || {};
+                    const d2 = Object.values(raw2)
+                      .map(e=>({ t: ((e?.date||e?.timestamp)||0)*1000, amount: +e?.amount }))
+                      .filter(d=> Number.isFinite(d.t) && Number.isFinite(d.amount) && d.amount>0)
+                      .sort((a,b)=>a.t-b.t);
+                    if(d2.length) state.divs = d2;
+                  }
+                }catch{}
                 const ts2 = res2.timestamp || [];
                 const qd2 = res2.indicators?.quote?.[0] || {};
                 const ac2 = res2.indicators?.adjclose?.[0]?.adjclose || [];
@@ -1092,6 +1205,14 @@
     els.freqSel?.addEventListener('change', ()=>{ state.interval=els.freqSel.value; loadAndRender(); });
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(updateAutoFibDebounced, 0); } });
+
+  // SMA controls wiring
+  els.smaPreset?.addEventListener('change', ()=>{ const v=+els.smaPreset.value; if(Number.isFinite(v)) addCustomSMA(v); els.smaPreset.value=''; });
+  els.smaAddBtn?.addEventListener('click', ()=>{ const v=+els.smaCustom.value; if(Number.isFinite(v)) addCustomSMA(v); else showToast('Enter a number'); });
+  els.smaCustom?.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const v=+els.smaCustom.value; if(Number.isFinite(v)) addCustomSMA(v); }});
+  // Toggle custom chip on click, remove on double click
+  els.smaChips?.addEventListener('click', e=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
+  els.smaChips?.addEventListener('dblclick', e=>{ const chip=e.target.closest('.chip'); if(!chip) return; const p=+chip.dataset.period; if(Number.isFinite(p)) removeCustomSMA(p); });
 
     /* ---------- Market Overview minis (DOW / NASDAQ / S&P) ---------- */
     const MKT = [
@@ -1211,7 +1332,7 @@
     window.addEventListener('resize', ()=>{ for(const c of MKT){ const el=document.getElementById(c.elId); if(el) try{ Plotly.Plots.resize(el); }catch{} } });
     
     // Boot
-    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); scheduleQuoteAutoRefresh(); await renderAllMkt(); scheduleMkt(); })();
+    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; renderCustomSMAChips(); await loadAndRender(); scheduleQuoteAutoRefresh(); await renderAllMkt(); scheduleMkt(); })();
   })();
   </script>
 </body>
