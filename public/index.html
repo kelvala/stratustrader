@@ -84,6 +84,8 @@
   .control label{display:block;font-size:13px;font-weight:800;margin-bottom:6px;color:#cbd5ff}
   .control select{width:100%;background:var(--field-bg);color:var(--field-text);border:1px solid var(--border);border-radius:10px;padding:10px}
   .toggle-row{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 10px}
+  /* Generic SMA chip styling (fallback for custom SMAs) */
+  .chip[data-k^="SMA"]{border-color:var(--c-sma50);color:var(--c-sma50);}
   .chip{border:1px solid #2b3548;border-radius:999px;padding:6px 12px;cursor:pointer;font-weight:800;opacity:.98;user-select:none;transition:background .15s,color .15s,border-color .15s; -webkit-text-fill-color: currentColor; color: currentColor; background: color-mix(in srgb, var(--panel), #ffffff 3%);} 
   .chip:not(.active){filter: saturate(0.95) brightness(1.02);} 
   /* Chip base colors (fixed typos) */
@@ -121,6 +123,11 @@
   .chip:focus-visible{outline:2px solid currentColor;outline-offset:3px}
   .section-sep{margin:20px -16px 16px;padding:0 16px}
   .section-sep .rule{height:3px;border-radius:999px;background:linear-gradient(90deg,var(--focus),var(--accent));opacity:.9}
+  /* SMA controls row */
+  .sma-ctrls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 4px}
+  .sma-ctrls select,.sma-ctrls input{background:var(--field-bg);color:var(--field-text);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+  .sma-ctrls input{width:92px}
+  .sma-ctrls small{opacity:.7}
   .sheet{position:fixed;left:0;right:0;bottom:0;top:auto;background:transparent;display:flex;justify-content:center;z-index:2000}
   .sheet[hidden]{display:none!important}
   .sheet-inner{width:min(760px,100%);background:var(--panel);border-top:1px solid var(--border);border-radius:16px 16px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.35);padding:14px;animation:sheetUp .18s ease-out;padding-bottom:max(14px, env(safe-area-inset-bottom))}
@@ -289,6 +296,25 @@
         <button class="chip" data-k="SESS" type="button" aria-pressed="true" title="Toggle pre/post-market bands">Pre/Post</button>
       </div>
 
+      <!-- Custom SMA controls + dynamic chips -->
+      <div class="sma-ctrls" id="smaCtrls">
+        <label for="smaPreset" style="font-weight:800;opacity:.9">SMA</label>
+        <select id="smaPreset" title="Quick add common SMAs">
+          <option value="">Presets…</option>
+          <option>10</option>
+          <option>20</option>
+          <option>30</option>
+          <option>50</option>
+          <option>100</option>
+          <option>150</option>
+          <option>200</option>
+        </select>
+        <input id="smaCustom" type="number" min="2" max="600" step="1" placeholder="Custom" title="Enter any SMA period" />
+        <button id="smaAddBtn" class="btn inline" type="button" title="Add SMA period">Add SMA</button>
+        <small id="smaHint">Tip: click a chip to toggle; double‑click to remove custom.</small>
+      </div>
+      <div class="toggle-row" id="smaCustomChips"></div>
+
       <div id="chart"></div>
     </div>
 
@@ -384,7 +410,8 @@
       toolGPTs:q('#toolGPTs'), toolScreeners:q('#toolScreeners'),
       gptInput:q('#gptInput'), sheetGPTs:q('#sheetGPTs'), sheetScreeners:q('#sheetScreeners'),
       // Added: candle height slider + label
-      heightSel:q('#heightSel'), heightLabel:q('#heightLabel')
+      heightSel:q('#heightSel'), heightLabel:q('#heightLabel'),
+      smaPreset:q('#smaPreset'), smaCustom:q('#smaCustom'), smaAddBtn:q('#smaAddBtn'), smaChips:q('#smaCustomChips')
     };
 
     /* ---------- Toast ---------- */
@@ -470,7 +497,9 @@
     /* ---------- Existing code continues below (chart, autocomplete, etc.) ---------- */
     /* ---------- State ---------- */
     let CURRENT = { ticker:null, company:"", prevClose:null };
-  const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0, divs:[], earns:[] };
+  const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0, divs:[], earns:[],
+    customSMAs: (()=>{ try{ const a=JSON.parse(localStorage.getItem('customSMAs')||'[]'); return Array.isArray(a)? a.filter(n=>Number.isFinite(+n)).slice(0,12) : []; }catch{return [];} })()
+  };
     const FUNDAMENTALS = {}; // cache fundamentals per ticker
   const EARN_CACHE = {}; // cache earnings history per ticker
 
@@ -637,6 +666,13 @@
     const fillForward = (arr)=>{ let last=null; return arr.map(v=>{ if(Number.isFinite(v)){ last=v; return v; } return Number.isFinite(last)? last : null; }); };
     const fillBackward = (arr)=>{ const out=arr.slice(); const fi=out.findIndex(Number.isFinite); if(fi>0){ const v=out[fi]; for(let i=0;i<fi;i++) out[i]=v; } return out; };
     const mapByTs = (rows, values)=>{ const m=new Map(); for(let i=0;i<rows.length;i++){ const t=rows[i]?.t; const v=values[i]; if(Number.isFinite(v)) m.set(t, v); } return m; };
+  const uniqSortedNums = arr=> Array.from(new Set((arr||[]).map(n=>+n).filter(n=>Number.isFinite(n)))).sort((a,b)=>a-b);
+
+  // Custom SMA chips rendering and interactions
+  function persistCustomSMAs(){ localStorage.setItem('customSMAs', JSON.stringify(state.customSMAs||[])); }
+  function renderCustomSMAChips(){ if(!els.smaChips) return; const list = uniqSortedNums(state.customSMAs||[]); els.smaChips.innerHTML = list.map(p=>`<button class="chip" data-k="SMA${p}" data-period="${p}" type="button" aria-pressed="true" title="Toggle SMA ${p}">SMA ${p}</button>`).join(''); }
+  function addCustomSMA(p){ p=+p; if(!Number.isFinite(p)||p<2||p>600) return showToast('Enter 2..600'); state.customSMAs = uniqSortedNums([...(state.customSMAs||[]), p]); persistCustomSMAs(); renderCustomSMAChips(); buildSMAAlignedSeries(/* will include base only; custom handled in render */); renderChart(); }
+  function removeCustomSMA(p){ p=+p; state.customSMAs = (state.customSMAs||[]).filter(x=>+x!==p); persistCustomSMAs(); renderCustomSMAChips(); renderChart(); }
 
     // Build SMA series aligned to state.rows; when < period, back/forward fill; when missing, try extended pull
     async function buildSMAAlignedSeries(){
@@ -789,6 +825,20 @@
       const tSMA50 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map50.get(r.t) ?? null))), name:'SMA 50', line:{ color: css('--c-sma50')||'#60a5fa', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA50"]')?.classList.contains('active')||false };
       const tSMA200= { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map200.get(r.t) ?? null))), name:'SMA 200', line:{ color: css('--c-sma200')||'#f59e0b', width:2.0 }, yaxis:'y', visible: q('.chip[data-k="SMA200"]')?.classList.contains('active')||false };
       traces.push(tSMA20,tSMA50,tSMA200);
+      // Dynamic custom SMA traces (from chips)
+      const customList = Array.from(document.querySelectorAll('#smaCustomChips .chip[data-period]'));
+      if(customList.length){
+        const closes = state.rows.map(r=>r.c);
+        for(const chip of customList){
+          const p = +chip.dataset.period; if(!Number.isFinite(p)) continue;
+          // compute series aligned to full rows then map to displayed rows
+          const full = sma(closes, p);
+          const fullAligned = fillForward(fillBackward(full));
+          const mapP = mapByTs(state.rows, fullAligned);
+          const y = rowsDisplay.map(r=> mapP.get(r.t) ?? null);
+          traces.push({ type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(y)), name:`SMA ${p}`, line:{ color: css('--c-sma50')||'#60a5fa', width:1.4, dash:'dot' }, yaxis:'y', visible: chip.classList.contains('active') });
+        }
+      }
       // Other overlays
       const volOn = q('.chip[data-k="VOL"]')?.classList.contains('active')||false; if(volOn) traces.push(volTrace(rowsDisplay));
       const rsiOn = q('.chip[data-k="RSI"]')?.classList.contains('active')||false; if(rsiOn) traces.push(rsiTrace(rowsDisplay));
@@ -1176,10 +1226,18 @@
   els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(updateAutoFibDebounced, 0); } });
 
+    // SMA controls wiring
+    els.smaPreset?.addEventListener('change', ()=>{ const v=+els.smaPreset.value; if(Number.isFinite(v)) addCustomSMA(v); els.smaPreset.value=''; });
+    els.smaAddBtn?.addEventListener('click', ()=>{ const v=+els.smaCustom.value; if(Number.isFinite(v)) addCustomSMA(v); else showToast('Enter a number'); });
+    els.smaCustom?.addEventListener('keydown', e=>{ if(e.key==='Enter'){ const v=+els.smaCustom.value; if(Number.isFinite(v)) addCustomSMA(v); }});
+    // Toggle custom chip on click, remove on double click
+    els.smaChips?.addEventListener('click', e=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
+    els.smaChips?.addEventListener('dblclick', e=>{ const chip=e.target.closest('.chip'); if(!chip) return; const p=+chip.dataset.period; if(Number.isFinite(p)) removeCustomSMA(p); });
+
     /* Market Overview minis removed */
     
     // Boot
-  (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; await loadAndRender(); scheduleQuoteAutoRefresh(); /* Market minis disabled */ })();
+  (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; renderCustomSMAChips(); await loadAndRender(); scheduleQuoteAutoRefresh(); /* Market minis disabled */ })();
   })();
   </script>
 </body>
