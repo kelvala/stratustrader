@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.40</title>
+<title>Stock Analyzer v.41</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -1237,24 +1237,54 @@
       return { sessionRows, prevClose, lastClose };
     }
 
-    function mktLayout(prev){
+    function mktLayout(prev, sessionRows){
       const grid = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim()||'#283044';
+      // Build Finviz-like time ticks across the bottom (10AM–4PM ET)
+      const toET = (ms)=> new Date(new Date(ms).toLocaleString('en-US',{ timeZone:'America/New_York' }));
+      const wantHours = [10,11,12,13,14,15,16];
+      const tickMap = new Map();
+      if (Array.isArray(sessionRows)) {
+        for (const r of sessionRows) {
+          const d = toET(r.t);
+          const h = d.getHours(), m = d.getMinutes();
+          if ((m===0) && wantHours.includes(h) && !tickMap.has(h)) {
+            tickMap.set(h, r.t);
+            if (tickMap.size === wantHours.length) break;
+          }
+        }
+      }
+      const tickvals = [], ticktext = [];
+      for (const h of wantHours) {
+        const t = tickMap.get(h);
+        if (t) {
+          tickvals.push(new Date(t));
+          const lbl = (h===0?12:(h>12?h-12:h)) + (h<12?'AM':'PM');
+          ticktext.push(lbl);
+        }
+      }
       return {
-        margin:{l:44,r:8,t:8,b:20},
+        margin:{l:44,r:8,t:8,b:26},
         paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
-        xaxis:{showgrid:true,gridcolor:grid, tickfont:{size:10}, rangeslider:{ visible:false }, fixedrange:true},
+        xaxis:{
+          showgrid:true, gridcolor:grid, tickfont:{size:10},
+          rangeslider:{ visible:false }, fixedrange:true,
+          tickmode: (tickvals.length? 'array':'auto'), tickvals, ticktext
+        },
         yaxis:{showgrid:true,gridcolor:grid, zeroline:false, tickfont:{size:10}, side:'right'},
         showlegend:false,
         shapes: prev!=null ? [{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:prev,y1:prev,line:{color:'#ef4444',dash:'dot',width:1}}] : []
       };
     }
     function mktCandle(rows){
+      const up = getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a';
+      const dn = getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626';
       return {
         type:'candlestick',
         x: rows.map(r=>new Date(r.t)),
         open: rows.map(r=>r.o), high: rows.map(r=>r.h), low: rows.map(r=>r.l), close: rows.map(r=>r.c),
-        increasing:{ line:{ color: getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a', width:1.6 } },
-        decreasing:{ line:{ color: getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626', width:1.6 } },
+        increasing:{ line:{ color: up, width:1.2 }, fillcolor: up+'33' },
+        decreasing:{ line:{ color: dn, width:1.2 }, fillcolor: dn+'33' },
+        whiskerwidth: 0.2,
         hovertemplate:'%{x|%I:%M %p}<br>O %{open:.2f} · H %{high:.2f}<br>L %{low:.2f} · C %{close:.2f}<extra></extra>'
       };
     }
@@ -1271,7 +1301,7 @@
         const col = chg>0? (getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a') : chg<0? (getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626') : '#cbd5e1';
         const chgEl = document.getElementById(card.chgId);
         if(chgEl){ chgEl.style.color=col; chgEl.textContent = (Number.isFinite(chg)&&Number.isFinite(pct))? `${chg>0?'+':''}${chg.toFixed(2)} (${chg>0?'+':''}${pct.toFixed(2)}%)` : '—'; }
-        await Plotly.react(el, [mktCandle(sessionRows)], mktLayout(prevClose), {displayModeBar:false, responsive:true});
+  await Plotly.react(el, [mktCandle(sessionRows)], mktLayout(prevClose, sessionRows), {displayModeBar:false, responsive:true});
         // Cache for overnight persistence (~78 bars ≈ 6.5h at 5m)
         setMktCache(card.id, { prev: prevClose, last: lastClose, rows: sessionRows.slice(-78), t: Date.now() });
         return sessionRows;
@@ -1279,7 +1309,7 @@
         // Fallback to cache so cards never go blank after-hours
         const cached = getMktCache(card.id);
         if(cached?.rows?.length){
-          await Plotly.react(el, [mktCandle(cached.rows)], mktLayout(cached.prev), {displayModeBar:false, responsive:true});
+          await Plotly.react(el, [mktCandle(cached.rows)], mktLayout(cached.prev, cached.rows), {displayModeBar:false, responsive:true});
           const chgEl = document.getElementById(card.chgId);
           if(chgEl && Number.isFinite(cached.last) && Number.isFinite(cached.prev)){
             const chg = cached.last - cached.prev; const pct = cached.prev? chg/cached.prev*100 : 0;
