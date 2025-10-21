@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.41</title>
+<title>Stock Analyzer v.42</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -829,6 +829,35 @@
     }
     const updateAutoFibDebounced = debounce(updateAutoFib, 50);
 
+    // Build subtle shading bands for Pre/Post when chip is active (intraday only)
+    function buildSessionBands(rowsDisp){
+      try{
+        if(!isIntraday(state.interval)) return [];
+        const includeAH = q('.chip[data-k="SESS"]')?.classList.contains('active');
+        if(!includeAH) return [];
+        const dtfDate = new Intl.DateTimeFormat('en-US',{ timeZone:'America/New_York', year:'numeric', month:'2-digit', day:'2-digit' });
+        const key = (ms)=> dtfDate.format(new Date(ms));
+        const hm = (ms)=>{ const parts=dtfET.formatToParts(new Date(ms)); const get=t=>parts.find(p=>p.type===t)?.value; const h=+(get('hour')||'0'); const m=+(get('minute')||'0'); return h + m/60; };
+        const byDay = new Map();
+        for(const r of rowsDisp){ const k=key(r.t); (byDay.get(k)||byDay.set(k,[]).get(k)).push(r); }
+        const preColor = css('--band-pre') || 'rgba(59,130,246,0.07)';
+        const postColor= css('--band-post')|| 'rgba(59,130,246,0.07)';
+        const shapes=[];
+        for(const [,rows] of byDay){
+          if(!rows.length) continue;
+          let preStart = rows[0].t, preEnd=null, postStart=null, postEnd=rows[rows.length-1].t;
+          for(const r of rows){ const v=hm(r.t); if(preEnd===null && v>=9.5){ preEnd=r.t; } if(postStart===null && v>16.0){ postStart=r.t; break; } }
+          if(Number.isFinite(preStart) && Number.isFinite(preEnd) && preEnd>preStart){
+            shapes.push({ type:'rect', xref:'x', yref:'paper', x0:new Date(preStart), x1:new Date(preEnd), y0:0, y1:1, fillcolor:preColor, line:{width:0}, layer:'below' });
+          }
+          if(Number.isFinite(postStart) && Number.isFinite(postEnd) && postEnd>postStart){
+            shapes.push({ type:'rect', xref:'x', yref:'paper', x0:new Date(postStart), x1:new Date(postEnd), y0:0, y1:1, fillcolor:postColor, line:{width:0}, layer:'below' });
+          }
+        }
+        return shapes;
+      }catch{ return []; }
+    }
+
     async function renderChart(){
       const rows = state.rows||[]; if(!rows.length||!els.chart) return;
       const rowsDisplay = getDisplayRows();
@@ -918,7 +947,8 @@
         yaxis2:{ overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false },
         yaxis3:{ overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
         yaxis4:{ overlaying:'y', side:'right', showgrid:false, showticklabels:false },
-        font:{ color:css('--text') }
+        font:{ color:css('--text') },
+        shapes: buildSessionBands(rowsDisplay)
       };
       const layout = buildLayout(baseLayout);
       await Plotly.react(els.chart, traces, layout, { responsive:true, displayModeBar:false });
@@ -1239,26 +1269,30 @@
 
     function mktLayout(prev, sessionRows){
       const grid = getComputedStyle(document.documentElement).getPropertyValue('--grid').trim()||'#283044';
-      // Build Finviz-like time ticks across the bottom (10AM–4PM ET)
+      // Build Finviz-like time ticks across the bottom starting 9:30AM, then every 30 minutes to 4:00PM ET
       const toET = (ms)=> new Date(new Date(ms).toLocaleString('en-US',{ timeZone:'America/New_York' }));
-      const wantHours = [10,11,12,13,14,15,16];
-      const tickMap = new Map();
+      // Desired half-hour marks: 9:30 → 16:00
+      const want = [];
+      { let h=9, m=30; while(true){ want.push([h,m]); if(h===16 && m===0) break; m+=30; if(m>=60){ m=0; h++; } } }
+      const tickMap = new Map(); // key "h:m" -> ms
       if (Array.isArray(sessionRows)) {
         for (const r of sessionRows) {
           const d = toET(r.t);
           const h = d.getHours(), m = d.getMinutes();
-          if ((m===0) && wantHours.includes(h) && !tickMap.has(h)) {
-            tickMap.set(h, r.t);
-            if (tickMap.size === wantHours.length) break;
+          if ((m===0 || m===30) && (h>9 || (h===9 && m>=30)) && (h<16 || (h===16 && m===0))) {
+            const key = h+":"+m;
+            if (!tickMap.has(key)) tickMap.set(key, r.t);
           }
         }
       }
       const tickvals = [], ticktext = [];
-      for (const h of wantHours) {
-        const t = tickMap.get(h);
+      for (const [h,m] of want) {
+        const t = tickMap.get(h+":"+m);
         if (t) {
           tickvals.push(new Date(t));
-          const lbl = (h===0?12:(h>12?h-12:h)) + (h<12?'AM':'PM');
+          let hh = h % 12; if (hh===0) hh = 12;
+          const suf = h<12? 'AM':'PM';
+          const lbl = m===0 ? `${hh}${suf}` : `${hh}:30`;
           ticktext.push(lbl);
         }
       }
