@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ticker mockup</title>
+<style>
+  body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #0f1720;
+    color: #e6eef6;
+  }
+
+  /* Chart placeholder */
+  .chart-wrap {
+    max-width: 1100px;
+    margin: 24px auto;
+    background: linear-gradient(180deg,#0b1720,#0f1b26);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+    overflow: hidden;
+  }
+  .chart-header {
+    padding: 14px 16px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+  .symbol {
+    font-weight:700;
+    font-size:20px;
+    color:#bde0ff;
+  }
+  .price {
+    margin-left:auto;
+    color:#9ff7b7;
+    font-weight:700;
+  }
+
+  /* Ticker bar */
+  .ticker-bar {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:#0a1116;
+    border-top: 1px solid rgba(255,255,255,0.03);
+    padding:8px 12px;
+    font-size:14px;
+    max-height:84px; /* allow smooth collapse */
+    transition: max-height 260ms ease, opacity 200ms ease, padding 220ms ease;
+  }
+  .ticker-left {
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-shrink:0;
+  }
+  .badge {
+    background:#12212b;
+    color:#9ccfe8;
+    padding:6px 10px;
+    border-radius:4px;
+    font-size:13px;
+    display:inline-flex;
+    gap:8px;
+    align-items:center;
+  }
+  .ticker-content {
+    overflow:hidden;
+    white-space:nowrap;
+    flex:1 1 auto;
+    --pace: 5000ms;
+  }
+  .headline {
+    display:inline-block;
+    padding-left:12px;
+    padding-right:24px;
+    color:#dceffd;
+    text-decoration:none;
+  }
+  .headline .meta {
+    color:#9bb8c9;
+    font-size:12px;
+    margin-right:8px;
+  }
+  .controls {
+    margin-left:12px;
+    display:flex;
+    gap:8px;
+    align-items:center;
+  }
+  .btn {
+    background:transparent;
+    border:1px solid rgba(255,255,255,0.06);
+    color:#cfe7ff;
+    padding:6px 8px;
+    border-radius:4px;
+    cursor:pointer;
+    font-size:13px;
+  }
+
+  /* simple fade/slide between items */
+  .ticker-item {
+    display:inline-block;
+    padding-right:48px;
+    opacity:0;
+    transform:translateY(4px);
+    transition:opacity 300ms, transform 300ms;
+  }
+  .ticker-item.visible{ opacity:1; transform:translateY(0); }
+
+  /* Collapsed state */
+  .ticker-bar.collapsed{ max-height:0; padding-top:0; padding-bottom:0; opacity:0; overflow:hidden }
+  /* expanded panel */
+  .ticker-panel{ background: #071018; padding:12px 14px; border-top:1px solid rgba(255,255,255,0.03); color:#dfeefe; display:none }
+  .ticker-panel.visible{ display:block }
+
+  /* Responsive */
+  @media (max-width:640px){
+    .badge { display:none; }
+    .price { font-size:14px; }
+    .ticker-bar { font-size:13px; padding:8px; }
+  }
+
+  /* chart area */
+  .chart-area {
+    height:260px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#7fb1d9;
+    font-size:14px;
+    background:
+      linear-gradient(transparent 70%, rgba(255,255,255,0.01) 70%),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.01) 0 1px, transparent 1px 60px);
+  }
+</style>
+</head>
+<body>
+
+<div class="chart-wrap" role="region" aria-label="Chart">
+  <div class="chart-header">
+    <div class="symbol">TGT <span style="font-weight:500; color:#8fb0c9; font-size:13px; margin-left:8px;">Target Corp — NYSE</span></div>
+    <div class="price">97.23 <span style="font-size:12px; color:#8fe4a1; font-weight:600;">+2.15%</span></div>
+  </div>
+
+  <!-- Ticker bar (mockup) -->
+  <div id="ticker" class="ticker-bar" aria-live="polite">
+    <div class="ticker-left">
+      <div class="badge">News</div>
+    </div>
+
+    <div class="ticker-content" id="tickerContent" aria-hidden="false">
+      <!-- headlines populated by JS -->
+    </div>
+
+    <div class="controls">
+      <button id="pauseBtn" class="btn" title="Pause/Play">Pause</button>
+      <button id="collapseBtn" class="btn" title="Collapse/Expand">Collapse</button>
+    </div>
+  </div>
+
+  <div class="chart-area">
+    <div>
+      [ Chart placeholder ]<br/>
+      Use this area to judge how the ticker sits above your chart.
+    </div>
+  </div>
+</div>
+
+<script>
+  // Mock headlines (provide direct article links where appropriate)
+  const headlines = [
+    { time:'Oct 25, 2:10 PM', src:'Reuters', title:'Target announces elimination of 1,800 corporate roles—its largest workforce reduction in a decade in a major restructuring move to address declining sales.', url:'https://www.reuters.com/' },
+    { time:'Oct 24, 10:05 AM', src:'Company PR', title:'Target says Q3 comparable sales beat, cites category strength and seasonal demand.', url:'https://corporate.target.com/news' },
+    { time:'Oct 23, 8:02 AM', src:'MarketWatch', title:'Analysts raise TGT price target after cost-cutting plan announced.', url:'https://www.marketwatch.com/' },
+    { time:'Oct 21, 3:30 PM', src:'SEC', title:'Target files 8-K disclosing executive changes and restructuring details.', url:'https://www.sec.gov/' }
+  ];
+
+  const tickerContent = document.getElementById('tickerContent');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const collapseBtn = document.getElementById('collapseBtn');
+
+  let idx = 0;
+  let running = true;
+  let collapsed = false;
+  let intervalHandle = null;
+
+  function renderOne(i){
+    tickerContent.innerHTML = '';
+    const h = headlines[i];
+    const el = document.createElement('a');
+    el.className = 'headline';
+    el.href = h.url;
+    el.target = '_blank';
+    el.rel = 'noopener';
+    el.innerHTML = `<span class="meta">${h.time} • ${h.src}</span>${escapeHtml(h.title)}`;
+    // wrap in ticker-item for animation
+    const wrapper = document.createElement('span');
+    wrapper.className = 'ticker-item';
+    wrapper.appendChild(el);
+    tickerContent.appendChild(wrapper);
+    // force show
+    requestAnimationFrame(()=> wrapper.classList.add('visible'));
+  }
+
+  function startTicker(){
+    if (intervalHandle) clearInterval(intervalHandle);
+    intervalHandle = setInterval(()=>{
+      idx = (idx + 1) % headlines.length;
+      renderOne(idx);
+    }, 5000);
+    running = true;
+    pauseBtn.textContent = 'Pause';
+  }
+  function stopTicker(){
+    if (intervalHandle) clearInterval(intervalHandle);
+    intervalHandle = null;
+    running = false;
+    pauseBtn.textContent = 'Play';
+  }
+
+  pauseBtn.addEventListener('click', ()=>{
+    if(running) stopTicker(); else startTicker();
+  });
+
+  // Compact <-> Expanded behavior with persistence
+  const TICKER_MODE_KEY = 'mockTickerMode'; // 'compact' or 'expanded'
+  const PANEL = document.createElement('div'); PANEL.className = 'ticker-panel'; PANEL.id = 'tickerPanel';
+  PANEL.innerHTML = '<div id="tickerPanelContent">Full article will appear here when expanded.</div>';
+  tickerContent.parentNode.parentNode.insertBefore(PANEL, tickerContent.parentNode.nextSibling);
+
+  function applyMode(mode){
+    const el = document.getElementById('ticker');
+    if(mode==='expanded'){
+      // show the expanded panel and pause the ticker so user can read
+  const p = document.getElementById('tickerPanel');
+  const h = headlines[idx] || {};
+  p.innerHTML = `<div style="white-space:pre-wrap">${escapeHtml(h.time)} • ${escapeHtml(h.src)}\n\n${escapeHtml(h.title)}\n\n(Full article text would be loaded here.)</div><p style="margin-top:8px"><a href="${h.url||'#'}" target="_blank" rel="noopener" style="color:#9ff7b7;font-weight:800">Read original</a></p>`;
+  p.classList.add('visible');
+      collapseBtn.textContent = 'Compact';
+      collapseBtn.setAttribute('aria-expanded','true');
+      // pause rotation while reading
+      if(running) stopTicker();
+    } else {
+      // compact mode: show single-line scrolling feed
+      document.getElementById('tickerPanel').classList.remove('visible');
+      collapseBtn.textContent = 'Expand';
+      collapseBtn.setAttribute('aria-expanded','false');
+      // resume rotation if not running
+      if(!running) startTicker();
+    }
+    try{ localStorage.setItem(TICKER_MODE_KEY, mode); }catch(e){}
+  }
+
+  // initialize mode
+  try{ const saved = localStorage.getItem(TICKER_MODE_KEY); applyMode(saved==='expanded' ? 'expanded' : 'compact'); }catch(e){ applyMode('compact'); }
+
+  collapseBtn.addEventListener('click', ()=>{
+    const current = (localStorage.getItem(TICKER_MODE_KEY) === 'expanded') ? 'expanded' : 'compact';
+    const next = current === 'expanded' ? 'compact' : 'expanded';
+    applyMode(next);
+  });
+
+  // helper to avoid XSS in mockup
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // init
+  renderOne(idx);
+  startTicker();
+
+  // pause on hover for convenience
+  tickerContent.addEventListener('mouseenter', ()=> stopTicker());
+  tickerContent.addEventListener('mouseleave', ()=> { if(!running) startTicker(); });
+
+  // Accessibility: keyboard toggle
+  pauseBtn.setAttribute('aria-pressed','false');
+  pauseBtn.addEventListener('click', ()=> pauseBtn.setAttribute('aria-pressed', String(!running)));
+
+</script>
+</body>
+</html>

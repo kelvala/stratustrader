@@ -138,6 +138,15 @@
   .btmnav .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 8px;border-radius:10px;border:0;background:transparent;color:var(--text);font-weight:700;font-size:13px}
   .btmnav .tab.active{background:var(--hover)}
   .btmnav .tab span{font-size:11px;opacity:.85}
+  /* --- headline ticker styles (mini) --- */
+  .site-ticker{display:flex;align-items:center;gap:10px;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:12px;color:var(--text);transition: max-height 260ms ease, opacity 200ms ease, padding 200ms ease;overflow:hidden}
+  .site-ticker .left{font-weight:800;color:var(--muted);background:color-mix(in srgb,var(--panel),#081018 6%);padding:6px 10px;border-radius:8px}
+  .site-ticker .content{flex:1;white-space:nowrap;overflow:hidden}
+  .site-ticker a.headline{color:var(--text);text-decoration:none;padding-right:28px;display:inline-block}
+  .site-ticker .meta{color:var(--muted);font-size:12px;margin-right:8px}
+  .site-ticker .controls{display:flex;gap:8px;margin-left:12px}
+  .site-ticker .btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:8px;cursor:pointer}
+  .site-ticker.collapsed{max-height:0;padding-top:0;padding-bottom:0;opacity:0}
   @media (max-width:720px){ .btmnav{display:flex;gap:8px} body{padding-bottom:64px} }
   .scr-list{display:flex;flex-direction:column;gap:10px}
   .scr-item{
@@ -249,6 +258,17 @@
         <button class="tool-btn" id="refreshBtn" aria-label="Refresh">⟳ <span class="tool-txt">Refresh</span></button>
       </div>
     </div>
+    
+    <!-- Inline headline ticker (mock) -->
+    <div id="siteTicker" class="site-ticker" aria-live="polite">
+      <div class="left">News</div>
+      <div class="content" id="siteTickerContent">Loading headlines…</div>
+      <div class="controls">
+        <button id="sitePause" class="btn" type="button">Pause</button>
+        <button id="siteCollapse" class="btn" type="button" aria-expanded="true">Collapse</button>
+      </div>
+    </div>
+    <div id="siteTickerPanel" class="site-ticker-panel" aria-hidden="true" style="display:none;padding:10px 12px;margin-bottom:12px;border-radius:8px;background:color-mix(in srgb,var(--panel),#071018 6%);color:var(--text)"></div>
 
     <!-- Info bar -->
     <div id="info" class="info">
@@ -263,6 +283,107 @@
       </div>
       <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
     </div>
+
+    <script>
+      (function(){
+        // Mock headline generator that follows the currently selected ticker.
+        // It polls the app state for `state.ticker` (if present) or the input #q and updates headlines.
+        function nowISO(){ return new Date().toLocaleString(); }
+
+        function makeHeadlinesFor(sym){
+          const s = (sym||'TGT').toUpperCase();
+          // If we have a known example article for this symbol, prefer direct links (mock)
+          const examples = {
+            'TGT': [
+              { src: 'Reuters', title: `${s}: Target announces elimination of 1,800 corporate roles in restructuring.`, url: 'https://www.reuters.com/business/retail-consumer/target-announces-layoffs-2025-10-25/' },
+              { src: 'Company PR', title: `${s} outlines cost actions and Q3 results in press release.`, url: 'https://corporate.target.com/news' },
+              { src: 'MarketWatch', title: `Analysts react to ${s} restructuring and update estimates.`, url: 'https://www.marketwatch.com/search?q=Target' }
+            ],
+            'AAPL': [
+              { src: 'Apple Newsroom', title: `${s}: Apple announces product/service update and guidance.`, url: 'https://www.apple.com/newsroom/' },
+              { src: 'Reuters', title: `${s} posts quarterly results; services remain a bright spot.`, url: 'https://www.reuters.com/companies/AAPL.O' },
+              { src: 'Analyst', title: `Analysts discuss ${s} supply chain and outlook.`, url: 'https://www.cnbc.com/search/?query=Apple' }
+            ]
+          };
+
+          if (examples[s]) return examples[s].map(h => ({ time: nowISO(), src: h.src, title: h.title, url: h.url }));
+
+          // Fallback: generate headlines and point to a news search for the symbol
+          return [
+            { time: nowISO(), src: 'Reuters', title: `${s}: Company announces restructuring to reduce costs and improve margins.`, url: `https://www.google.com/search?q=${encodeURIComponent(s + ' news')}&tbm=nws` },
+            { time: nowISO(), src: 'Company PR', title: `${s} reports quarterly results; management highlights category strength.`, url: `https://www.google.com/search?q=${encodeURIComponent(s + ' press release')}&tbm=nws` },
+            { time: nowISO(), src: 'Analyst', title: `Analysts update ${s} outlook after strategic changes.`, url: `https://www.google.com/search?q=${encodeURIComponent(s + ' analysts raise price target')}&tbm=nws` }
+          ];
+        }
+
+        const content = document.getElementById('siteTickerContent');
+        const pauseBtn = document.getElementById('sitePause');
+        const collapseBtn = document.getElementById('siteCollapse');
+        const panelEl = document.getElementById('siteTickerPanel');
+
+        let HEADLINES = makeHeadlinesFor('TGT');
+        let idx = 0, running = true, timer = null;
+        const MODE_KEY = 'siteTickerMode_v1'; // 'compact' or 'expanded'
+        let currentSym = null;
+
+        function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+        function render(i){ const h = HEADLINES[i]||{}; content.innerHTML = `<a class="headline" href="${h.url||'#'}" target="_blank" rel="noopener"><span class="meta">${escapeHtml(h.time||'')}${h.src? ' • '+escapeHtml(h.src):''}</span> ${escapeHtml(h.title||'')}</a>`; }
+        function start(){ if(timer) clearInterval(timer); timer=setInterval(()=>{ idx=(idx+1)%Math.max(1,HEADLINES.length); render(idx); },4500); running=true; pauseBtn.textContent='Pause'; }
+        function stop(){ if(timer) clearInterval(timer); timer=null; running=false; pauseBtn.textContent='Play'; }
+        pauseBtn.addEventListener('click', ()=> running? stop() : start());
+
+        function applyMode(mode){
+          if(mode==='expanded'){
+            panelEl.style.display = '';
+            const h = HEADLINES[idx]||{};
+            panelEl.innerHTML = `<div style="white-space:pre-wrap">${escapeHtml(h.time||'')}${h.src? ' • '+escapeHtml(h.src):''}\n\n${escapeHtml(h.title||'')}\n\n(Full article would be fetched from the source.)</div><p style="margin-top:8px"><a href="${h.url||'#'}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:800">Read original</a></p>`;
+            collapseBtn.textContent = 'Compact';
+            collapseBtn.setAttribute('aria-expanded','true');
+            if(running) stop();
+          } else {
+            panelEl.style.display = 'none';
+            collapseBtn.textContent = 'Expand';
+            collapseBtn.setAttribute('aria-expanded','false');
+            if(!running) start();
+          }
+          try{ localStorage.setItem(MODE_KEY, mode);}catch(e){}
+        }
+
+        // detect current ticker from global state or input
+        function getCurrentTicker(){
+          try{ if(window.state && window.state.ticker) return window.state.ticker; }catch(e){}
+          try{ const v = document.getElementById('q')?.value; if(v) return v.trim().toUpperCase(); }catch(e){}
+          try{ const v2 = localStorage.getItem('lastTicker'); if(v2) return v2; }catch(e){}
+          return null;
+        }
+
+        function pollTicker(){
+          const sym = getCurrentTicker() || 'TGT';
+          if(sym !== currentSym){
+            currentSym = sym;
+            HEADLINES = makeHeadlinesFor(currentSym);
+            idx = 0; render(idx);
+            // if expanded, refresh panel content
+            const mode = localStorage.getItem(MODE_KEY) === 'expanded' ? 'expanded' : 'compact';
+            applyMode(mode);
+          }
+        }
+
+        // initialize
+        try{ const saved = localStorage.getItem(MODE_KEY); applyMode(saved==='expanded'?'expanded':'compact'); }catch(e){ applyMode('compact'); }
+        collapseBtn.addEventListener('click', ()=>{
+          const current = (localStorage.getItem(MODE_KEY) === 'expanded') ? 'expanded' : 'compact';
+          const next = current === 'expanded' ? 'compact' : 'expanded';
+          applyMode(next);
+        });
+
+        // poll for ticker changes so headlines follow the chart
+        setInterval(pollTicker, 900);
+        content.addEventListener('mouseenter', ()=>{ if(running) stop(); });
+        content.addEventListener('mouseleave', ()=>{ if(!running) start(); });
+        render(0); start();
+      })();
+    </script>
 
     <!-- Market Overview (auto-updating) -->
     <div id="mktRow" class="mkt-row" aria-label="Market overview">
