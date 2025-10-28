@@ -825,14 +825,58 @@
     function removeCustomSMA(p){ p=+p; state.customSMAs = (state.customSMAs||[]).filter(x=>+x!==p); persistCustomSMAs(); renderCustomSMAChips(); renderChart(); }
 
     // Build SMA series aligned to state.rows; when < period, back/forward fill; when missing, try extended pull
-    async function buildSMAAlignedSeries(){
+      async function buildSMAAlignedSeries(){
       const rows = state.rows||[]; state.smaSeries = state.smaSeries || {}; state.smaLast = state.smaLast || {}; if(!rows.length){ state.smaSeries={}; state.smaLast={}; return; }
       const closes = rows.map(r=>r.c);
       const periods = uniqSortedNums([20,50,200, ...((state.customSMAs||[]))]).slice(0, 24);
-      const pickRange=(interval,p)=>{ switch(interval){ case '1m':return '5d'; case '5m':return '1mo'; case '15m':return '3mo'; case '60m':return '6mo'; case '1wk':return '10y'; case '1mo': return 'max'; case '3mo': return 'max'; case '1y': return 'max'; default: return p>=200? '3y':'1y'; } };
-      async function alignFromExtended(p){ const extR = pickRange(state.interval, p); try{ const ext = await fetchRows(state.ticker, extR, state.interval); if(Array.isArray(ext)&&ext.length){ const yExt = sma(ext.map(r=>r.c), p); const mapP = mapByTs(ext, yExt); const aligned = rows.map(r=> mapP.get(r.t) ?? null); return fillBackward(fillForward(aligned)); } }catch{} return null; }
-      for(const p of periods){ let y = sma(closes, p); if(y.some(Number.isFinite)) y=fillBackward(fillForward(y)); else { const extAligned = await alignFromExtended(p); y = extAligned || Array(rows.length).fill(closes.filter(Number.isFinite).at(-1) ?? null); }
-        state.smaSeries[p]=y; const last = y.filter(Number.isFinite).at(-1); if(Number.isFinite(last)) state.smaLast[p]=last; }
+
+      // Choose a generous daily range to compute long SMAs when the visible interval is coarse.
+      const pickRange=(interval,p)=>{
+        switch(String(interval)){
+          case '1m': return '5d';
+          case '5m': return '1mo';
+          case '15m': return '3mo';
+          case '60m': return '6mo';
+          case '1wk': return '10y';
+          case '1mo': return 'max';
+          case '3mo': return 'max';
+          case '1y': return 'max';
+          default: return p>=200? '10y':'3y'; // prefer 10y for very long SMAs so we have enough daily points
+        }
+      };
+
+      // When aligning an SMA computed from extended (daily) data to the current rows (which may be monthly/quarterly),
+      // match each row to the most recent prior SMA value (nearest earlier timestamp). This avoids exact-timestamp mismatches.
+      async function alignFromExtended(p){
+        const extR = pickRange(state.interval, p);
+        try{
+          // Always fetch daily series for SMA calculation to ensure enough granularity
+          const ext = await fetchRows(state.ticker, extR, '1d');
+          if(!Array.isArray(ext) || !ext.length) return null;
+          const yExt = sma(ext.map(r=>r.c), p);
+          // Build an array of {t, val} for quick nearest-previous lookup
+          const extPairs = ext.map((r,i)=>({ t: r.t, v: Number.isFinite(yExt[i])? yExt[i] : null }));
+          // For each target row, find the nearest extPairs entry with t <= row.t and use its SMA value
+          const aligned = rows.map(r=>{
+            // binary search in extPairs by timestamp
+            let lo = 0, hi = extPairs.length - 1, found = -1;
+            while(lo <= hi){ const mid = (lo+hi)>>1; if(extPairs[mid].t <= r.t){ found = mid; lo = mid + 1; } else { hi = mid - 1; } }
+            return (found>=0)? extPairs[found].v : null;
+          });
+          return fillBackward(fillForward(aligned));
+        }catch(e){ return null; }
+      }
+
+      for(const p of periods){
+        let y = sma(closes, p);
+        if(y.some(Number.isFinite)){
+          y = fillBackward(fillForward(y));
+        } else {
+          const extAligned = await alignFromExtended(p);
+          y = extAligned || Array(rows.length).fill(closes.filter(Number.isFinite).at(-1) ?? null);
+        }
+        state.smaSeries[p]=y; const last = y.filter(Number.isFinite).at(-1); if(Number.isFinite(last)) state.smaLast[p]=last;
+      }
     }
 
     /* ---------- Price axis fit (uses slider) ---------- */
@@ -991,7 +1035,28 @@
       const xArr = rowsDisplay.map(r=>new Date(r.t));
       const tSMA20 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map20.get(r.t) ?? null))), name:'SMA 20', line:{ color: css('--c-sma20')||'#22c55e', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA20"]')?.classList.contains('active')||false };
       const tSMA50 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map50.get(r.t) ?? null))), name:'SMA 50', line:{ color: css('--c-sma50')||'#60a5fa', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA50"]')?.classList.contains('active')||false };
-      const tSMA200= { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map200.get(r.t) ?? null))), name:'SMA 200', line:{ color: css('--c-sma200')||'#f59e0b', width:2.0 }, yaxis:'y', visible: q('.chip[data-k="SMA200"]')?.classList.contains('active')||false };
+
+      // Robust SMA200: prefer aligned precomputed series; if it contains only nulls (coarse intervals),
+      // compute SMA200 from daily data and align the daily SMA to the chart rows (nearest prior value).
+      let y200 = fillForward(fillBackward(rowsDisplay.map(r=> map200.get(r.t) ?? null)));
+      if(!y200.some(Number.isFinite)){
+        try{
+          // fetch a reasonable daily window to compute SMA200 (200 trading days ~ 1 year). Use 10y to be safe.
+          const ext = await fetchRows(state.ticker, '10y', '1d');
+          if(Array.isArray(ext) && ext.length){
+            const yExt = sma(ext.map(r=>r.c), 200);
+            const extPairs = ext.map((r,i)=>({ t: r.t, v: Number.isFinite(yExt[i])? yExt[i] : null }));
+            // align daily SMA to each row by picking the most recent daily SMA at or before the row timestamp
+            y200 = rowsDisplay.map(r=>{
+              let lo=0, hi=extPairs.length-1, found=-1;
+              while(lo<=hi){ const mid=(lo+hi)>>1; if(extPairs[mid].t <= r.t){ found=mid; lo=mid+1; } else { hi=mid-1; } }
+              return (found>=0)? extPairs[found].v : null;
+            });
+            y200 = fillBackward(fillForward(y200));
+          }
+        }catch(e){ /* ignore fallback errors, keep original y200 */ }
+      }
+      const tSMA200= { type:'scatter', mode:'lines', x:xArr, y:y200, name:'SMA 200', line:{ color: css('--c-sma200')||'#f59e0b', width:2.0 }, yaxis:'y', visible: q('.chip[data-k="SMA200"]')?.classList.contains('active')||false };
       traces.push(tSMA20,tSMA50,tSMA200);
       // Other overlays
       const volOn = q('.chip[data-k="VOL"]')?.classList.contains('active')||false; if(volOn) traces.push(volTrace(rowsDisplay));
