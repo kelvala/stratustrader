@@ -99,6 +99,10 @@
   .chip[data-k="ICHI"]{border-color:#60a5fa;color:#60a5fa}
   .chip[data-k="SESS"]{border-color:#93c5fd;color:#93c5fd}
 
+  /* Bollinger Bands chip color */
+  .chip[data-k="BB"]{ border-color:#7c3aed;color:#7c3aed; }
+  .chip.active[data-k="BB"]{ background:rgba(124,58,237,.12); }
+
   /* Active backgrounds (kept) */
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
   .chip.active[data-k="SMA50"]{background:rgba(96,165,250,.12)}
@@ -465,7 +469,8 @@
         <button class="chip" data-k="RSI" type="button" aria-pressed="false">RSI</button>
         <button class="chip" data-k="MACD" type="button" aria-pressed="false">MACD</button>
         <button class="chip" data-k="VOL" type="button" aria-pressed="false">Volume</button>
-        <button class="chip" data-k="DIV" type="button" aria-pressed="false" title="Show dividend events">Dividends</button>
+  <button class="chip" data-k="BB" type="button" aria-pressed="false" title="Bollinger Bands">BB</button>
+  <button class="chip" data-k="DIV" type="button" aria-pressed="false" title="Show dividend events">Dividends</button>
         <button class="chip" id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
         <button class="chip" data-k="ICHI" type="button" aria-pressed="false">Ichimoku</button>
         <button class="chip" data-k="SESS" type="button" aria-pressed="true" title="Toggle pre/post-market bands">Pre/Post</button>
@@ -900,6 +905,40 @@
     function rsiArr(rows, period=14){ const c=rows.map(r=>r.c); const gains=[], losses=[]; for(let i=1;i<c.length;i++){ const d=c[i]-c[i-1]; gains.push(Math.max(0,d)); losses.push(Math.max(0,-d)); } const avgG=ema(gains,period); const avgL=ema(losses,period); const rsi=Array(c.length).fill(null); for(let i=1;i<c.length;i++){ const gi=avgG[i-1], li=avgL[i-1]; if(Number.isFinite(gi)&&Number.isFinite(li)){ const rs = li===0? 100 : gi/li; rsi[i]=100-(100/(1+rs)); } } return rsi; }
     function rsiTrace(rows){ return { type:'scatter', mode:'lines', x:rows.map(r=>new Date(r.t)), y:rsiArr(rows), name:'RSI', line:{ color: css('--c-rsi')||'#a78bfa', width:1.6 }, yaxis:'y3', hoverinfo:'skip' }; }
     function macdTraces(rows){ const c=rows.map(r=>r.c); const e12=ema(c,12), e26=ema(c,26); const macd=e12.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(e26[i]))? v-e26[i] : null); const signal=ema(macd,9); const hist=macd.map((v,i)=> (Number.isFinite(v)&&Number.isFinite(signal[i]))? v-signal[i]: null); const x=rows.map(r=>new Date(r.t)); const cols=hist.map(v=> v==null? 'rgba(0,0,0,0)' : (v>=0? 'rgba(34,197,94,0.35)':'rgba(239,68,68,0.35)')); return [ { type:'scatter', mode:'lines', x, y:macd, name:'MACD', line:{ color: css('--c-macd')||'#38bdf8', width:1.6 }, yaxis:'y4', hoverinfo:'skip' }, { type:'scatter', mode:'lines', x, y:signal, name:'Signal', line:{ color:'#f59e0b', width:1.2, dash:'dot' }, yaxis:'y4', hoverinfo:'skip' }, { type:'bar', x, y:hist, name:'Histogram', marker:{ color: cols }, yaxis:'y4', hoverinfo:'skip' } ]; }
+    // Bollinger Bands: rolling std + SMA band (defaults: 20 period, 2 std)
+    function rollingStd(arr,p){
+      const out = Array(arr.length).fill(null);
+      if(!p || !arr.length) return out;
+      for(let i=0;i<arr.length;i++){
+        if(i < p-1) { out[i]=null; continue; }
+        let sum=0, sum2=0, cnt=0;
+        for(let j=i-p+1;j<=i;j++){
+          const v=+arr[j];
+          if(!Number.isFinite(v)) continue;
+          sum += v; sum2 += v*v; cnt++;
+        }
+        if(!cnt){ out[i]=null; continue; }
+        const mean = sum/cnt;
+        const variance = Math.max(0, (sum2/cnt) - (mean*mean));
+        out[i] = Math.sqrt(variance);
+      }
+      return out;
+    }
+    function bollingerTraces(rows, period=20, mult=2){
+      const closes = rows.map(r=>r.c);
+      const ma = sma(closes, period);
+      const sd = rollingStd(closes, period);
+      const upper = ma.map((v,i)=> Number.isFinite(v) && Number.isFinite(sd[i]) ? v + mult*sd[i] : null);
+      const lower = ma.map((v,i)=> Number.isFinite(v) && Number.isFinite(sd[i]) ? v - mult*sd[i] : null);
+      const x = rows.map(r=>new Date(r.t));
+      // fill area between upper (first) and lower (second with tonexty)
+      const col = css('--c-bb') || '#7c3aed';
+      const fillColor = 'rgba(124,58,237,0.10)';
+      const upTrace = { type:'scatter', mode:'lines', x, y:fillForward(fillBackward(upper)), name:'BB Upper', line:{ color: col, width:1 }, hoverinfo:'skip', showlegend:false, yaxis:'y' };
+      const lowTrace = { type:'scatter', mode:'lines', x, y:fillForward(fillBackward(lower)), name:'BB Lower', line:{ color: col, width:1 }, fill:'tonexty', fillcolor:fillColor, hoverinfo:'skip', showlegend:false, yaxis:'y' };
+      const midTrace = { type:'scatter', mode:'lines', x, y:fillForward(fillBackward(ma)), name:`BB ${period}`, line:{ color: '#6d28d9', width:1.4, dash:'dash' }, hoverinfo:'skip', yaxis:'y' };
+      return [upTrace, lowTrace, midTrace];
+    }
     function ichiTraces(rows){
       const high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c), x=rows.map(r=>new Date(r.t));
       const rollingMid=(h,l,p)=>{ const out=Array(h.length).fill(null); for(let i=0;i<h.length;i++){ const s=Math.max(0,i-p+1); let hi=-Infinity, lo=Infinity; for(let j=s;j<=i;j++){ if(Number.isFinite(h[j])) hi=Math.max(hi,h[j]); if(Number.isFinite(l[j])) lo=Math.min(lo,l[j]); } if(hi>-Infinity&&lo<Infinity) out[i]=(hi+lo)/2; } return out; };
@@ -1062,7 +1101,9 @@
       const volOn = q('.chip[data-k="VOL"]')?.classList.contains('active')||false; if(volOn) traces.push(volTrace(rowsDisplay));
       const rsiOn = q('.chip[data-k="RSI"]')?.classList.contains('active')||false; if(rsiOn) traces.push(rsiTrace(rowsDisplay));
       const macdOn= q('.chip[data-k="MACD"]')?.classList.contains('active')||false; if(macdOn) traces.push(...macdTraces(rowsDisplay));
-      const ichiOn= q('.chip[data-k="ICHI"]')?.classList.contains('active')||false; if(ichiOn) traces.push(...ichiTraces(rowsDisplay));
+  const bbOn = q('.chip[data-k="BB"]')?.classList.contains('active')||false;
+  if(bbOn){ traces.push(...bollingerTraces(rowsDisplay, 20, 2)); }
+  const ichiOn= q('.chip[data-k="ICHI"]')?.classList.contains('active')||false; if(ichiOn) traces.push(...ichiTraces(rowsDisplay));
 
       // Dynamic custom SMA traces (from chips)
       const customList = Array.from(document.querySelectorAll('#smaCustomChips .chip[data-period]'));
