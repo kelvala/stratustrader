@@ -1705,7 +1705,9 @@
       return {text:`${pct.toFixed(1)}% · Cheap`, color:getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a'};
     }
 
-  function renderBuffett(){ const elVal = document.getElementById('buffettValueMini'); const elRemark = document.getElementById('buffettRemarkMini'); if(!elVal||!elRemark) return; const d = loadBuffett(); if(!d){ elVal.textContent='—'; elRemark.textContent='No data — click Refresh'; setBuffettPillColor('transparent'); return; } const pct = Number(d.ratio)*100; const rem = buffettRemark(pct); elVal.textContent = `${pct.toFixed(1)}%`; elVal.style.color = rem.color; elRemark.textContent = rem.text; elRemark.style.color = rem.color; setBuffettPillColor(rem.color); }
+  async function renderBuffett(){ const elVal = document.getElementById('buffettValueMini'); const elRemark = document.getElementById('buffettRemarkMini'); if(!elVal||!elRemark) return; let d = loadBuffett(); // if nothing in localStorage, try to fetch from server once (best-effort)
+    if(!d){ try{ const r = await fetch('/api/buffett'); if(r.ok){ const j = await r.json(); if(j && (j.ratio || j.percent)){ d = { marketCap: j.marketCap||null, gdp: j.gdp||null, ratio: Number(j.ratio||(j.percent? j.percent/100:NaN)), t: Date.now(), source: j.source||'/api/buffett' }; saveBuffett(d); } } }catch(e){ /* ignore */ } }
+    if(!d){ elVal.textContent='—'; elRemark.textContent='No data — click Refresh'; setBuffettPillColor('transparent'); return; } const pct = Number(d.ratio)*100; const rem = buffettRemark(pct); elVal.textContent = `${pct.toFixed(1)}%`; elVal.style.color = rem.color; elRemark.textContent = rem.text; elRemark.style.color = rem.color; setBuffettPillColor(rem.color); }
   // set the tiny pill color for at-a-glance status
   function setBuffettPillColor(color){ const p = document.getElementById('buffettPill'); if(!p) return; try{ p.style.background = color || 'transparent'; }catch{} }
 
