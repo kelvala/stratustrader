@@ -40,6 +40,19 @@ vercel --prod
 - `server.js` is for local dev only. Vercel uses `api/` serverless functions.
 - `public/index.html` includes a long-range fallback that aggregates daily Yahoo data into Quarterly/Yearly candles and trims to the selected range.
 
+### Scheduled refreshes (GitHub Actions / Vercel)
+
+The repository contains a GitHub Actions workflow at `.github/workflows/scheduled-refresh.yml` which can trigger two endpoints on your deployed site:
+
+- `/api/refresh-buffett` — refreshes the persisted Buffett Indicator cache
+- `/api/capture-vix-open` — captures and persists the market-open ^VIX baseline
+
+To use the workflow, set the repository secret `SITE_URL` to your deployed site root (for example `https://my-app.vercel.app`). Optionally set `SCHEDULER_TOKEN` (a shared secret) and export the same value into your deployment as `SCHEDULER_TOKEN` to restrict who may call the endpoints.
+
+Notes:
+- Vercel serverless functions have ephemeral execution and do not run persistent crons. The workflow above is the recommended approach for scheduled refreshes when deploying to Vercel.
+- For local development you can still rely on `server.js`'s in-process cron when running the Express server.
+
 ---
 
 MIT License

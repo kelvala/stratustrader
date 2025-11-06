@@ -55,6 +55,12 @@
   .toolsbar{display:flex;align-items:center;gap:8px;margin-left:auto;flex:1 1 100%;justify-content:flex-start;flex-wrap:wrap}
   .tool-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-weight:700;cursor:pointer}
   .tool-btn:hover{background:var(--hover)}
+  /* Buffett Indicator card (prominent) */
+  .buffett-card{margin-left:12px;padding:10px 14px;border-radius:12px;background:linear-gradient(180deg, rgba(59,130,246,0.06), rgba(34,197,94,0.02));border:1px solid color-mix(in srgb,var(--border), #ffffff 8%);display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:200px}
+  .buffett-title{font-weight:900;font-size:12px;opacity:.9}
+  .buffett-value{font-weight:900;font-size:20px;letter-spacing:.6px}
+  .buffett-sub{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px}
+  .buffett-card .tool-btn{padding:6px 8px;border-radius:8px;font-weight:800}
   .theme-toggle{margin-left:auto;cursor:pointer;padding:8px 14px;border-radius:8px;background:var(--panel);color:var(--text);border:1px solid var(--border);font-weight:600}
   .theme-toggle:hover{background:var(--hover)}
   .theme-toggle.active{background:var(--accent);color:#fff}
@@ -250,6 +256,10 @@
   @media (max-width:820px){ .mkt-gauges{grid-template-columns:repeat(2,minmax(180px,1fr));} }
   @media (max-width:520px){ .mkt-gauges{grid-template-columns:1fr;gap:8px} }
   .g-card{background:color-mix(in srgb, var(--panel), var(--bg) 52%);border:1px solid color-mix(in srgb, var(--border), #ffffff 18%);border-radius:10px;padding:6px 8px}
+  /* make toolbar mini cards feel interactive */
+  .toolsbar .g-card{cursor:pointer}
+  /* Buffett mini-card pill for quick color status */
+  .buffett-pill{height:6px;border-radius:4px;width:100%;margin-top:8px;background:transparent;border:1px solid rgba(255,255,255,0.02)}
   .g-head{display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin-bottom:4px}
   .g-title{font-weight:600;opacity:.88;font-size:12px;white-space:normal}
   .g-metrics{font-weight:600;font-size:11px;color:var(--muted);opacity:.9;white-space:nowrap}
@@ -278,7 +288,26 @@
         <button class="tool-btn" id="wideBtn" aria-label="Toggle Width">↔︎ <span class="tool-txt">Wide</span></button>
         <button class="tool-btn" id="maxBtn" aria-label="Maximize">⤢ <span class="tool-txt">Max</span></button>
         <button class="tool-btn" id="refreshBtn" aria-label="Refresh">⟳ <span class="tool-txt">Refresh</span></button>
+        <!-- compact VIX + Buffett mini-cards placed beside the refresh button -->
+        <div style="display:flex;gap:8px;align-items:center;margin-left:8px">
+          <div class="g-card" id="vixMini" style="min-width:96px;padding:6px">
+            <div class="g-head"><div class="g-title">VIX</div><div class="g-metrics" id="vixValueMini">—</div></div>
+            <div class="g-metrics" id="vixRemarkMini" style="font-size:11px;color:var(--muted)">—</div>
+            <svg id="vixSpark" width="88" height="20" style="margin-top:6px;display:block"></svg>
+            <div id="vixDeltaBar" style="height:5px;border-radius:5px;background:transparent;margin-top:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.03)"><div id="vixDeltaFill" style="height:100%;width:0%;background:linear-gradient(90deg,var(--c-down),var(--c-up));transition:width .3s"></div></div>
+            <div class="g-metrics" id="vixActionMini" style="font-size:11px;font-weight:800;margin-top:6px;color:var(--muted)">—</div>
+          </div>
+          <div class="g-card" id="buffettMini" style="min-width:132px;padding:6px">
+            <div class="g-head"><div class="g-title">Buffett</div><div class="g-metrics" id="buffettValueMini">—</div></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <div style="flex:1"><div class="g-metrics" id="buffettRemarkMini" style="font-size:11px;color:var(--muted)">—</div>
+              <div class="buffett-pill" id="buffettPill" aria-hidden="true"></div></div>
+              <div style="flex:0"><button id="buffettEditBtn" class="tool-btn" title="Edit Buffett value">✎</button></div>
+            </div>
+          </div>
+        </div>
       </div>
+      
     </div>
     
     <!-- Inline headline ticker (mock) -->
@@ -635,8 +664,16 @@
     function applyMaxToggle(){ const cc=els.chartCard; if(!cc) return; const now = cc.classList.toggle('max'); const txt=els.maxBtn?.querySelector('.tool-txt'); if(txt) txt.textContent = now? 'Restore':'Max'; els.maxBtn?.setAttribute('aria-pressed', now?'true':'false'); document.body.style.overflow = now? 'hidden' : ''; if(now){ setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },120); } else { setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },60); } }
     els.maxBtn?.addEventListener('click', applyMaxToggle);
 
-    async function manualRefresh(){ els.refreshBtn?.setAttribute('data-busy','1'); try{ await loadAndRender(); showToast('Refreshed'); } catch{ showToast('Refresh failed'); } finally { els.refreshBtn?.removeAttribute('data-busy'); } }
-    els.refreshBtn?.addEventListener('click', manualRefresh);
+  async function manualRefresh(){ els.refreshBtn?.setAttribute('data-busy','1'); try{ await loadAndRender(); // also refresh Buffett and VIX
+    try{ await fetchBuffettAuto(); renderBuffett(); }catch{};
+    try{ await renderVix(); }catch{};
+    showToast('Refreshed'); } catch{ showToast('Refresh failed'); } finally { els.refreshBtn?.removeAttribute('data-busy'); } }
+  els.refreshBtn?.addEventListener('click', manualRefresh);
+
+  // Small card clicks: quick interactions
+  const vixMiniEl = q('#vixMini'); if(vixMiniEl) vixMiniEl.addEventListener('click', ()=>{ renderVix(); showToast('VIX refreshed'); });
+  // replace whole-card click with explicit Edit button to avoid accidental prompts
+  const buffEditBtn = q('#buffettEditBtn'); if(buffEditBtn) buffEditBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openBuffettModal(); });
 
     // Keyboard shortcuts (optional): W=wide, M=max, R=refresh when focused on body & not typing
     document.addEventListener('keydown', e=>{ if(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; if(e.metaKey||e.altKey||e.ctrlKey) return; if(e.key==='w'||e.key==='W'){ applyWideToggle(); } else if(e.key==='m'||e.key==='M'){ applyMaxToggle(); } else if(e.key==='r'||e.key==='R'){ manualRefresh(); } });
@@ -1640,6 +1677,148 @@
     let mktTimer=null; function scheduleMkt(){ clearInterval(mktTimer); mktTimer=setInterval(renderAllMkt, 60000); }
     window.addEventListener('resize', ()=>{ for(const c of MKT){ const el=document.getElementById(c.elId); if(el) try{ Plotly.Plots.resize(el); }catch{} } });
     
+    // Buffett Indicator helpers
+    function fmtNum(n){ if(!Number.isFinite(n)) return '—'; if(Math.abs(n)>=1e12) return (n/1e12).toFixed(2)+'T'; if(Math.abs(n)>=1e9) return (n/1e9).toFixed(2)+'B'; if(Math.abs(n)>=1e6) return (n/1e6).toFixed(2)+'M'; return n.toString(); }
+    function fmtRatio(r){ if(!Number.isFinite(r)) return '—'; const pct = (r*100).toFixed(1)+'%'; const times = r.toFixed(2)+'x'; return `${pct} · ${times}`; }
+    function loadBuffett(){ try{ const s = localStorage.getItem('buffettIndicator'); return s? JSON.parse(s) : null; }catch{return null;} }
+    function saveBuffett(obj){ try{ localStorage.setItem('buffettIndicator', JSON.stringify(obj)); }catch{} }
+
+    async function fetchBuffettAuto(){
+      try{
+        const r = await fetch('/api/buffett');
+        if(!r.ok) throw new Error('bad');
+        const j = await r.json();
+        if(j && (j.ratio || j.percent)){
+          const obj = { marketCap: j.marketCap||null, gdp: j.gdp||null, ratio: Number(j.ratio|| (j.percent? j.percent/100 : NaN)), t: Date.now(), source: j.source||'/api/buffett' };
+          saveBuffett(obj);
+          return obj;
+        }
+      }catch(e){ console.warn('[buffett] auto fetch failed', e?.message||e); }
+      return null;
+    }
+    function buffettRemark(pct){
+      // pct = percent, e.g. 236.4
+      if(!Number.isFinite(pct)) return {text:'—', color:'var(--muted)'};
+      if(pct>=200) return {text:`${pct.toFixed(1)}% · Overvalued`, color:getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626'};
+      if(pct>=100) return {text:`${pct.toFixed(1)}% · Stretched`, color:getComputedStyle(document.documentElement).getPropertyValue('--c-div').trim()||'#eab308'};
+      if(pct>=70) return {text:`${pct.toFixed(1)}% · Bargain`, color:getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a'};
+      return {text:`${pct.toFixed(1)}% · Cheap`, color:getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a'};
+    }
+
+  function renderBuffett(){ const elVal = document.getElementById('buffettValueMini'); const elRemark = document.getElementById('buffettRemarkMini'); if(!elVal||!elRemark) return; const d = loadBuffett(); if(!d){ elVal.textContent='—'; elRemark.textContent='No data — click Refresh'; setBuffettPillColor('transparent'); return; } const pct = Number(d.ratio)*100; const rem = buffettRemark(pct); elVal.textContent = `${pct.toFixed(1)}%`; elVal.style.color = rem.color; elRemark.textContent = rem.text; elRemark.style.color = rem.color; setBuffettPillColor(rem.color); }
+  // set the tiny pill color for at-a-glance status
+  function setBuffettPillColor(color){ const p = document.getElementById('buffettPill'); if(!p) return; try{ p.style.background = color || 'transparent'; }catch{} }
+
+  // VIX sparkline helpers — store recent samples in localStorage and render a tiny SVG
+  function getVixSamples(){ try{ return JSON.parse(localStorage.getItem('vixSamples_v1')||'[]'); }catch{return [];} }
+  function saveVixSamples(arr){ try{ localStorage.setItem('vixSamples_v1', JSON.stringify(arr)); }catch{} }
+  function renderVixSparkline(arr){ const svg = document.getElementById('vixSpark'); if(!svg) return; try{ arr = arr || getVixSamples(); if(!arr || !arr.length){ svg.innerHTML=''; return; } const w = svg.getAttribute('width')||120; const h = svg.getAttribute('height')||28; const vals = arr.map(x=>x.v); const min = Math.min(...vals); const max = Math.max(...vals); const range = (max - min) || 1; const pad = 2; const step = (w - pad*2) / Math.max(1, arr.length-1); const points = arr.map((pt,i)=>{ const x = pad + i*step; const y = pad + (1 - ((pt.v - min)/range))*(h - pad*2); return `${x},${y}`; }).join(' '); const stroke = vals[vals.length-1] >= vals[0] ? getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim() : getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim(); svg.innerHTML = `<polyline fill="none" stroke="${stroke}" stroke-width="2" points="${points}" stroke-linejoin="round" stroke-linecap="round"/>`; }catch(e){ console.warn('[vixSpark] render failed', e); } }
+
+    // Buffett modal: explicit edit UI (avoids native prompt)
+    function openBuffettModal(){
+      let m = document.getElementById('buffettModal');
+      if(!m){
+        // create modal markup
+        m = document.createElement('div'); m.id='buffettModal'; m.className='sheet'; m.setAttribute('hidden','');
+        m.innerHTML = `<div class="sheet-inner" role="dialog" aria-modal="true" aria-label="Edit Buffett Indicator">
+          <div class="sheet-head"><div class="sheet-title">Edit Buffett Indicator</div><button class="sheet-close" data-close="buffettModal">✕</button></div>
+          <div class="sheet-body">
+            <p style="margin:0 0 8px;color:var(--muted)">Enter Buffett Indicator percent (example: <em>236.4</em> for 236.4%). This saves locally in your browser.</p>
+            <input id="buffettModalInput" type="number" step="0.1" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text);" />
+            <div style="display:flex;gap:8px;margin-top:10px"><button id="buffettSaveBtn" class="btn">Save</button><button id="buffettClearBtn" class="tool-btn">Clear</button><button id="buffettCloseBtn" class="tool-btn">Close</button></div>
+          </div></div>`;
+        document.body.appendChild(m);
+        // wire close
+        m.querySelectorAll('[data-close]').forEach(b=> b.addEventListener('click', ()=> closeBuffettModal()));
+        m.querySelector('#buffettCloseBtn').addEventListener('click', ()=> closeBuffettModal());
+        m.querySelector('#buffettSaveBtn').addEventListener('click', ()=> { buffettModalSave(); });
+        m.querySelector('#buffettClearBtn').addEventListener('click', ()=> { buffettModalClear(); });
+      }
+      // populate value
+      const cur = loadBuffett(); const input = m.querySelector('#buffettModalInput'); if(input) input.value = cur && Number.isFinite(cur.ratio) ? (cur.ratio*100).toFixed(1) : '';
+      m.hidden = false; m.setAttribute('data-open','true'); document.body.style.overflow='hidden';
+      setTimeout(()=>{ const inp = m.querySelector('#buffettModalInput'); if(inp) inp.focus(); },50);
+    }
+    function closeBuffettModal(){ const m=document.getElementById('buffettModal'); if(!m) return; m.hidden=true; m.removeAttribute('data-open'); if(![...document.querySelectorAll('.sheet')].some(s=>!s.hidden)) document.body.style.overflow=''; }
+    function buffettModalSave(){ const m=document.getElementById('buffettModal'); if(!m) return; const v = parseFloat(m.querySelector('#buffettModalInput').value); if(!Number.isFinite(v)){ showToast('Invalid value'); return; } const obj = { marketCap:null, gdp:null, ratio: v/100, t: Date.now(), source:'manual' }; saveBuffett(obj); renderBuffett(); closeBuffettModal(); showToast('Buffett saved locally'); }
+    function buffettModalClear(){ localStorage.removeItem('buffettIndicator'); renderBuffett(); closeBuffettModal(); showToast('Buffett cleared'); }
+
+    // Try auto-fetch once at load; fall back to any saved value or manual
+    (async ()=>{ try{ const a = await fetchBuffettAuto(); if(a) renderBuffett(); else renderBuffett(); }catch(e){ renderBuffett(); } })();
+
+    // VIX helpers: fetch and display + simple buy/sell remark
+    function parseQuoteForPrice(j){ try{ if(j?.quoteResponse?.result && j.quoteResponse.result[0]){ return j.quoteResponse.result[0].regularMarketPrice || j.quoteResponse.result[0].regularMarketPriceRaw || j.quoteResponse.result[0].regularMarketPrice?.raw || j.quoteResponse.result[0].regularMarketPrice; } if(j?.quoteSummary?.result && j.quoteSummary.result[0] && j.quoteSummary.result[0].price){ return j.quoteSummary.result[0].price.regularMarketPrice?.raw || j.quoteSummary.result[0].price.regularMarketPrice; } if(j?.chart?.result && j.chart.result[0] && j.chart.result[0].meta){ return j.chart.result[0].meta.regularMarketPrice || j.chart.result[0].meta.regularMarketPriceRaw; } return null; }catch(e){ return null; } }
+    async function fetchVIX(){ try{ const r = await fetch('/api/quote?ticker=%5EVIX'); if(!r.ok) throw new Error('vix fetch bad'); const j = await r.json(); const price = parseQuoteForPrice(j); if(!Number.isFinite(price)) return null; return Number(price); }catch(e){ console.warn('[vix] fetch failed', e?.message||e); return null; } }
+    function vixRemark(val){ if(!Number.isFinite(val)) return {text:'—', level:'unknown'}; if(val>=30) return {text:'Dangerously High — Extreme fear', level:'danger'}; if(val>=22) return {text:'Elevated — Caution', level:'warn'}; if(val>=14) return {text:'Normal', level:'ok'}; return {text:'Low — Complacency', level:'low'}; }
+
+    // VIX state for intraday delta, baseline, and alerts
+    const __vixState = { baseline: null, last: null, lastLevel: null };
+
+    function decideVixAction(v, pctChange){
+      // base level by absolute VIX
+      let level = 'low';
+      if(v>=30) level = 'danger'; else if(v>=22) level = 'warn'; else if(v>=14) level = 'ok';
+      // start with base action
+      let action = 'Hold';
+      if(level==='danger') action = 'Stand Down — Hedge / reduce size heavily';
+      else if(level==='warn') action = 'Reduce — Consider hedges / tighten stops';
+      else if(level==='ok') action = 'Hold — Normal sizing';
+      else action = 'Trade as usual';
+
+      // escalate if intraday jump is significant (percent change vs baseline)
+      if(Number.isFinite(pctChange)){
+        const pct = Math.abs(pctChange);
+        if(pct >= 20){ action = 'Stand Down — Vol spike'; }
+        else if(pct >= 10 && action !== 'Stand Down — Vol spike'){ action = 'Reduce — Vol rising'; }
+      }
+      return { action, level };
+    }
+
+    async function renderVix(){
+      const elV = document.getElementById('vixValueMini');
+      const elR = document.getElementById('vixRemarkMini');
+      const elAct = document.getElementById('vixActionMini');
+      const elFill = document.getElementById('vixDeltaFill');
+      if(!elV||!elR) return;
+      const v = await fetchVIX();
+      if(!Number.isFinite(v)){ elV.textContent='—'; elR.textContent='—'; if(elAct) elAct.textContent='—'; if(elFill) elFill.style.width='0%'; return; }
+
+      // initialize baseline on first successful fetch
+      if(!Number.isFinite(__vixState.baseline)) __vixState.baseline = v;
+      const baseline = __vixState.baseline;
+      const last = __vixState.last;
+      __vixState.last = v;
+
+      // persist sample locally for sparkline (keep last 48)
+      try{
+        const keyArr = getVixSamples() || [];
+        keyArr.push({ t: Date.now(), v });
+        if(keyArr.length>48) keyArr.splice(0, keyArr.length-48);
+        saveVixSamples(keyArr);
+        renderVixSparkline(keyArr);
+      }catch(e){ console.warn('[vix] sample save failed', e); }
+
+      const delta = (Number.isFinite(baseline) && baseline!==0) ? (v - baseline) : NaN;
+      const pctChange = (Number.isFinite(baseline) && baseline!==0) ? (delta / baseline * 100) : NaN;
+
+      elV.textContent = v.toFixed(2);
+      const rem = vixRemark(v);
+      elR.textContent = `${rem.text} · ${Number.isFinite(pctChange)? (pctChange>=0?'+':'')+pctChange.toFixed(1)+'%':''}`;
+      elR.style.color = rem.level==='danger'? getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim() : rem.level==='warn'? getComputedStyle(document.documentElement).getPropertyValue('--c-div').trim() : rem.level==='low'? getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim() : getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
+
+      // set delta bar width (clamp to +/-50% mapped to 0-100%)
+      if(elFill){ const w = Number.isFinite(pctChange)? Math.min(100, Math.abs(pctChange) * 2) : 0; elFill.style.width = w+'%'; elFill.style.background = (pctChange>=0)? 'linear-gradient(90deg,var(--c-down),#ffb4b4)' : 'linear-gradient(90deg,var(--c-up),#b7f5d0)'; }
+
+      // decide action based on v and pctChange
+      const { action, level } = decideVixAction(v, pctChange);
+      if(elAct) { elAct.textContent = action; elAct.style.color = level==='danger'? getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim() : level==='warn'? getComputedStyle(document.documentElement).getPropertyValue('--c-div').trim() : level==='low'? getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim() : getComputedStyle(document.documentElement).getPropertyValue('--muted').trim(); }
+
+      // Alert on level crossing (only when level changes)
+      if(__vixState.lastLevel !== level){ const labelMap = { danger:'≥30', warn:'≥22', ok:'14–22', low:'<14' }; showToast(`VIX moved to ${labelMap[level]} — ${action}`, 4000); __vixState.lastLevel = level; }
+    }
+  // Kick off VIX polling (every 60s)
+  renderVix(); setInterval(renderVix, 60000);
+
     // Boot
     (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; renderCustomSMAChips(); await loadAndRender(); scheduleQuoteAutoRefresh(); await renderAllMkt(); scheduleMkt(); })();
   })();
