@@ -40,7 +40,9 @@ export default async function handler(req) {
       ? adj.at(-1)
       : (Array.isArray(q?.close) ? q.close.at(-1) : null);
     if (Number.isFinite(+last)) {
-      return new Response(JSON.stringify({ price: +last, source: 'chart' }), {
+      // Return a quoteResponse-shaped object so client parsing is consistent
+      const out = { quoteResponse: { result: [ { symbol: ticker, regularMarketPrice: +last, regularMarketTime: res0?.timestamp?.at(-1) || null, regularMarketPreviousClose: (res0?.meta?.previousClose ?? null), currency: res0?.meta?.currency || 'USD', exchangeName: res0?.meta?.exchangeName || res0?.meta?.exchange || '' } ] } };
+      return new Response(JSON.stringify(out), {
         status: 200, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }
       });
     }
