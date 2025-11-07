@@ -1653,18 +1653,31 @@
         scan(d); scan(n); scan(s);
         const tot = adv+dec; const advPct = clampPct(pct(adv, tot)); const decPct = clampPct(100 - advPct);
         const tn = nh+nl; const nhPct = clampPct(pct(nh, tn)); const nlPct = clampPct(100 - nhPct);
-        const set = (idL,idR,idM,left,right,html)=>{ const L=q(idL), R=q(idR), M=q(idM); if(L) L.style.width = left+'%'; if(R) R.style.width = right+'%'; if(M) M.innerHTML = html; };
-        set('#g-advance-l','#g-advance-r','#g-advance-m', advPct, decPct, `<span class="g-up">Advancing ${advPct.toFixed(1)}%</span> · <span class="g-dn">Declining ${decPct.toFixed(1)}%</span>`);
-        set('#g-newhigh-l','#g-newhigh-r','#g-newhigh-m', nhPct, nlPct, `<span class="g-up">New High ${nhPct.toFixed(1)}%</span> · <span class="g-dn">New Low ${nlPct.toFixed(1)}%</span>`);
+        const set = (idL,idR,idM,left,right,html)=>{ const L=q(idL), R=q(idR), M=q(idM); if(L) L.style.width = (Number.isFinite(left)? left:0) + '%'; if(R) R.style.width = (Number.isFinite(right)? right:0) + '%'; if(M) M.innerHTML = html; };
+        // Advancing/Declining: if tot is zero show placeholder
+        if(Number.isFinite(advPct) && Number.isFinite(decPct)){
+          set('#g-advance-l','#g-advance-r','#g-advance-m', advPct, decPct, `<span class="g-up">Advancing ${advPct.toFixed(1)}%</span> · <span class="g-dn">Declining ${decPct.toFixed(1)}%</span>`);
+        } else {
+          set('#g-advance-l','#g-advance-r','#g-advance-m', 0,0, `—`);
+        }
+        if(Number.isFinite(nhPct) && Number.isFinite(nlPct)){
+          set('#g-newhigh-l','#g-newhigh-r','#g-newhigh-m', nhPct, nlPct, `<span class="g-up">New High ${nhPct.toFixed(1)}%</span> · <span class="g-dn">New Low ${nlPct.toFixed(1)}%</span>`);
+        } else {
+          set('#g-newhigh-l','#g-newhigh-r','#g-newhigh-m', 0,0, `—`);
+        }
         // Approximate above/below SMA50/200 using session SMA by index (intraday roughness acceptable for breadth)
         function sma(arr,p){ const out=[]; let sum=0, cnt=0; for(let i=0;i<arr.length;i++){ const v=arr[i]; if(Number.isFinite(v)){ sum+=v; cnt++; } if(i>=p){ const w=arr[i-p]; if(Number.isFinite(w)){ sum-=w; cnt--; } } out[i]= (i>=p-1 && cnt>0)? (sum/cnt) : null; } return out; }
         function abBelow(rows,p){ const closes=rows.map(r=>r.c); const s=sma(closes,p); let ab=0, bl=0; for(let i=0;i<rows.length;i++){ const c=rows[i]?.c; const m=s[i]; if(Number.isFinite(c)&&Number.isFinite(m)){ if(c>=m) ab++; else bl++; } } return {ab,bl}; }
         const a50 = abBelow(d,50); const b50 = abBelow(n,50); const c50 = abBelow(s,50);
-        const ab50 = (a50.ab + b50.ab + c50.ab); const bl50 = (a50.bl + b50.bl + c50.bl); const t50 = ab50 + bl50; const ab50Pct = clampPct(pct(ab50, t50)); const bl50Pct = clampPct(100 - ab50Pct);
-        set('#g-sma50-l','#g-sma50-r','#g-sma50-m', ab50Pct, bl50Pct, `<span class="g-up">Above ${ab50Pct.toFixed(1)}%</span> · <span class="g-dn">Below ${bl50Pct.toFixed(1)}%</span>`);
+        const ab50 = (a50.ab + b50.ab + c50.ab); const bl50 = (a50.bl + b50.bl + c50.bl); const t50 = ab50 + bl50;
+        const ab50Pct = t50? clampPct(pct(ab50, t50)) : NaN; const bl50Pct = t50? clampPct(pct(bl50, t50)) : NaN;
+        if(t50){ set('#g-sma50-l','#g-sma50-r','#g-sma50-m', ab50Pct, bl50Pct, `<span class="g-up">Above ${ab50Pct.toFixed(1)}%</span> · <span class="g-dn">Below ${bl50Pct.toFixed(1)}%</span>`); }
+        else { set('#g-sma50-l','#g-sma50-r','#g-sma50-m', 0,0, `—`); }
         const a200 = abBelow(d,200); const b200 = abBelow(n,200); const c200 = abBelow(s,200);
-        const ab200 = (a200.ab + b200.ab + c200.ab); const bl200 = (a200.bl + b200.bl + c200.bl); const t200 = ab200 + bl200; const ab200Pct = clampPct(pct(ab200, t200)); const bl200Pct = clampPct(100 - ab200Pct);
-        set('#g-sma200-l','#g-sma200-r','#g-sma200-m', ab200Pct, bl200Pct, `<span class="g-up">Above ${ab200Pct.toFixed(1)}%</span> · <span class="g-dn">Below ${bl200Pct.toFixed(1)}%</span>`);
+        const ab200 = (a200.ab + b200.ab + c200.ab); const bl200 = (a200.bl + b200.bl + c200.bl); const t200 = ab200 + bl200;
+        const ab200Pct = t200? clampPct(pct(ab200, t200)) : NaN; const bl200Pct = t200? clampPct(pct(bl200, t200)) : NaN;
+        if(t200){ set('#g-sma200-l','#g-sma200-r','#g-sma200-m', ab200Pct, bl200Pct, `<span class="g-up">Above ${ab200Pct.toFixed(1)}%</span> · <span class="g-dn">Below ${bl200Pct.toFixed(1)}%</span>`); }
+        else { set('#g-sma200-l','#g-sma200-r','#g-sma200-m', 0,0, `—`); }
         // Intraday sentiment mirrors adv/decl for a simple bull/bear split
         const adv0 = Math.round(advPct), dec0 = 100 - adv0;
         set('#g-sentiment-l','#g-sentiment-r','#g-sentiment-m', advPct, decPct, `${adv0}% <span class="g-up">BULL</span>  ${dec0}% <span class="g-dn">BEAR</span>`);
@@ -1685,11 +1698,17 @@
 
     async function fetchBuffettAuto(){
       try{
-        const r = await fetch('/api/buffett');
-        if(!r.ok) throw new Error('bad');
+        const url = (window.location && window.location.origin) ? (window.location.origin + '/api/buffett') : '/api/buffett';
+        const r = await fetch(url);
+        if(!r.ok){
+          // log status for easier debugging in DevTools
+          const txt = await r.text().catch(()=>null);
+          console.warn('[buffett] auto fetch failed status', r.status, txt);
+          throw new Error('bad');
+        }
         const j = await r.json();
         if(j && (j.ratio || j.percent)){
-          const obj = { marketCap: j.marketCap||null, gdp: j.gdp||null, ratio: Number(j.ratio|| (j.percent? j.percent/100 : NaN)), t: Date.now(), source: j.source||'/api/buffett' };
+          const obj = { marketCap: j.marketCap||null, gdp: j.gdp||null, ratio: Number(j.ratio|| (j.percent? j.percent/100 : NaN)), t: Date.now(), source: j.source||url };
           saveBuffett(obj);
           return obj;
         }
@@ -1750,7 +1769,14 @@
 
     // VIX helpers: fetch and display + simple buy/sell remark
     function parseQuoteForPrice(j){ try{ if(j?.quoteResponse?.result && j.quoteResponse.result[0]){ return j.quoteResponse.result[0].regularMarketPrice || j.quoteResponse.result[0].regularMarketPriceRaw || j.quoteResponse.result[0].regularMarketPrice?.raw || j.quoteResponse.result[0].regularMarketPrice; } if(j?.quoteSummary?.result && j.quoteSummary.result[0] && j.quoteSummary.result[0].price){ return j.quoteSummary.result[0].price.regularMarketPrice?.raw || j.quoteSummary.result[0].price.regularMarketPrice; } if(j?.chart?.result && j.chart.result[0] && j.chart.result[0].meta){ return j.chart.result[0].meta.regularMarketPrice || j.chart.result[0].meta.regularMarketPriceRaw; } return null; }catch(e){ return null; } }
-    async function fetchVIX(){ try{ const r = await fetch('/api/quote?ticker=%5EVIX'); if(!r.ok) throw new Error('vix fetch bad'); const j = await r.json(); const price = parseQuoteForPrice(j); if(!Number.isFinite(price)) return null; return Number(price); }catch(e){ console.warn('[vix] fetch failed', e?.message||e); return null; } }
+    async function fetchVIX(){
+      try{
+        const base = (window.location && window.location.origin) ? window.location.origin : '';
+        const r = await fetch(base + '/api/quote?ticker=%5EVIX');
+        if(!r.ok){ const txt = await r.text().catch(()=>null); console.warn('[vix] fetch status', r.status, txt); throw new Error('vix fetch bad'); }
+        const j = await r.json(); const price = parseQuoteForPrice(j); if(!Number.isFinite(price)) return null; return Number(price);
+      }catch(e){ console.warn('[vix] fetch failed', e?.message||e); return null; }
+    }
     function vixRemark(val){ if(!Number.isFinite(val)) return {text:'—', level:'unknown'}; if(val>=30) return {text:'Dangerously High — Extreme fear', level:'danger'}; if(val>=22) return {text:'Elevated — Caution', level:'warn'}; if(val>=14) return {text:'Normal', level:'ok'}; return {text:'Low — Complacency', level:'low'}; }
 
     // VIX state for intraday delta, baseline, and alerts
