@@ -1,0 +1,40 @@
+name: Breadth scan
+
+on:
+  schedule:
+    # every 5 minutes (be mindful of Actions minutes)
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  compute-breadth:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run breadth script
+        run: |
+          chmod +x scripts/compute-breadth.mjs
+          node --experimental-fetch scripts/compute-breadth.mjs
+
+      - name: Commit breadth results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/breadth.json || true
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(breadth): update breadth.json [skip ci]" || true
+            git push origin HEAD:main
+          else
+            echo "no changes"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

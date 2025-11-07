@@ -1686,6 +1686,8 @@
     async function renderAllMkt(){
       const rowsList = await Promise.all(MKT.map(renderMktCard));
       if(Array.isArray(rowsList) && rowsList.length===3){ updateGauges({ d: rowsList[0]||[], n: rowsList[1]||[], s: rowsList[2]||[] }); }
+      // Try breadth JSON (produced by scheduled job) to populate more accurate Above/Below figures
+      try{ await fetchBreadthAndRender(); }catch(e){ /* ignore */ }
     }
     let mktTimer=null; function scheduleMkt(){ clearInterval(mktTimer); mktTimer=setInterval(renderAllMkt, 60000); }
     window.addEventListener('resize', ()=>{ for(const c of MKT){ const el=document.getElementById(c.elId); if(el) try{ Plotly.Plots.resize(el); }catch{} } });
@@ -1846,6 +1848,27 @@
     }
   // Kick off VIX polling (every 60s)
   renderVix(); setInterval(renderVix, 60000);
+
+    // Attempt to load breadth JSON (public/breadth.json) produced by scheduled job
+    async function fetchBreadth(){
+      try{
+        const r = await fetch('/breadth.json', { cache: 'no-store' });
+        if(!r.ok) return null;
+        const j = await r.json(); return j;
+      }catch(e){ return null; }
+    }
+
+    async function fetchBreadthAndRender(){
+      const j = await fetchBreadth(); if(!j) return;
+      const s50 = j.sma50 || {}; const s200 = j.sma200 || {};
+      function set(idL,idR,idM,abovePct,belowPct,html){ const L=q(idL), R=q(idR), M=q(idM); if(L) L.style.width = (Number.isFinite(abovePct)? Math.max(0,Math.min(100,abovePct)):0) + '%'; if(R) R.style.width = (Number.isFinite(belowPct)? Math.max(0,Math.min(100,belowPct)):0) + '%'; if(M) M.innerHTML = html; }
+      if(Number.isFinite(s50.abovePct) && Number.isFinite(s50.belowPct)){
+        set('#g-sma50-l','#g-sma50-r','#g-sma50-m', s50.abovePct, s50.belowPct, `<span class="g-up">Above ${s50.abovePct.toFixed(1)}%</span> · <span class="g-dn">Below ${s50.belowPct.toFixed(1)}%</span>`);
+      }
+      if(Number.isFinite(s200.abovePct) && Number.isFinite(s200.belowPct)){
+        set('#g-sma200-l','#g-sma200-r','#g-sma200-m', s200.abovePct, s200.belowPct, `<span class="g-up">Above ${s200.abovePct.toFixed(1)}%</span> · <span class="g-dn">Below ${s200.belowPct.toFixed(1)}%</span>`);
+      }
+    }
 
     // Boot
     (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; renderCustomSMAChips(); await loadAndRender(); scheduleQuoteAutoRefresh(); await renderAllMkt(); scheduleMkt(); })();
