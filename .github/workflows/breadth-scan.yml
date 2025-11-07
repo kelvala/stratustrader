@@ -1,5 +1,9 @@
 name: Breadth scan
 
+# Ensure the job has permission to push a commit to the repository
+permissions:
+  contents: write
+
 on:
   schedule:
     # Run every 15 minutes during US market hours (ET 9:30–16:00 -> UTC 14:30–21:00) Mon-Fri
@@ -16,6 +20,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: true
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -34,7 +39,12 @@ jobs:
           git add public/breadth.json || true
           if ! git diff --cached --quiet; then
             git commit -m "chore(breadth): update breadth.json [skip ci]" || true
-            git push origin HEAD:main
+            # Attempt to push; if branch protections prevent push, log and continue
+            if git push origin HEAD:main; then
+              echo "pushed breadth.json"
+            else
+              echo "push failed - branch may be protected or token lacks permissions; skipping push";
+            fi
           else
             echo "no changes"
           fi
