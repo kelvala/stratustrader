@@ -57,6 +57,18 @@ jobs:
             API_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls"
             curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github.v3+json" \
               ${API_URL} -d "{\"title\": \"${PR_TITLE}\", \"head\": \"${BRANCH}\", \"base\": \"main\", \"body\": \"${PR_BODY}\"}" || echo "PR creation failed or already exists"
+            # Try to parse PR number and auto-merge if possible
+            PR_RESPONSE=$(curl -s -X POST -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github.v3+json" \
+              ${API_URL} -d "{\"title\": \"${PR_TITLE}\", \"head\": \"${BRANCH}\", \"base\": \"main\", \"body\": \"${PR_BODY}\"}" ) || PR_RESPONSE=''
+            PR_NUM=$(echo "$PR_RESPONSE" | python -c "import sys,json; d=sys.stdin.read(); print(json.loads(d).get('number','') if d.strip() else '')" 2>/dev/null || true)
+            if [ -n "$PR_NUM" ]; then
+              echo "Created PR #$PR_NUM — attempting to merge"
+              MERGE_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUM}/merge"
+              curl -s -X PUT -H "Authorization: token ${GITHUB_TOKEN}" -H "Accept: application/vnd.github.v3+json" \
+                ${MERGE_URL} -d '{"commit_title":"chore(breadth): merge breadth update","merge_method":"merge"}' || echo "merge attempt failed or requires review"
+            else
+              echo "No PR number returned; skipping merge"
+            fi
           else
             echo "branch push failed - skipping PR creation"
           fi
