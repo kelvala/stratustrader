@@ -735,7 +735,7 @@
     let CURRENT = { ticker:null, company:"", prevClose:null };
     const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0,
       divs:[],
-      customSMAs: (()=>{ try{ const a=JSON.parse(localStorage.getItem('customSMAs')||'[]'); return Array.isArray(a)? a.filter(n=>Number.isFinite(+n)).slice(0,12) : []; }catch{return [];} })()
+      customSMAs: (()=>{ try{ const a=JSON.parse(sessionStorage.getItem('customSMAs')||'[]'); return Array.isArray(a)? a.filter(n=>Number.isFinite(+n)).slice(0,12) : []; }catch{return [];} })()
     };
     const FUNDAMENTALS = {}; // cache fundamentals per ticker
 
@@ -869,7 +869,7 @@
     const CUSTOM_SMA_PALETTE = ['#f97316','#a78bfa','#06b6d4','#f472b6','#84cc16','#14b8a6','#e879f9','#22d3ee','#fb7185'];
 
     // Custom SMA chips rendering and interactions
-    function persistCustomSMAs(){ localStorage.setItem('customSMAs', JSON.stringify(state.customSMAs||[])); }
+    function persistCustomSMAs(){ try{ sessionStorage.setItem('customSMAs', JSON.stringify(state.customSMAs||[])); }catch{} }
     function renderCustomSMAChips(){
       if(!els.smaChips) return;
       const list = uniqSortedNums(state.customSMAs||[]);
