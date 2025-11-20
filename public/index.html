@@ -1575,13 +1575,15 @@
                 }
               }
               console.warn('daily agg: all attempts failed, using coarse rows');
-            }catch{ /* ignore and fall through */ }
+            }catch(e){ /* ignore and fall through */ }
 
             return rows;
           }
         }
-      }catch{}
-      throw new Error('chart fetch failed');
+      }catch(e){
+        console.error('chart fetch failed', e);
+        throw e;
+      }
     }
 
     async function loadAndRender(){
