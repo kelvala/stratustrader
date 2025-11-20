@@ -515,9 +515,9 @@
         <div class="freq-row" aria-label="Frequency">
           <button data-interval="1m"  type="button">1m</button>
           <button data-interval="5m"  type="button">5m</button>
-          <button data-interval="15m" type="button" class="active">15m</button>
+          <button data-interval="15m" type="button">15m</button>
           <button data-interval="60m" type="button">1h</button>
-          <button data-interval="1d"  type="button">1D</button>
+          <button data-interval="1d"  type="button" class="active">1D</button>
           <button data-interval="1wk" type="button">1W</button>
           <button data-interval="1mo" type="button">1M</button>
         </div>
@@ -780,7 +780,11 @@
     /* ---------- Existing code continues below (chart, autocomplete, etc.) ---------- */
     /* ---------- State ---------- */
     let CURRENT = { ticker:null, company:"", prevClose:null };
-    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(document.querySelector('#rangeBar button[data-range].active')?.dataset.range)||'6mo', interval:(document.querySelector('#rangeBar button[data-interval].active')?.dataset.interval)||'15m', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0,
+    const FIRST_LOAD_KEY = 'chartFirstLoad_6m1d_v1';
+    const hasSeenInitial = (()=>{ try{return localStorage.getItem(FIRST_LOAD_KEY)==='1';}catch{return true;} })();
+    const defaultRange = hasSeenInitial ? (document.querySelector('#rangeBar button[data-range].active')?.dataset.range)||'6mo' : '6mo';
+    const defaultInterval = hasSeenInitial ? (document.querySelector('#rangeBar button[data-interval].active')?.dataset.interval)||'15m' : '1d';
+    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:defaultRange, interval:defaultInterval, rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0,
       divs:[],
       customSMAs: (()=>{ try{ const a=JSON.parse(sessionStorage.getItem('customSMAs')||'[]'); return Array.isArray(a)? a.filter(n=>Number.isFinite(+n)).slice(0,12) : []; }catch{return [];} })()
     };
