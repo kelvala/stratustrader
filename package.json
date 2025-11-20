@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node server.js",
-    "symbols": "node ./scripts/fetch-all-symbols.mjs"
+    "symbols": "node ./scripts/fetch-all-symbols.mjs",
+    "check:index": "node ./scripts/check-index-syntax.mjs"
   },
   "dependencies": {
     "express": "^4.21.2",
