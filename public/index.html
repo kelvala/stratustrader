@@ -1953,7 +1953,32 @@
     }
 
     // Boot
-    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; renderCustomSMAChips(); refreshRangeFreqDisabledState(); await loadAndRender(); scheduleQuoteAutoRefresh(); await renderAllMkt(); scheduleMkt(); })();
+    (async function boot(){
+      try{ await loadSymbols(); }catch{}
+      // Explicit first-load default: if user hasn’t chosen anything yet,
+      // force 6mo / 1d so initial chart is always 6-month daily.
+      if(!localStorage.getItem('hasSeenInitialRange')){
+        state.range = '6mo';
+        state.interval = '1d';
+        // Align the inline range/frequency buttons to the default
+        if(els.rangeBar){
+          els.rangeBar.querySelectorAll('button[data-range]').forEach(btn=>{
+            btn.classList.toggle('active', btn.dataset.range==='6mo');
+          });
+          els.rangeBar.querySelectorAll('button[data-interval]').forEach(btn=>{
+            btn.classList.toggle('active', btn.dataset.interval==='1d');
+          });
+        }
+        try{ localStorage.setItem('hasSeenInitialRange','1'); }catch{}
+      }
+      els.input.value=state.ticker;
+      renderCustomSMAChips();
+      refreshRangeFreqDisabledState();
+      await loadAndRender();
+      scheduleQuoteAutoRefresh();
+      await renderAllMkt();
+      scheduleMkt();
+    })();
   })();
   </script>
 </body>
