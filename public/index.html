@@ -784,6 +784,10 @@
       divs:[],
       customSMAs: (()=>{ try{ const a=JSON.parse(sessionStorage.getItem('customSMAs')||'[]'); return Array.isArray(a)? a.filter(n=>Number.isFinite(+n)).slice(0,12) : []; }catch{return [];} })()
     };
+    // Ensure very first load defaults to 6mo / 1d even if HTML defaults change,
+    // but do NOT overwrite whatever the user later selects.
+    if(!state.range) state.range = '6mo';
+    if(!state.interval) state.interval = '1d';
     const FUNDAMENTALS = {}; // cache fundamentals per ticker
 
     /* ---------- Utils & Formatters ---------- */
