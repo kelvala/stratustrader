@@ -515,9 +515,9 @@
         <div class="freq-row" aria-label="Frequency">
           <button data-interval="1m"  type="button">1m</button>
           <button data-interval="5m"  type="button">5m</button>
-          <button data-interval="15m" type="button" class="active">15m</button>
+          <button data-interval="15m" type="button">15m</button>
           <button data-interval="60m" type="button">1h</button>
-          <button data-interval="1d"  type="button">1D</button>
+          <button data-interval="1d"  type="button" class="active">1D</button>
           <button data-interval="1wk" type="button">1W</button>
           <button data-interval="1mo" type="button">1M</button>
         </div>
@@ -1407,8 +1407,8 @@
     /* ---------- Data fetch ---------- */
     async function fetchRows(ticker, range, interval){
       const T = normalizeTickerForFetch(ticker);
-      try{
-        const r = await fetch(`/api/chart?ticker=${encodeURIComponent(T)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`, { cache:'no-store' });
+      async function fetchOnce(rng, ivl){
+        const r = await fetch(`/api/chart?ticker=${encodeURIComponent(T)}&range=${encodeURIComponent(rng)}&interval=${encodeURIComponent(ivl)}`, { cache:'no-store' });
         if(r.ok){
           const j = await r.json();
           const res = j?.chart?.result?.[0];
@@ -1455,22 +1455,44 @@
               for(const r of rows){ byT.set(r.t, r); }
               rows = Array.from(byT.values()).sort((a,b)=>a.t-b.t);
             }
-            // Fallback: if target interval is coarse (3mo/1y) and Yahoo returned too few bars,
-            // rebuild from daily data aggregated to quarterly/yearly to keep the chart meaningful.
-            const uniqueBars = rows.length;
-            const isCoarse = (interval==='3mo' || interval==='1y');
-            const isLongRange = (()=>{
-              if(range==='max') return true;
-              const m = String(range||'').match(/^(\d+)([a-z]+)$/i);
-              if(!m) return false;
-              const n=+m[1], u=m[2];
-              if(u==='y') return n>=5;
-              if(u==='mo') return n>=60;
-              if(u==='d') return n>=1825; // ~5y
-              return false;
-            })();
-            const needsAggregate = (isCoarse && (uniqueBars < 8 || isLongRange));
-            if(!needsAggregate) return rows;
+            return rows;
+          }
+        }
+        return [];
+      }
+      try{
+        // primary attempt with requested range/interval
+        let rows = await fetchOnce(range, interval);
+        // If Yahoo returns no usable bars, fall back to a safe daily interval
+        if(!rows || rows.length < 3){
+          const fallbackInterval = '1d';
+          if(interval !== fallbackInterval){
+            console.warn('No data for range/interval, retrying with daily', { range, interval });
+            const alt = await fetchOnce(range, fallbackInterval);
+            if(alt && alt.length){
+              rows = alt;
+            }
+          }
+        }
+        // if still empty, bail out and let caller handle
+        if(!rows || !rows.length) return rows;
+
+        // Fallback: if target interval is coarse (3mo/1y) and Yahoo returned too few bars,
+        // rebuild from daily data aggregated to quarterly/yearly to keep the chart meaningful.
+        const uniqueBars = rows.length;
+        const isCoarse = (interval==='3mo' || interval==='1y');
+        const isLongRange = (function(){
+          if(range==='max') return true;
+          const m = String(range||'').match(/^(\d+)([a-z]+)$/i);
+          if(!m) return false;
+          const n=+m[1], u=m[2];
+          if(u==='y') return n>=5;
+          if(u==='mo') return n>=60;
+          if(u==='d') return n>=1825; // ~5y
+          return false;
+        })();
+        const needsAggregate = (isCoarse && (uniqueBars < 8 || isLongRange));
+        if(!needsAggregate) return rows;
 
             // Helper: aggregate daily rows to quarterly/yearly buckets
             function aggregateOHLC(dailyRows, target){
