@@ -1587,8 +1587,16 @@
     }
 
     async function loadAndRender(){
-      try{ state.rows = await fetchRows(state.ticker, state.range, state.interval); await buildSMAAlignedSeries(); await renderChart(); refreshQuoteOnce(); }
-      catch(e){ console.error('Chart error', e); els.lastLine.innerHTML='Last: — · Change: —'; if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)'; }
+      try {
+        state.rows = await fetchRows(state.ticker, state.range, state.interval);
+        await buildSMAAlignedSeries();
+        await renderChart();
+        refreshQuoteOnce();
+      } catch (e) {
+        console.error('Chart error', e);
+        els.lastLine.innerHTML = 'Last: — · Change: —';
+        if(els.rangeLine) els.rangeLine.textContent = 'Range: — (no data)';
+      }
     }
 
     // UI wiring (patched search + AC close)
