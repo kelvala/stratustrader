@@ -120,6 +120,21 @@
   .chip.active[data-k="AUTOFIB"]{background:rgba(139,92,246,.12)}
   .chip.active[data-k="ICHI"]{background:rgba(96,165,250,.12)}
   .chip.active[data-k="SESS"]{background:rgba(147,197,253,.12)}
+  /* Range + inline frequency rows */
+  .range-bar{display:flex;flex-direction:column;gap:4px;margin:0 0 12px}
+  .range-label,.freq-label{font-size:11px;opacity:.7;margin-left:2px}
+  .range-row,.freq-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .range-row button,.freq-row button{background:var(--panel);border:1px solid var(--border);color:var(--text);font-weight:700;padding:6px 10px;border-radius:8px;cursor:pointer;font-size:13px;min-width:42px;transition:opacity .15s,background .15s,border-color .15s,color .15s}
+  .range-row button.active,.freq-row button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .range-row button.disabled,.freq-row button.disabled{opacity:.35;cursor:default;border-style:dashed}
+  .freq-grid button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  /* Clean UI preview mode (enable via ?ui=clean) */
+  .clean-ui #tfCard{display:none!important}
+  .clean-ui #chartCard{display:flex;flex-direction:column}
+  .clean-ui #chart{order:2}
+  .clean-ui .range-bar{order:3;margin-top:10px}
+  .clean-ui #toggles,.clean-ui #smaCtrls,.clean-ui #smaCustomChips{order:1}
 
   /* Bright glow for active chips only (already present; keep it)
      This guarantees inactive chips have NO glow. */
@@ -478,34 +493,33 @@
 
     <!-- Chart card -->
     <div id="chartCard">
-      <div class="tf-card" id="tfCard" data-open="true">
-        <div class="tf-head" id="tfHead"><span class="carat">▾</span> <span style="font-style:italic">time frame</span></div>
-        <div class="tf-body">
-          <div class="control">
-            <label for="timeSel">Time</label>
-            <select id="timeSel">
-              <option value="1d">1 day</option><option value="2d">2 days</option>
-              <option value="5d">5 days</option><option value="10d">10 days</option>
-              <option value="sep" disabled>──────────</option>
-              <option value="1mo">1 month</option><option value="2mo">2 months</option>
-              <option value="3mo">3 months</option><option value="6mo" selected>6 months</option>
-              <option value="ytd">YTD</option><option value="1y">1 year</option>
-              <option value="2y">2 years</option><option value="3y">3 years</option>
-              <option value="4y">4 years</option><option value="5y">5 years</option>
-              <option value="10y">1 decade</option><option value="max">All Data</option>
-            </select>
-          </div>
-          <div class="control">
-            <label for="freqSel">Frequency</label>
-            <select id="freqSel">
-              <option value="1m">1-Minute</option><option value="5m">5-Minute</option>
-              <option value="15m">15-Minute</option><option value="60m">Hourly</option>
-              <option value="sep" disabled>──────────</option>
-              <option value="1d" selected>Daily</option><option value="1wk">Weekly</option>
-              <option value="1mo">Monthly</option><option value="3mo">Quarterly</option>
-              <option value="1y">Yearly</option>
-            </select>
-          </div>
+      <!-- Range buttons + inline frequency buttons -->
+      <div id="rangeBar" class="range-bar">
+        <div class="range-label">Time</div>
+        <div class="range-row">
+          <button data-range="1d"  type="button">1D</button>
+          <button data-range="2d"  type="button">2D</button>
+          <button data-range="5d"  type="button">5D</button>
+          <button data-range="10d" type="button">10D</button>
+          <button data-range="1mo" type="button">1M</button>
+          <button data-range="3mo" type="button">3M</button>
+          <button data-range="6mo" type="button" class="active">6M</button>
+          <button data-range="ytd" type="button">YTD</button>
+          <button data-range="1y"  type="button">1Y</button>
+          <button data-range="2y"  type="button">2Y</button>
+          <button data-range="5y"  type="button">5Y</button>
+          <button data-range="10y" type="button">10Y</button>
+          <button data-range="max" type="button">MAX</button>
+        </div>
+        <div class="freq-label">Frequency</div>
+        <div class="freq-row" aria-label="Frequency">
+          <button data-interval="1m"  type="button">1m</button>
+          <button data-interval="5m"  type="button">5m</button>
+          <button data-interval="15m" type="button" class="active">15m</button>
+          <button data-interval="60m" type="button">1h</button>
+          <button data-interval="1d"  type="button">1D</button>
+          <button data-interval="1wk" type="button">1W</button>
+          <button data-interval="1mo" type="button">1M</button>
         </div>
       </div>
 
@@ -520,7 +534,6 @@
   <button class="chip" data-k="DIV" type="button" aria-pressed="false" title="Show dividend events">Dividends</button>
         <button class="chip" id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
         <button class="chip" data-k="ICHI" type="button" aria-pressed="false">Ichimoku</button>
-        <button class="chip" data-k="SESS" type="button" aria-pressed="true" title="Toggle pre/post-market bands">Pre/Post</button>
       </div>
 
       <!-- Custom SMA controls + dynamic chips -->
@@ -628,7 +641,7 @@
       input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'),
       headline:q('#headline'), subInfo:q('#subInfo'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'), companyLine:q('#companyLine'),
       chartCard:q('#chartCard'), chart:q('#chart'),
-      timeSel:q('#timeSel'), freqSel:q('#freqSel'), toggles:q('#toggles'),
+      rangeBar:q('#rangeBar'), toggles:q('#toggles'),
       themeToggle:q('#themeToggle'), autoFib:q('#autoFib'),
       refreshBtn:q('#refreshBtn'), maxBtn:q('#maxBtn'), wideBtn:q('#wideBtn'),
       tfCard:q('#tfCard'), tfHead:q('#tfHead'),
@@ -646,6 +659,14 @@
     let toast = q('#toast');
     if(!toast){ toast = document.createElement('div'); toast.id='toast'; document.body.appendChild(toast); }
     function showToast(msg, ms=2600){ toast.textContent=msg; toast.classList.add('show'); clearTimeout(showToast._t); showToast._t=setTimeout(()=>toast.classList.remove('show'), ms); }
+
+    /* ---------- Clean UI preview toggle ---------- */
+    try{
+      const params = new URLSearchParams(location.search);
+      if((params.get('ui')||'').toLowerCase()==='clean'){
+        document.body.classList.add('clean-ui');
+      }
+    }catch{}
 
     /* ---------- Sheets (GPTs / Screeners) ---------- */
     function openSheet(id){ const el=q('#'+id); if(!el) return; el.hidden=false; el.setAttribute('data-open','true'); document.body.style.overflow='hidden'; if(id==='sheetGPTs' && els.gptInput){ setTimeout(()=>els.gptInput.focus(),50); } }
@@ -691,6 +712,32 @@
     // Escape closes top-most sheet
     document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ const open=[...document.querySelectorAll('.sheet')].filter(s=>!s.hidden).pop(); if(open){ closeSheet(open.id); highlightTab('home'); } } });
 
+    /* ---------- Range / Frequency validity helpers ---------- */
+    const INTRADAY_INTERVALS = ['1m','5m','15m','60m'];
+    const SHORT_RANGES = ['1d','2d','5d','10d'];
+    function isValidCombo(range, interval){
+      range = String(range||'').toLowerCase();
+      interval = String(interval||'').toLowerCase();
+      const intraday = INTRADAY_INTERVALS.includes(interval);
+      if(!intraday) return true; // daily/weekly/monthly allowed for all ranges
+      return SHORT_RANGES.includes(range); // intraday only supported on short ranges
+    }
+    function refreshRangeFreqDisabledState(){
+      if(!els.rangeBar) return;
+      const currentRange = state.range;
+      const currentInterval = state.interval;
+      els.rangeBar.querySelectorAll('button[data-range]').forEach(btn=>{
+        const r = btn.dataset.range;
+        const allowed = isValidCombo(r, currentInterval);
+        btn.classList.toggle('disabled', !allowed);
+      });
+      els.rangeBar.querySelectorAll('button[data-interval]').forEach(btn=>{
+        const iv = btn.dataset.interval;
+        const allowed = isValidCombo(currentRange, iv);
+        btn.classList.toggle('disabled', !allowed);
+      });
+    }
+
     /* ---------- Screeners Populate (Updated with provided SCREENERS list) ---------- */
     const SCREENERS = [
       { id:"oversold_reversal", label:"Oversold Reversal", level:"Beginner", url:"https://finviz.com/screener.ashx?v=111&f=sh_price_o5,sh_relvol_o2,ta_change_u,ta_rsi_os30&ft=4&o=price", filters:["sh_price_o5","sh_relvol_o2","ta_change_u","ta_rsi_os30"] },
@@ -733,7 +780,7 @@
     /* ---------- Existing code continues below (chart, autocomplete, etc.) ---------- */
     /* ---------- State ---------- */
     let CURRENT = { ticker:null, company:"", prevClose:null };
-    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(q('#timeSel')?.value)||'6mo', interval:(q('#freqSel')?.value)||'1d', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0,
+    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:(document.querySelector('#rangeBar button[data-range].active')?.dataset.range)||'6mo', interval:(document.querySelector('#rangeBar button[data-interval].active')?.dataset.interval)||'15m', rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0,
       divs:[],
       customSMAs: (()=>{ try{ const a=JSON.parse(sessionStorage.getItem('customSMAs')||'[]'); return Array.isArray(a)? a.filter(n=>Number.isFinite(+n)).slice(0,12) : []; }catch{return [];} })()
     };
@@ -1127,8 +1174,8 @@
       const map50 = mapByTs(state.rows, state.smaSeries?.[50]||[]);
       const map200= mapByTs(state.rows, state.smaSeries?.[200]||[]);
       const xArr = rowsDisplay.map(r=>new Date(r.t));
-      const tSMA20 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map20.get(r.t) ?? null))), name:'SMA 20', line:{ color: css('--c-sma20')||'#22c55e', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA20"]')?.classList.contains('active')||false };
-      const tSMA50 = { type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map50.get(r.t) ?? null))), name:'SMA 50', line:{ color: css('--c-sma50')||'#60a5fa', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA50"]')?.classList.contains('active')||false };
+      const tSMA20 = { type:'scatter', mode:'lines', connectgaps:true, x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map20.get(r.t) ?? null))), name:'SMA 20', line:{ color: css('--c-sma20')||'#22c55e', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA20"]')?.classList.contains('active')||false };
+      const tSMA50 = { type:'scatter', mode:'lines', connectgaps:true, x:xArr, y:fillForward(fillBackward(rowsDisplay.map(r=> map50.get(r.t) ?? null))), name:'SMA 50', line:{ color: css('--c-sma50')||'#60a5fa', width:1.8 }, yaxis:'y', visible: q('.chip[data-k="SMA50"]')?.classList.contains('active')||false };
 
       // Robust SMA200: prefer aligned precomputed series; if it contains only nulls (coarse intervals),
       // compute SMA200 from daily data and align the daily SMA to the chart rows (nearest prior value).
@@ -1150,7 +1197,7 @@
           }
         }catch(e){ /* ignore fallback errors, keep original y200 */ }
       }
-      const tSMA200= { type:'scatter', mode:'lines', x:xArr, y:y200, name:'SMA 200', line:{ color: css('--c-sma200')||'#f59e0b', width:2.0 }, yaxis:'y', visible: q('.chip[data-k="SMA200"]')?.classList.contains('active')||false };
+      const tSMA200= { type:'scatter', mode:'lines', connectgaps:true, x:xArr, y:y200, name:'SMA 200', line:{ color: css('--c-sma200')||'#f59e0b', width:2.0 }, yaxis:'y', visible: q('.chip[data-k="SMA200"]')?.classList.contains('active')||false };
       traces.push(tSMA20,tSMA50,tSMA200);
       // Other overlays
       const volOn = q('.chip[data-k="VOL"]')?.classList.contains('active')||false; if(volOn) traces.push(volTrace(rowsDisplay));
@@ -1171,7 +1218,7 @@
           const mapP = mapByTs(state.rows, series);
           const y = rowsDisplay.map(r=> mapP.get(r.t) ?? null);
           const col = (state.customSMAColors && state.customSMAColors[p]) || CUSTOM_SMA_PALETTE[0];
-          traces.push({ type:'scatter', mode:'lines', x:xArr, y:fillForward(fillBackward(y)), name:`SMA ${p}`, line:{ color: col, width:1.6, dash:'dot' }, yaxis:'y', visible: chip.classList.contains('active') });
+          traces.push({ type:'scatter', mode:'lines', connectgaps:true, x:xArr, y:fillForward(fillBackward(y)), name:`SMA ${p}`, line:{ color: col, width:1.6, dash:'dot' }, yaxis:'y', visible: chip.classList.contains('active') });
         }
       }
 
@@ -1224,7 +1271,21 @@
         margin:{l:56,r:24,t:18,b:28},
         paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
         showlegend:true, legend:{orientation:'h', y:-0.12},
-        xaxis:{ gridcolor:css('--grid'), showgrid:true, zeroline:false, rangeslider:{ visible:false } },
+        xaxis:(()=>{
+          const base = { gridcolor:css('--grid'), showgrid:true, zeroline:false, rangeslider:{ visible:false } };
+          const intraday = ['1m','5m','15m','60m'];
+          const shortRange = ['1d','2d','5d','10d'];
+          if(intraday.includes(state.interval) && shortRange.includes(state.range)){
+            return {
+              ...base,
+              rangebreaks:[
+                { pattern:'day of week', bounds:[6,1] },
+                { pattern:'hour', bounds:[16,9.5] }
+              ]
+            };
+          }
+          return base;
+        })(),
         yaxis:{ gridcolor:css('--grid'), showgrid:true, zeroline:false },
         yaxis2:{ overlaying:'y', side:'right', rangemode:'tozero', showgrid:false, showticklabels:false },
         yaxis3:{ overlaying:'y', side:'right', range:[0,100], showgrid:false, showticklabels:false },
@@ -1513,8 +1574,29 @@
     els.input?.addEventListener('input', (e)=>{ updateAC(e.target.value); });
     els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ hideAC(); return;} if(!state.acMatches.length){ if(e.key==='Enter'){ els.searchBtn?.click(); } return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
     els.list?.addEventListener('mousedown', (e)=>{ const it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });
-    els.timeSel?.addEventListener('change', ()=>{ state.range=els.timeSel.value; loadAndRender(); });
-    els.freqSel?.addEventListener('change', ()=>{ state.interval=els.freqSel.value; loadAndRender(); });
+    // Range bar handlers (days + frequency)
+    els.rangeBar?.addEventListener('click', e=>{
+      const rangeBtn = e.target.closest('button[data-range]');
+      const freqBtn  = e.target.closest('button[data-interval]');
+      if(rangeBtn){
+        if(rangeBtn.classList.contains('disabled')) return;
+        [...els.rangeBar.querySelectorAll('button[data-range]')].forEach(x=>x.classList.remove('active'));
+        rangeBtn.classList.add('active');
+        state.range = rangeBtn.dataset.range;
+        refreshRangeFreqDisabledState();
+        loadAndRender();
+        return;
+      }
+      if(freqBtn){
+        if(freqBtn.classList.contains('disabled')) return;
+        [...els.rangeBar.querySelectorAll('button[data-interval]')].forEach(x=>x.classList.remove('active'));
+        freqBtn.classList.add('active');
+        state.interval = freqBtn.dataset.interval;
+        refreshRangeFreqDisabledState();
+        loadAndRender();
+        return;
+      }
+    });
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; chip.classList.toggle('active'); chip.setAttribute('aria-pressed', chip.classList.contains('active')?'true':'false'); renderChart(); });
     els.toggles?.addEventListener('click', (e)=>{ const chip=e.target.closest('.chip'); if(!chip) return; if(chip.dataset.k==='AUTOFIB'){ setTimeout(updateAutoFibDebounced, 0); } });
 
@@ -1871,7 +1953,7 @@
     }
 
     // Boot
-    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; renderCustomSMAChips(); await loadAndRender(); scheduleQuoteAutoRefresh(); await renderAllMkt(); scheduleMkt(); })();
+    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; renderCustomSMAChips(); refreshRangeFreqDisabledState(); await loadAndRender(); scheduleQuoteAutoRefresh(); await renderAllMkt(); scheduleMkt(); })();
   })();
   </script>
 </body>
