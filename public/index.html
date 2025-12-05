@@ -1377,6 +1377,21 @@
       const s200= state.smaSeries?.[200]?.filter(Number.isFinite).at(-1);
       let anchor = (Number.isFinite(s50) && Number.isFinite(s200)) ? (s50+s200)/2 : (Number.isFinite(s50)? s50 : (Number.isFinite(s200)? s200 : null));
       let iv=null; if(Number.isFinite(graham) && Number.isFinite(anchor)) iv = graham*0.6 + anchor*0.4; else if(Number.isFinite(graham)) iv=graham; else if(Number.isFinite(anchor)) iv=anchor;
+
+      // Sanity checks: hide obviously absurd intrinsic values
+      try{
+        const price = state.rows?.at(-1)?.c;
+        if(!Number.isFinite(price) || !Number.isFinite(iv) || iv<=0){
+          iv = null;
+        } else {
+          const ratio = iv/price;
+          // require IV to be within a reasonable band vs last price
+          if(ratio<0.1 || ratio>10){
+            iv = null;
+          }
+        }
+      }catch{}
+
       els.ivLine.textContent = `Intrinsic Value: ${Number.isFinite(iv)? '$'+fmt(iv) : '—'}`;
     }
 
