@@ -1,18 +1,18 @@
 {
-  "t": 1762536228112,
+  "t": 1767214243933,
   "sampleSize": 800,
   "sma50": {
-    "above": 237,
-    "below": 467,
-    "counted": 704,
-    "abovePct": 33.66477272727273,
-    "belowPct": 66.33522727272727
+    "above": 339,
+    "below": 358,
+    "counted": 697,
+    "abovePct": 48.63701578192253,
+    "belowPct": 51.36298421807748
   },
   "sma200": {
-    "above": 373,
-    "below": 269,
-    "counted": 642,
-    "abovePct": 58.09968847352025,
-    "belowPct": 41.90031152647975
+    "above": 374,
+    "below": 270,
+    "counted": 644,
+    "abovePct": 58.07453416149069,
+    "belowPct": 41.92546583850932
   }
 }
