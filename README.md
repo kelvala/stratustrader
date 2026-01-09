@@ -40,18 +40,22 @@ vercel --prod
 - `server.js` is for local dev only. Vercel uses `api/` serverless functions.
 - `public/index.html` includes a long-range fallback that aggregates daily Yahoo data into Quarterly/Yearly candles and trims to the selected range.
 
-### Scheduled refreshes (GitHub Actions / Vercel)
+### Scheduled + background jobs (GitHub Actions / Vercel)
 
-The repository contains a GitHub Actions workflow at `.github/workflows/scheduled-refresh.yml` which can trigger two endpoints on your deployed site:
+Current workflows under `.github/workflows/`:
 
-- `/api/refresh-buffett` — refreshes the persisted Buffett Indicator cache
-- `/api/capture-vix-open` — captures and persists the market-open ^VIX baseline
+- `deploy-vercel.yml` — builds (via `npm ci` when `package.json` exists) and deploys `main` to Vercel.
+- `breadth-scan.yml` — runs `scripts/compute-breadth.mjs` on a schedule and commits the updated `public/breadth.json` back to the repo via an auto PR + merge attempt.
+- `buffett-vix-scheduler.yml` — calls your deployed `/api/refresh-buffett` and `/api/capture-vix-open` endpoints on a weekday schedule (open/close) to keep the Buffett indicator and VIX baseline fresh.
 
-To use the workflow, set the repository secret `SITE_URL` to your deployed site root (for example `https://my-app.vercel.app`). Optionally set `SCHEDULER_TOKEN` (a shared secret) and export the same value into your deployment as `SCHEDULER_TOKEN` to restrict who may call the endpoints.
+Buffett and VIX endpoints are exposed for external schedulers:
 
-Notes:
-- Vercel serverless functions have ephemeral execution and do not run persistent crons. The workflow above is the recommended approach for scheduled refreshes when deploying to Vercel.
-- For local development you can still rely on `server.js`'s in-process cron when running the Express server.
+- `/api/refresh-buffett` — refreshes the persisted Buffett Indicator cache.
+- `/api/capture-vix-open` — captures and persists the market-open ^VIX baseline.
+
+Recommended pattern for production is to call those endpoints from GitHub Actions or another external scheduler (for example `buffett-vix-scheduler.yml`, which hits `SITE_URL/api/refresh-buffett` and `SITE_URL/api/capture-vix-open` with an optional `SCHEDULER_TOKEN` header). For local development you can rely on `server.js`'s in-process cron when running the Express server.
+
+To use `buffett-vix-scheduler.yml`, set `SITE_URL` (e.g. your Vercel URL) and, if you want protection, `SCHEDULER_TOKEN` as repository secrets and configure the same `SCHEDULER_TOKEN` in your deployed environment.
 
 ---
 

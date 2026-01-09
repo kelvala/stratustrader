@@ -1,0 +1,33 @@
+name: Buffett & VIX scheduler
+
+on:
+  schedule:
+    # Weekdays at 18:10 UTC (~ after US close)
+    - cron: '10 18 * * 1-5'
+    # Weekdays at 14:40 UTC (~ a few minutes after US open)
+    - cron: '40 14 * * 1-5'
+  workflow_dispatch: {}
+
+jobs:
+  call-endpoints:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /api/refresh-buffett
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
+        run: |
+          set -e
+          curl -fsS -X POST \
+            -H "x-scheduler-token: ${SCHEDULER_TOKEN}" \
+            "${SITE_URL}/api/refresh-buffett" || echo "refresh-buffett failed"
+
+      - name: Call /api/capture-vix-open
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
+        run: |
+          set -e
+          curl -fsS -X POST \
+            -H "x-scheduler-token: ${SCHEDULER_TOKEN}" \
+            "${SITE_URL}/api/capture-vix-open" || echo "capture-vix-open failed"
