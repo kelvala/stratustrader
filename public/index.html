@@ -143,8 +143,9 @@
   .range-row button.disabled,.freq-row button.disabled{opacity:.35;cursor:default;border-style:dashed}
   .freq-grid button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
-  /* Local chart layout controls row (Wide / Max) */
-  .chart-actions{display:flex;justify-content:flex-end;gap:8px;margin:0 0 8px;flex-wrap:wrap}
+  /* Local chart layout controls row (Wide) */
+  .chart-actions{display:flex;justify-content:flex-start;align-items:center;gap:10px;margin:0 0 8px;flex-wrap:wrap}
+  .chart-actions #wideBtn{padding:10px 18px;font-size:14px}
 
   /* Clean UI preview mode (enable via ?ui=clean) */
   .clean-ui #tfCard{display:none!important}
@@ -511,7 +512,6 @@
       <!-- Local chart layout controls (Wide / Max) -->
       <div class="chart-actions" aria-label="Chart layout controls">
         <button class="tool-btn" id="wideBtn" aria-label="Toggle chart width">↔︎ <span class="tool-txt">Wide</span></button>
-        <button class="tool-btn" id="maxBtn" aria-label="Maximize chart">⤢ <span class="tool-txt">Max</span></button>
       </div>
       <!-- Range buttons + inline frequency buttons -->
       <div id="rangeBar" class="range-bar">
@@ -663,7 +663,7 @@
       chartCard:q('#chartCard'), chart:q('#chart'),
       rangeBar:q('#rangeBar'), toggles:q('#toggles'),
       themeToggle:q('#themeToggle'), autoFib:q('#autoFib'),
-      refreshBtn:q('#refreshBtn'), maxBtn:q('#maxBtn'), wideBtn:q('#wideBtn'),
+      refreshBtn:q('#refreshBtn'), wideBtn:q('#wideBtn'),
       tfCard:q('#tfCard'), tfHead:q('#tfHead'),
       btmNav:q('#btmNav'), scrList:q('#scrList'),
       // Added: tool buttons & sheet / input refs for GPTs & Screeners
@@ -701,43 +701,9 @@
 
     function applyWideToggle(){ if(!__container) return; const on = __container.classList.toggle('wide'); if(on){ localStorage.setItem('wideMode','1'); } else { localStorage.removeItem('wideMode'); } const txt=els.wideBtn?.querySelector('.tool-txt'); if(txt) txt.textContent = on? 'Narrow':'Wide'; els.wideBtn?.setAttribute('aria-pressed', on?'true':'false'); }
     els.wideBtn?.addEventListener('click', ()=>{
-      // If the chart is maximized, exit Max first so Wide/Narrow clearly
-      // affects the standard layout (and the chart width), not the overlay box.
-      if(els.chartCard?.classList.contains('max')){
-        applyMaxToggle();
-      }
       applyWideToggle();
       setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} }, 50);
     });
-
-    function applyMaxToggle(){
-      const cc = els.chartCard; if(!cc) return;
-
-      const isMax = cc.classList.contains('max');
-      const txt = els.maxBtn?.querySelector('.tool-txt');
-
-      if(!isMax){
-        // Measure BEFORE switching to fixed so we anchor the
-        // overlay exactly where the chart currently starts.
-        const rect = cc.getBoundingClientRect();
-        cc.classList.add('max');
-        cc.style.top = rect.top + 'px';
-        if(txt) txt.textContent = 'Restore';
-        els.maxBtn?.setAttribute('aria-pressed','true');
-        document.body.classList.add('chart-max');
-        document.body.style.overflow = 'hidden';
-        setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },120);
-      } else {
-        cc.classList.remove('max');
-        cc.style.top = '';
-        if(txt) txt.textContent = 'Max';
-        els.maxBtn?.setAttribute('aria-pressed','false');
-        document.body.classList.remove('chart-max');
-        document.body.style.overflow = '';
-        setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },60);
-      }
-    }
-    els.maxBtn?.addEventListener('click', applyMaxToggle);
 
   async function manualRefresh(){ els.refreshBtn?.setAttribute('data-busy','1'); try{ await loadAndRender(); // also refresh Buffett and VIX
     try{ await fetchBuffettAuto(); renderBuffett(); }catch{};
@@ -750,8 +716,8 @@
   // replace whole-card click with explicit Edit button to avoid accidental prompts
   const buffEditBtn = q('#buffettEditBtn'); if(buffEditBtn) buffEditBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openBuffettModal(); });
 
-    // Keyboard shortcuts (optional): W=wide, M=max, R=refresh when focused on body & not typing
-    document.addEventListener('keydown', e=>{ if(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; if(e.metaKey||e.altKey||e.ctrlKey) return; if(e.key==='w'||e.key==='W'){ applyWideToggle(); } else if(e.key==='m'||e.key==='M'){ applyMaxToggle(); } else if(e.key==='r'||e.key==='R'){ manualRefresh(); } });
+    // Keyboard shortcuts (optional): W=wide, R=refresh when focused on body & not typing
+    document.addEventListener('keydown', e=>{ if(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; if(e.metaKey||e.altKey||e.ctrlKey) return; if(e.key==='w'||e.key==='W'){ applyWideToggle(); } else if(e.key==='r'||e.key==='R'){ manualRefresh(); } });
 
     // Added: highlightTab + bottom nav wiring (was missing, causing button logic to fail)
     function highlightTab(tab){ if(!els.btmNav) return; els.btmNav.querySelectorAll('.tab').forEach(t=> t.classList.toggle('active', t.dataset.tab===tab)); }
