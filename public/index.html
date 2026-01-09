@@ -44,7 +44,10 @@
   html,body{overflow-x:hidden}
   body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;min-height:100vh;padding:20px;transition:background .2s,color .2s}
   .container{max-width:1100px;margin:0 auto}
-  .toolbar{position:sticky;top:0;z-index:12000;display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px 12px;margin-bottom:16px;flex-wrap:wrap}
+    .toolbar{position:sticky;top:0;z-index:12000;display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px 12px;margin-bottom:16px;flex-wrap:wrap;transition:opacity .15s ease}
+    /* When the chart is maximized, hide the floating toolbar so it
+      doesn't sit on top of the full-screen chart. */
+    body.chart-max .toolbar{opacity:0;pointer-events:none}
   .ticker-wrap{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
   .ticker-wrap label{font-weight:800;opacity:.9}
   .input-wrap{position:relative;flex:0 1 460px;max-width:460px;width:100%}
@@ -708,20 +711,28 @@
     });
 
     function applyMaxToggle(){
-      const cc=els.chartCard; if(!cc) return;
-      const now = cc.classList.toggle('max');
-      const txt=els.maxBtn?.querySelector('.tool-txt');
-      if(txt) txt.textContent = now? 'Restore':'Max';
-      els.maxBtn?.setAttribute('aria-pressed', now?'true':'false');
+      const cc = els.chartCard; if(!cc) return;
 
-      if(now){
-        // Anchor the fixed card to where the chart normally begins
+      const isMax = cc.classList.contains('max');
+      const txt = els.maxBtn?.querySelector('.tool-txt');
+
+      if(!isMax){
+        // Measure BEFORE switching to fixed so we anchor the
+        // overlay exactly where the chart currently starts.
         const rect = cc.getBoundingClientRect();
+        cc.classList.add('max');
         cc.style.top = rect.top + 'px';
+        if(txt) txt.textContent = 'Restore';
+        els.maxBtn?.setAttribute('aria-pressed','true');
+        document.body.classList.add('chart-max');
         document.body.style.overflow = 'hidden';
         setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },120);
       } else {
+        cc.classList.remove('max');
         cc.style.top = '';
+        if(txt) txt.textContent = 'Max';
+        els.maxBtn?.setAttribute('aria-pressed','false');
+        document.body.classList.remove('chart-max');
         document.body.style.overflow = '';
         setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },60);
       }
