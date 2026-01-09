@@ -45,11 +45,6 @@
   body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;min-height:100vh;padding:20px;transition:background .2s,color .2s}
   .container{max-width:1100px;margin:0 auto}
   .toolbar{position:sticky;top:0;z-index:12000;display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:10px 12px;margin-bottom:16px;flex-wrap:wrap}
-  /* On wider screens, keep the toolbar as a smaller card on the right
-     so it doesn't cover the SMA chips/controls on the left of the chart */
-  @media (min-width: 960px){
-    .toolbar{max-width:720px;margin-left:auto}
-  }
   .ticker-wrap{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
   .ticker-wrap label{font-weight:800;opacity:.9}
   .input-wrap{position:relative;flex:0 1 460px;max-width:460px;width:100%}
