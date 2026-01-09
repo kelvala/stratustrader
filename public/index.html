@@ -140,6 +140,9 @@
   .range-row button.disabled,.freq-row button.disabled{opacity:.35;cursor:default;border-style:dashed}
   .freq-grid button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
+  /* Local chart layout controls row (Wide / Max) */
+  .chart-actions{display:flex;justify-content:flex-end;gap:8px;margin:0 0 8px;flex-wrap:wrap}
+
   /* Clean UI preview mode (enable via ?ui=clean) */
   .clean-ui #tfCard{display:none!important}
   .clean-ui #chartCard{display:flex;flex-direction:column}
@@ -311,8 +314,6 @@
       <div class="toolsbar" id="toolsBar">
         <button class="tool-btn" id="toolGPTs" aria-label="Open GPTs">🧠 <span class="tool-txt">GPTs</span></button>
         <button class="tool-btn" id="toolScreeners" aria-label="Open Screeners">🔎 <span class="tool-txt">Screeners</span></button>
-        <button class="tool-btn" id="wideBtn" aria-label="Toggle Width">↔︎ <span class="tool-txt">Wide</span></button>
-        <button class="tool-btn" id="maxBtn" aria-label="Maximize">⤢ <span class="tool-txt">Max</span></button>
         <button class="tool-btn" id="refreshBtn" aria-label="Refresh">⟳ <span class="tool-txt">Refresh</span></button>
         <!-- compact VIX + Buffett mini-cards placed beside the refresh button -->
         <div style="display:flex;gap:8px;align-items:center;margin-left:8px">
@@ -504,6 +505,11 @@
 
     <!-- Chart card -->
     <div id="chartCard">
+      <!-- Local chart layout controls (Wide / Max) -->
+      <div class="chart-actions" aria-label="Chart layout controls">
+        <button class="tool-btn" id="wideBtn" aria-label="Toggle chart width">↔︎ <span class="tool-txt">Wide</span></button>
+        <button class="tool-btn" id="maxBtn" aria-label="Maximize chart">⤢ <span class="tool-txt">Max</span></button>
+      </div>
       <!-- Range buttons + inline frequency buttons -->
       <div id="rangeBar" class="range-bar">
         <div class="range-label">Time</div>
