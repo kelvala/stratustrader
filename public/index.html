@@ -691,7 +691,15 @@
     if(__container?.classList.contains('wide')){ els.wideBtn?.classList.add('active'); els.wideBtn?.setAttribute('aria-pressed','true'); }
 
     function applyWideToggle(){ if(!__container) return; const on = __container.classList.toggle('wide'); if(on){ localStorage.setItem('wideMode','1'); } else { localStorage.removeItem('wideMode'); } const txt=els.wideBtn?.querySelector('.tool-txt'); if(txt) txt.textContent = on? 'Narrow':'Wide'; els.wideBtn?.setAttribute('aria-pressed', on?'true':'false'); }
-    els.wideBtn?.addEventListener('click', ()=>{ applyWideToggle(); setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} }, 50); });
+    els.wideBtn?.addEventListener('click', ()=>{
+      // If the chart is maximized, exit Max first so Wide/Narrow clearly
+      // affects the standard layout (and the chart width), not the overlay box.
+      if(els.chartCard?.classList.contains('max')){
+        applyMaxToggle();
+      }
+      applyWideToggle();
+      setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} }, 50);
+    });
 
     function applyMaxToggle(){ const cc=els.chartCard; if(!cc) return; const now = cc.classList.toggle('max'); const txt=els.maxBtn?.querySelector('.tool-txt'); if(txt) txt.textContent = now? 'Restore':'Max'; els.maxBtn?.setAttribute('aria-pressed', now?'true':'false'); document.body.style.overflow = now? 'hidden' : ''; if(now){ setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },120); } else { setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },60); } }
     els.maxBtn?.addEventListener('click', applyMaxToggle);
