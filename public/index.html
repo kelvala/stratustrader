@@ -81,16 +81,18 @@
       /* When maximized, pin the chart card just below the sticky toolbar
         so the Time/Frequency/indicator buttons stay fully visible. */
       #chartCard.max{
-       position:fixed;
-       top:76px; /* just below toolbar */
-       left:12px;right:12px;bottom:12px;
-       z-index:9999;
-       margin:0!important;
-       width:auto!important;height:auto!important;
-       overflow:auto;
-       padding:16px;
+        position:fixed;
+        /* Leave clear space for the sticky toolbar so the
+           Time/Frequency/SMA buttons are never covered. */
+        top:104px;
+        left:12px;right:12px;bottom:12px;
+        z-index:9999;
+        margin:0!important;
+        width:auto!important;height:auto!important;
+        overflow:auto;
+        padding:16px;
       }
-  #chartCard.max #chart{height:calc(100vh - 160px)!important;min-height:400px;cursor:zoom-out}
+      #chartCard.max #chart{height:calc(100vh - 210px)!important;min-height:400px;cursor:zoom-out}
   .tf-card{background:var(--tf-bg);border:1px solid rgba(99,102,241,.25);border-radius:12px;padding:10px;margin-bottom:10px;box-shadow:0 0 0 1px rgba(99,102,241,.15) inset}
   .tf-head{display:flex;align-items:center;gap:8px;background:linear-gradient(180deg, var(--tf-head), transparent);border-radius:8px;padding:6px 10px;margin:-4px -2px 8px;font-weight:800}
   .tf-head .carat{display:inline-block;transform:rotate(-90deg);transition:transform .15s ease}
