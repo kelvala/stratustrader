@@ -75,24 +75,22 @@
   .info-logo{position:absolute;top:10px;right:12px;height:54px;opacity:.92;pointer-events:none;filter:drop-shadow(0 2px 8px rgba(0,0,0,.35))}
   .light .info-logo{mix-blend-mode:multiply;filter:drop-shadow(0 2px 6px rgba(0,0,0,.12));opacity:.95}
   @media (max-width:640px){ .info-logo{height:42px;right:10px} }
-      #chartCard{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative}
+  #chartCard{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative}
   #chart{height:68vh;min-height:520px}
   .container.wide{max-width:100%!important}
-      /* When maximized, pin the chart card just below the sticky toolbar
-        so the Time/Frequency/indicator buttons stay fully visible. */
-      #chartCard.max{
-        position:fixed;
-        /* Leave clear space for the sticky toolbar so the
-           Time/Frequency/SMA buttons are never covered. */
-        top:104px;
-        left:12px;right:12px;bottom:12px;
-        z-index:9999;
-        margin:0!important;
-        width:auto!important;height:auto!important;
-        overflow:auto;
-        padding:16px;
-      }
-      #chartCard.max #chart{height:calc(100vh - 210px)!important;min-height:400px;cursor:zoom-out}
+  /* When maximized, we fix the chart card and let JS
+     set its top so it anchors exactly where the chart
+     normally starts (no overlap with controls above). */
+  #chartCard.max{
+    position:fixed;
+    left:12px;right:12px;bottom:12px;
+    z-index:9999;
+    margin:0!important;
+    width:auto!important;height:auto!important;
+    overflow:auto;
+    padding:16px;
+  }
+  #chartCard.max #chart{height:calc(100vh - 210px)!important;min-height:400px;cursor:zoom-out}
   .tf-card{background:var(--tf-bg);border:1px solid rgba(99,102,241,.25);border-radius:12px;padding:10px;margin-bottom:10px;box-shadow:0 0 0 1px rgba(99,102,241,.15) inset}
   .tf-head{display:flex;align-items:center;gap:8px;background:linear-gradient(180deg, var(--tf-head), transparent);border-radius:8px;padding:6px 10px;margin:-4px -2px 8px;font-weight:800}
   .tf-head .carat{display:inline-block;transform:rotate(-90deg);transition:transform .15s ease}
@@ -703,7 +701,25 @@
       setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} }, 50);
     });
 
-    function applyMaxToggle(){ const cc=els.chartCard; if(!cc) return; const now = cc.classList.toggle('max'); const txt=els.maxBtn?.querySelector('.tool-txt'); if(txt) txt.textContent = now? 'Restore':'Max'; els.maxBtn?.setAttribute('aria-pressed', now?'true':'false'); document.body.style.overflow = now? 'hidden' : ''; if(now){ setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },120); } else { setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },60); } }
+    function applyMaxToggle(){
+      const cc=els.chartCard; if(!cc) return;
+      const now = cc.classList.toggle('max');
+      const txt=els.maxBtn?.querySelector('.tool-txt');
+      if(txt) txt.textContent = now? 'Restore':'Max';
+      els.maxBtn?.setAttribute('aria-pressed', now?'true':'false');
+
+      if(now){
+        // Anchor the fixed card to where the chart normally begins
+        const rect = cc.getBoundingClientRect();
+        cc.style.top = rect.top + 'px';
+        document.body.style.overflow = 'hidden';
+        setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },120);
+      } else {
+        cc.style.top = '';
+        document.body.style.overflow = '';
+        setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} },60);
+      }
+    }
     els.maxBtn?.addEventListener('click', applyMaxToggle);
 
   async function manualRefresh(){ els.refreshBtn?.setAttribute('data-busy','1'); try{ await loadAndRender(); // also refresh Buffett and VIX
