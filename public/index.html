@@ -80,7 +80,6 @@
   @media (max-width:640px){ .info-logo{height:42px;right:10px} }
   #chartCard{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative}
   #chart{height:68vh;min-height:520px}
-  .container.wide{max-width:100%!important}
   /* When maximized, we fix the chart card and let JS
      set its top so it anchors exactly where the chart
      normally starts (no overlap with controls above). */
@@ -143,9 +142,8 @@
   .range-row button.disabled,.freq-row button.disabled{opacity:.35;cursor:default;border-style:dashed}
   .freq-grid button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
 
-  /* Local chart layout controls row (Wide) */
+  /* Local chart layout controls row */
   .chart-actions{display:flex;justify-content:flex-start;align-items:center;gap:10px;margin:0 0 8px;flex-wrap:wrap}
-  .chart-actions #wideBtn{padding:10px 18px;font-size:14px}
 
   /* Clean UI preview mode (enable via ?ui=clean) */
   .clean-ui #tfCard{display:none!important}
@@ -509,10 +507,6 @@
 
     <!-- Chart card -->
     <div id="chartCard">
-      <!-- Local chart layout controls (Wide / Max) -->
-      <div class="chart-actions" aria-label="Chart layout controls">
-        <button class="tool-btn" id="wideBtn" aria-label="Toggle chart width">↔︎ <span class="tool-txt">Wide</span></button>
-      </div>
       <!-- Range buttons + inline frequency buttons -->
       <div id="rangeBar" class="range-bar">
         <div class="range-label">Time</div>
@@ -663,7 +657,7 @@
       chartCard:q('#chartCard'), chart:q('#chart'),
       rangeBar:q('#rangeBar'), toggles:q('#toggles'),
       themeToggle:q('#themeToggle'), autoFib:q('#autoFib'),
-      refreshBtn:q('#refreshBtn'), wideBtn:q('#wideBtn'),
+      refreshBtn:q('#refreshBtn'),
       tfCard:q('#tfCard'), tfHead:q('#tfHead'),
       btmNav:q('#btmNav'), scrList:q('#scrList'),
       // Added: tool buttons & sheet / input refs for GPTs & Screeners
@@ -693,18 +687,6 @@
     function closeSheet(id){ const el=q('#'+id); if(!el) return; el.hidden=true; el.removeAttribute('data-open'); if(![...document.querySelectorAll('.sheet')].some(s=>!s.hidden)) document.body.style.overflow=''; }
     function toggleSheet(id){ const el=q('#'+id); if(!el) return; if(el.hidden) openSheet(id); else closeSheet(id); }
 
-    // Added handlers for Wide / Max / Refresh
-    const __container = document.querySelector('.container');
-    // Restore persisted wide mode
-    if(localStorage.getItem('wideMode')==='1'){ __container?.classList.add('wide'); }
-    if(__container?.classList.contains('wide')){ els.wideBtn?.classList.add('active'); els.wideBtn?.setAttribute('aria-pressed','true'); }
-
-    function applyWideToggle(){ if(!__container) return; const on = __container.classList.toggle('wide'); if(on){ localStorage.setItem('wideMode','1'); } else { localStorage.removeItem('wideMode'); } const txt=els.wideBtn?.querySelector('.tool-txt'); if(txt) txt.textContent = on? 'Narrow':'Wide'; els.wideBtn?.setAttribute('aria-pressed', on?'true':'false'); }
-    els.wideBtn?.addEventListener('click', ()=>{
-      applyWideToggle();
-      setTimeout(()=>{ try{ fitPriceAxisToCandlesStrict(); }catch{} }, 50);
-    });
-
   async function manualRefresh(){ els.refreshBtn?.setAttribute('data-busy','1'); try{ await loadAndRender(); // also refresh Buffett and VIX
     try{ await fetchBuffettAuto(); renderBuffett(); }catch{};
     try{ await renderVix(); }catch{};
@@ -716,8 +698,8 @@
   // replace whole-card click with explicit Edit button to avoid accidental prompts
   const buffEditBtn = q('#buffettEditBtn'); if(buffEditBtn) buffEditBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openBuffettModal(); });
 
-    // Keyboard shortcuts (optional): W=wide, R=refresh when focused on body & not typing
-    document.addEventListener('keydown', e=>{ if(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; if(e.metaKey||e.altKey||e.ctrlKey) return; if(e.key==='w'||e.key==='W'){ applyWideToggle(); } else if(e.key==='r'||e.key==='R'){ manualRefresh(); } });
+    // Keyboard shortcut (optional): R=refresh when focused on body & not typing
+    document.addEventListener('keydown', e=>{ if(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; if(e.metaKey||e.altKey||e.ctrlKey) return; if(e.key==='r'||e.key==='R'){ manualRefresh(); } });
 
     // Added: highlightTab + bottom nav wiring (was missing, causing button logic to fail)
     function highlightTab(tab){ if(!els.btmNav) return; els.btmNav.querySelectorAll('.tab').forEach(t=> t.classList.toggle('active', t.dataset.tab===tab)); }
