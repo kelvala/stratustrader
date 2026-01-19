@@ -299,6 +299,16 @@
   .g-bar{position:relative;height:5px;border-radius:5px;background:color-mix(in srgb, var(--metric-bg), #ffffff 8%);border:1px solid color-mix(in srgb, var(--metric-border), #ffffff 20%);overflow:hidden}
   .g-fill-left{position:absolute;left:0;top:0;bottom:0;background:linear-gradient(90deg, rgba(34,197,94,.52), rgba(34,197,94,.30));}
   .g-fill-right{position:absolute;right:0;top:0;bottom:0;background:linear-gradient(90deg, rgba(239,68,68,.30), rgba(239,68,68,.52));}
+
+  /* Responsive tweaks for phones/tablets */
+  @media (max-width:1024px){
+    #chart{height:64vh;min-height:420px}
+  }
+  @media (max-width:720px){
+    body{padding:12px}
+    #chart{height:60vh;min-height:360px}
+    .toolbar{padding:8px 10px}
+  }
 </style>
 </head>
 <body>
@@ -668,6 +678,19 @@
       // Custom SMA controls
       smaPreset:q('#smaPreset'), smaCustom:q('#smaCustom'), smaAddBtn:q('#smaAddBtn'), smaChips:q('#smaCustomChips')
     };
+
+    // Prevent double-tap/page zoom on interactive chart surfaces (mobile)
+    function disableTapZoomFor(el){
+      if(!el) return;
+      let lastTouchEnd = 0;
+      el.addEventListener('touchend', (e)=>{
+        const now = Date.now();
+        if(now - lastTouchEnd <= 350){
+          e.preventDefault();
+        }
+        lastTouchEnd = now;
+      }, { passive:false });
+    }
 
     /* ---------- Toast ---------- */
     let toast = q('#toast');
@@ -1277,6 +1300,8 @@
         margin:{l:56,r:24,t:18,b:28},
         paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)',
         showlegend:true, legend:{orientation:'h', y:-0.12},
+        // Disable drag zoom/pan; keep hover only
+        dragmode:false,
         xaxis:(()=>{
           const base = { gridcolor:css('--grid'), showgrid:true, zeroline:false, rangeslider:{ visible:false } };
           const intraday = ['1m','5m','15m','60m'];
@@ -1300,7 +1325,12 @@
         shapes: buildSessionBands(rowsDisplay)
       };
       const layout = buildLayout(baseLayout);
-      await Plotly.react(els.chart, traces, layout, { responsive:true, displayModeBar:false });
+      await Plotly.react(els.chart, traces, layout, {
+        responsive:true,
+        displayModeBar:false,
+        scrollZoom:false,
+        doubleClick:false
+      });
       await fitPriceAxisToCandlesStrict();
       // ensure Fib aligns to current viewport after first render
       updateAutoFibDebounced();
@@ -1636,6 +1666,10 @@
       { id:'gspc', elId:'mkt-gspc', chgId:'mkt-gspc-chg', sym:'^GSPC', title:'S&P 500' }
     ];
 
+    // Disable tap-to-zoom on main chart and mini overview charts
+    disableTapZoomFor(els.chart);
+    MKT.forEach(c=>{ const el=document.getElementById(c.elId); if(el) disableTapZoomFor(el); });
+
     // NEW: helpers so minis keep last completed session after-hours
     const toETDay = (ms)=> new Date(new Date(ms).toLocaleString('en-US',{ timeZone:'America/New_York' })).toDateString();
     const getMktCache = (id)=>{ try{ return JSON.parse(localStorage.getItem('mkt:'+id)||'null'); }catch{ return null; } };
@@ -1689,8 +1723,10 @@
           rangeslider:{ visible:false }, fixedrange:true,
           tickmode: (tickvals.length? 'array':'auto'), tickvals, ticktext
         },
-        yaxis:{showgrid:true,gridcolor:grid, zeroline:false, tickfont:{size:10}, side:'right'},
+        yaxis:{showgrid:true,gridcolor:grid, zeroline:false, tickfont:{size:10}, side:'right', fixedrange:true},
         showlegend:false,
+        // Disable drag interactions on minis as well
+        dragmode:false,
         shapes: prev!=null ? [{type:'line',xref:'paper',yref:'y',x0:0,x1:1,y0:prev,y1:prev,line:{color:'#ef4444',dash:'dot',width:1}}] : []
       };
     }
@@ -1720,7 +1756,12 @@
         const col = chg>0? (getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a') : chg<0? (getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626') : '#cbd5e1';
         const chgEl = document.getElementById(card.chgId);
         if(chgEl){ chgEl.style.color=col; chgEl.textContent = (Number.isFinite(chg)&&Number.isFinite(pct))? `${chg>0?'+':''}${chg.toFixed(2)} (${chg>0?'+':''}${pct.toFixed(2)}%)` : '—'; }
-  await Plotly.react(el, [mktCandle(sessionRows)], mktLayout(prevClose, sessionRows), {displayModeBar:false, responsive:true});
+    await Plotly.react(el, [mktCandle(sessionRows)], mktLayout(prevClose, sessionRows), {
+      displayModeBar:false,
+      responsive:true,
+      scrollZoom:false,
+      doubleClick:false
+    });
         // Cache for overnight persistence (~78 bars ≈ 6.5h at 5m)
         setMktCache(card.id, { prev: prevClose, last: lastClose, rows: sessionRows.slice(-78), t: Date.now() });
         return sessionRows;
@@ -1728,7 +1769,12 @@
         // Fallback to cache so cards never go blank after-hours
         const cached = getMktCache(card.id);
         if(cached?.rows?.length){
-          await Plotly.react(el, [mktCandle(cached.rows)], mktLayout(cached.prev, cached.rows), {displayModeBar:false, responsive:true});
+          await Plotly.react(el, [mktCandle(cached.rows)], mktLayout(cached.prev, cached.rows), {
+            displayModeBar:false,
+            responsive:true,
+            scrollZoom:false,
+            doubleClick:false
+          });
           const chgEl = document.getElementById(card.chgId);
           if(chgEl && Number.isFinite(cached.last) && Number.isFinite(cached.prev)){
             const chg = cached.last - cached.prev; const pct = cached.prev? chg/cached.prev*100 : 0;
@@ -1973,8 +2019,29 @@
       }
     }
 
+    // Simple device classification (phone / tablet / desktop) for adaptive behavior
+    function applyDeviceClass(){
+      const w = window.innerWidth || document.documentElement.clientWidth || 0;
+      let cls = 'device-desktop';
+      if(w <= 600) cls = 'device-phone';
+      else if(w <= 1024) cls = 'device-tablet';
+      document.body.classList.remove('device-phone','device-tablet','device-desktop');
+      document.body.classList.add(cls);
+    }
+    window.addEventListener('resize', debounce(applyDeviceClass, 120));
+
     // Boot
-    (async function boot(){ try{ await loadSymbols(); }catch{}; els.input.value=state.ticker; renderCustomSMAChips(); refreshRangeFreqDisabledState(); await loadAndRender(); scheduleQuoteAutoRefresh(); await renderAllMkt(); scheduleMkt(); })();
+    (async function boot(){
+      try{ await loadSymbols(); }catch{}
+      applyDeviceClass();
+      els.input.value=state.ticker;
+      renderCustomSMAChips();
+      refreshRangeFreqDisabledState();
+      await loadAndRender();
+      scheduleQuoteAutoRefresh();
+      await renderAllMkt();
+      scheduleMkt();
+    })();
   })();
   </script>
 </body>
