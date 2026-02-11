@@ -32,11 +32,11 @@ function sma(arr, p){ if(!Array.isArray(arr) || arr.length < p) return null; con
 async function main(){
   const csv = await fs.readFile(STOCK_CSV, 'utf-8');
   const list = parseCSV(csv).map(r=>r.t).filter(Boolean);
-  const MAX = 800; // cap to avoid excessive runtime
+  const MAX = Number(process.env.BREADTH_MAX || 300); // cap to avoid excessive runtime
   const symbols = list.slice(0, MAX);
   console.log('symbols to process', symbols.length);
 
-  const concurrency = 6;
+  const concurrency = Number(process.env.BREADTH_CONCURRENCY || 4);
   let idx = 0;
   const results = [];
 

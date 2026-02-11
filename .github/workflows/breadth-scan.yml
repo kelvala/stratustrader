@@ -6,9 +6,8 @@ permissions:
 
 on:
   schedule:
-    # Run every 15 minutes during US market hours (ET 9:30–16:00 -> UTC 14:30–21:00) Mon-Fri
-    - cron: '30,45 14 * * 1-5'   # 14:30, 14:45 UTC (market open 9:30 ET)
-    - cron: '*/15 15-20 * * 1-5' # every 15m between 15:00 and 20:59 UTC
+    # Run hourly during US market hours (ET 9:30–16:00 -> UTC 14:30–21:00) Mon-Fri
+    - cron: '30 14-20 * * 1-5'  # 14:30 through 20:30 UTC (hourly)
     - cron: '0 21 * * 1-5'      # 21:00 UTC (market close 16:00 ET)
   workflow_dispatch: {}
 
