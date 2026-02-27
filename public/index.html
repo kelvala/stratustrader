@@ -277,7 +277,9 @@
   @media (max-width:980px){ .mkt-row{grid-template-columns:1fr;gap:10px} }
   .mkt-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
   .mkt-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .mkt-left{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
   .mkt-title{font-weight:900;letter-spacing:.4px}
+  .mkt-level{font-size:12px;font-weight:700;color:var(--muted)}
   .mkt-chg{font-weight:900}
   .mkt-chart{height:180px}
 
@@ -478,15 +480,15 @@
     <!-- Market Overview (auto-updating) -->
     <div id="mktRow" class="mkt-row" aria-label="Market overview">
       <div class="mkt-card">
-        <div class="mkt-head"><span class="mkt-title">DOW</span><span id="mkt-dji-chg" class="mkt-chg">—</span></div>
+        <div class="mkt-head"><span class="mkt-left"><span class="mkt-title">DOW</span><span id="mkt-dji-level" class="mkt-level">—</span></span><span id="mkt-dji-chg" class="mkt-chg">—</span></div>
         <div id="mkt-dji" class="mkt-chart"></div>
       </div>
       <div class="mkt-card">
-        <div class="mkt-head"><span class="mkt-title">NASDAQ</span><span id="mkt-ixic-chg" class="mkt-chg">—</span></div>
+        <div class="mkt-head"><span class="mkt-left"><span class="mkt-title">NASDAQ</span><span id="mkt-ixic-level" class="mkt-level">—</span></span><span id="mkt-ixic-chg" class="mkt-chg">—</span></div>
         <div id="mkt-ixic" class="mkt-chart"></div>
       </div>
       <div class="mkt-card">
-        <div class="mkt-head"><span class="mkt-title">S&P 500</span><span id="mkt-gspc-chg" class="mkt-chg">—</span></div>
+        <div class="mkt-head"><span class="mkt-left"><span class="mkt-title">S&P 500</span><span id="mkt-gspc-level" class="mkt-level">—</span></span><span id="mkt-gspc-chg" class="mkt-chg">—</span></div>
         <div id="mkt-gspc" class="mkt-chart"></div>
       </div>
     </div>
@@ -1661,9 +1663,9 @@
 
     /* ---------- Market Overview minis (DOW / NASDAQ / S&P) ---------- */
     const MKT = [
-      { id:'dji',  elId:'mkt-dji',  chgId:'mkt-dji-chg',  sym:'^DJI',  title:'DOW' },
-      { id:'ixic', elId:'mkt-ixic', chgId:'mkt-ixic-chg', sym:'^IXIC', title:'NASDAQ' },
-      { id:'gspc', elId:'mkt-gspc', chgId:'mkt-gspc-chg', sym:'^GSPC', title:'S&P 500' }
+      { id:'dji',  elId:'mkt-dji',  chgId:'mkt-dji-chg',  levelId:'mkt-dji-level',  sym:'^DJI',  title:'DOW' },
+      { id:'ixic', elId:'mkt-ixic', chgId:'mkt-ixic-chg', levelId:'mkt-ixic-level', sym:'^IXIC', title:'NASDAQ' },
+      { id:'gspc', elId:'mkt-gspc', chgId:'mkt-gspc-chg', levelId:'mkt-gspc-level', sym:'^GSPC', title:'S&P 500' }
     ];
 
     // Disable tap-to-zoom on main chart and mini overview charts
@@ -1743,6 +1745,10 @@
         hovertemplate:'%{x|%I:%M %p}<br>O %{open:.2f} · H %{high:.2f}<br>L %{low:.2f} · C %{close:.2f}<extra></extra>'
       };
     }
+    function fmtMktLevel(v){
+      if(!Number.isFinite(v)) return '—';
+      return `Close: ${new Intl.NumberFormat('en-US', { minimumFractionDigits:2, maximumFractionDigits:2 }).format(v)}`;
+    }
     async function renderMktCard(card){
       const el = document.getElementById(card.elId); if(!el) return;
       try{
@@ -1755,6 +1761,8 @@
         const pct = (Number.isFinite(lastClose)&&Number.isFinite(prevClose)&&prevClose!==0) ? (chg/prevClose*100) : NaN;
         const col = chg>0? (getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a') : chg<0? (getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626') : '#cbd5e1';
         const chgEl = document.getElementById(card.chgId);
+        const levelEl = document.getElementById(card.levelId);
+        if(levelEl){ levelEl.textContent = fmtMktLevel(lastClose); }
         if(chgEl){ chgEl.style.color=col; chgEl.textContent = (Number.isFinite(chg)&&Number.isFinite(pct))? `${chg>0?'+':''}${chg.toFixed(2)} (${chg>0?'+':''}${pct.toFixed(2)}%)` : '—'; }
     await Plotly.react(el, [mktCandle(sessionRows)], mktLayout(prevClose, sessionRows), {
       displayModeBar:false,
@@ -1776,6 +1784,8 @@
             doubleClick:false
           });
           const chgEl = document.getElementById(card.chgId);
+          const levelEl = document.getElementById(card.levelId);
+          if(levelEl){ levelEl.textContent = fmtMktLevel(cached.last); }
           if(chgEl && Number.isFinite(cached.last) && Number.isFinite(cached.prev)){
             const chg = cached.last - cached.prev; const pct = cached.prev? chg/cached.prev*100 : 0;
             const col = chg>0? (getComputedStyle(document.documentElement).getPropertyValue('--c-up').trim()||'#16a34a') : chg<0? (getComputedStyle(document.documentElement).getPropertyValue('--c-down').trim()||'#dc2626') : '#cbd5e1';
