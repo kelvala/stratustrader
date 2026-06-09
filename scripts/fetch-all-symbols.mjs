@@ -47,8 +47,8 @@ function writeCSV(rows){
 }
 
 const NASDAQ_TRADER = [
-  'https://ftp.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt',
-  'https://ftp.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt'
+  'https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt',
+  'https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt'
 ];
 
 function normalizeSym(sym){
@@ -106,14 +106,15 @@ async function run(){
     }catch(e){ console.warn('Source failed', url, e.message); }
   }
   // Ensure critical user-specified tickers present
-  const ensureSyms = ['UURAF','UUUU','OKLO','BTC-USD','ETH-USD','DOGE-USD'];
+  const ensureSyms = ['UURAF','UUUU','OKLO','BTC-USD','ETH-USD','DOGE-USD','BBHL'];
   const ensureNameMap = {
     'UURAF':'Uranium Royalty Corp.',
     'UUUU':'Energy Fuels Inc.',
     'OKLO':'Oklo Inc.',
     'BTC-USD':'Bitcoin USD',
     'ETH-USD':'Ethereum USD',
-    'DOGE-USD':'Dogecoin USD'
+    'DOGE-USD':'Dogecoin USD',
+    'BBHL':'BBH Select Large Cap ETF'
   };
   // Try to enrich names via Yahoo
   const ensurePairs = [];
