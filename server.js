@@ -97,6 +97,36 @@ app.get('/api/chart', async (req, res) => {
   res.status(502).json({ error: 'upstream chart failed' });
 });
 
+app.get('/api/autocomplete', async (req, res) => {
+  const query = String(req.query.query || '').trim();
+  if (!query) {
+    return res.status(400).json({ error: 'query required' });
+  }
+
+  const urls = [
+    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&lang=en-US&region=US&quotesCount=25&newsCount=0`,
+    `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&lang=en-US&region=US&quotesCount=25&newsCount=0`
+  ];
+
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' } });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const quotes = Array.isArray(j?.quotes) ? j.quotes : [];
+      const matches = quotes
+        .map(q => ({ t: String(q?.symbol || '').trim().toUpperCase(), n: String(q?.longname || q?.shortname || q?.name || '').trim() }))
+        .filter(x => x.t)
+        .slice(0, 40);
+      return res.json(matches);
+    } catch (e) {
+      console.warn('[autocomplete] fetch failed', e?.message || e);
+    }
+  }
+
+  return res.json([]);
+});
+
 app.get('/api/quote', async (req, res) => {
   const { ticker } = req.query;
   if (!ticker) {
