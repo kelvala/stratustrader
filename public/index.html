@@ -48,9 +48,19 @@
     /* When the chart is maximized, hide the floating toolbar so it
       doesn't sit on top of the full-screen chart. */
     body.chart-max .toolbar{opacity:0;pointer-events:none}
-  .ticker-wrap{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+  .ticker-wrap{display:flex;align-items:center;gap:8px;flex:1;min-width:0;flex-wrap:wrap}
   .ticker-wrap label{font-weight:800;opacity:.9}
   .input-wrap{position:relative;flex:0 1 460px;max-width:460px;width:100%}
+  .history-row{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+  .history-chip{border:1px solid var(--border);background:color-mix(in srgb, var(--panel), #ffffff 3%);color:var(--text);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer}
+  .history-chip:hover{background:var(--hover);border-color:var(--accent)}
+  .favorites-row{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+  .favorites-row.hidden{display:none}
+  .fav-chip{border:1px solid color-mix(in srgb, var(--accent), #ffffff 18%);background:color-mix(in srgb, var(--accent), transparent 86%);color:var(--text);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer}
+  .fav-chip:hover{background:color-mix(in srgb, var(--accent), transparent 78%);border-color:var(--accent)}
+  .history-empty{font-size:12px;color:var(--muted);padding:2px 2px 0}
+  .favorite-toggle{padding:8px 12px;background:color-mix(in srgb, var(--panel), #ffffff 4%);color:var(--text);border:1px solid var(--border)}
+  .favorite-toggle.active{background:color-mix(in srgb, var(--accent), transparent 84%);border-color:var(--accent);color:var(--accent)}
   @media (max-width:720px){ .input-wrap{flex:1 1 100%;max-width:100%} }
   .ticker-input{width:100%;min-width:120px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text);text-transform:uppercase;font-size:16px}
   .btn{padding:10px 14px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:800;cursor:pointer}
@@ -323,7 +333,11 @@
           <input id="q" class="ticker-input" type="text" placeholder="AAPL, MSFT… or BTC" spellcheck="false" autocomplete="off"/>
           <div id="ac" class="ac" role="listbox" aria-label="Suggestions"></div>
         </div>
+        <button id="showFavoritesBtn" class="btn inline favorite-toggle" type="button" title="Show saved favorites">Favorites</button>
+        <button id="favoriteToggleBtn" class="btn inline favorite-toggle" type="button" title="Add or remove the current ticker from favorites">☆</button>
         <button id="searchBtn" class="btn inline" type="button">Search</button>
+        <div id="searchHistory" class="history-row" aria-label="Recent tickers"></div>
+        <div id="favoritesRow" class="favorites-row hidden" aria-label="Favorite tickers"></div>
       </div>
       <div class="toolsbar" id="toolsBar">
         <button class="tool-btn" id="toolGPTs" aria-label="Open GPTs">🧠 <span class="tool-txt">GPTs</span></button>
@@ -664,7 +678,7 @@
 
     /* ---------- Elements ---------- */
     const els = {
-      input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'),
+      input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'), searchHistory:q('#searchHistory'), favoritesRow:q('#favoritesRow'), favoriteToggleBtn:q('#favoriteToggleBtn'), showFavoritesBtn:q('#showFavoritesBtn'),
       headline:q('#headline'), subInfo:q('#subInfo'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'), companyLine:q('#companyLine'),
       chartCard:q('#chartCard'), chart:q('#chart'),
       rangeBar:q('#rangeBar'), toggles:q('#toggles'),
@@ -812,7 +826,7 @@
     const defaultRange = hasSeenInitial ? (document.querySelector('#rangeBar button[data-range].active')?.dataset.range)||'6mo' : '6mo';
     const defaultInterval = hasSeenInitial ? (document.querySelector('#rangeBar button[data-interval].active')?.dataset.interval)||'15m' : '1d';
     const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:defaultRange, interval:defaultInterval, rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0,
-      divs:[],
+      divs:[], chartFetchId:0, chartController:null,
       customSMAs: (()=>{ try{ const a=JSON.parse(sessionStorage.getItem('customSMAs')||'[]'); return Array.isArray(a)? a.filter(n=>Number.isFinite(+n)).slice(0,12) : []; }catch{return [];} })()
     };
     const FUNDAMENTALS = {}; // cache fundamentals per ticker
@@ -828,12 +842,27 @@
     const $all = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
     const sanitizeTicker = s => String(s||'').split('|')[0].trim().toUpperCase();
     const normalizeTickerForFetch = t => sanitizeTicker(t).replace(/\s+/g,'').replace(/\.([A-Z0-9]{1,3})$/,'-$1'); // BRK.B -> BRK-B, etc.
+    const SEARCH_HISTORY_KEY = 'tickerSearchHistory_v1';
+    const SEARCH_HISTORY_LIMIT = 8;
+    const FAVORITES_KEY = 'tickerFavorites_v1';
+    const FAVORITES_LIMIT = 12;
     // Restrict -USD behavior to known crypto bases only
     const CRYPTO_BASE = new Set(['BTC','ETH','SOL','DOGE','XRP','ADA','LTC','BCH','BNB','SHIB']);
     const AUTOCOMPLETE_TIMEOUT_MS = 250; // Yahoo autocomplete request timeout before falling back to local CSV
     function isCryptoBase(sym){ return CRYPTO_BASE.has(sym); }
     function hideAC(){ if(els.list){ els.list.classList.remove('show'); els.list.innerHTML=''; } state.acMatches=[]; state.acIndex=-1; }
     function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const html=items.slice(0,60).map((o,i)=>`<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${o.n||''}</span></div>`).join(''); els.list.innerHTML=html; els.list.classList.add('show'); }
+    function getSearchHistory(){ try{ const raw=localStorage.getItem(SEARCH_HISTORY_KEY); if(!raw) return []; const parsed=JSON.parse(raw); return Array.isArray(parsed)? parsed.filter(Boolean).map(x=>sanitizeTicker(x)).filter(Boolean).slice(0,SEARCH_HISTORY_LIMIT) : []; }catch{return [];} }
+    function saveSearchHistory(history){ try{ localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify((history||[]).slice(0,SEARCH_HISTORY_LIMIT))); }catch{} }
+    function addToSearchHistory(ticker){ const cleaned=sanitizeTicker(ticker); if(!cleaned) return; const next=[cleaned, ...getSearchHistory().filter(x=>x!==cleaned)].slice(0,SEARCH_HISTORY_LIMIT); saveSearchHistory(next); renderSearchHistory(); }
+    function renderSearchHistory(){ if(!els.searchHistory) return; const history=getSearchHistory(); if(!history.length){ els.searchHistory.innerHTML='<div class="history-empty">No recent searches yet</div>'; return; } els.searchHistory.innerHTML = history.map(t=>`<button class="history-chip" type="button" data-history="${t}">${t}</button>`).join(''); }
+    function getFavorites(){ try{ const raw=localStorage.getItem(FAVORITES_KEY); if(!raw) return []; const parsed=JSON.parse(raw); return Array.isArray(parsed)? parsed.filter(Boolean).map(x=>sanitizeTicker(x)).filter(Boolean).slice(0,FAVORITES_LIMIT) : []; }catch{return [];} }
+    function saveFavorites(favorites){ try{ localStorage.setItem(FAVORITES_KEY, JSON.stringify((favorites||[]).slice(0,FAVORITES_LIMIT))); }catch{} }
+    function toggleFavorite(ticker){ const cleaned=sanitizeTicker(ticker); if(!cleaned) return false; const favorites=getFavorites(); const exists=favorites.includes(cleaned); const next = exists ? favorites.filter(x=>x!==cleaned) : [cleaned, ...favorites].slice(0,FAVORITES_LIMIT); saveFavorites(next); renderFavorites(); syncFavoriteButton(); return !exists; }
+    function renderFavorites(){ if(!els.favoritesRow) return; const favorites=getFavorites(); if(!favorites.length){ els.favoritesRow.innerHTML='<div class="history-empty">No favorites yet</div>'; return; } els.favoritesRow.innerHTML = favorites.map(t=>`<button class="fav-chip" type="button" data-history="${t}">${t}</button>`).join(''); }
+    function syncFavoriteButton(){ if(!els.favoriteToggleBtn) return; const current=sanitizeTicker(state.ticker || els.input?.value || ''); const isFav=getFavorites().includes(current); els.favoriteToggleBtn.classList.toggle('active', isFav); els.favoriteToggleBtn.textContent = isFav ? '★' : '☆'; els.favoriteToggleBtn.setAttribute('aria-pressed', isFav?'true':'false'); }
+    function setFavoritesPanelVisible(visible){ if(!els.favoritesRow) return; els.favoritesRow.classList.toggle('hidden', !visible); if(els.showFavoritesBtn){ els.showFavoritesBtn.classList.toggle('active', visible); els.showFavoritesBtn.textContent = visible ? 'Hide Fav' : 'Favorites'; } }
+    function toggleFavoritesPanel(){ if(!els.favoritesRow) return; const currentlyVisible = !els.favoritesRow.classList.contains('hidden'); if(!currentlyVisible){ renderFavorites(); } setFavoritesPanelVisible(!currentlyVisible); }
     async function fetchACFromYahoo(q){ if(!q) return { ok:true, matches:[] }; const controller = new AbortController(); const timeout = setTimeout(()=>controller.abort(), AUTOCOMPLETE_TIMEOUT_MS);
       try{
         const r = await fetch(`/api/autocomplete?query=${encodeURIComponent(q)}`, { cache:'no-store', signal: controller.signal });
@@ -1468,10 +1497,10 @@
     }
 
     /* ---------- Data fetch ---------- */
-    async function fetchRows(ticker, range, interval){
+    async function fetchRows(ticker, range, interval, signal){
       const T = normalizeTickerForFetch(ticker);
       try{
-        const r = await fetch(`/api/chart?ticker=${encodeURIComponent(T)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`, { cache:'no-store' });
+        const r = await fetch(`/api/chart?ticker=${encodeURIComponent(T)}&range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`, { cache:'no-store', signal });
         if(r.ok){
           const j = await r.json();
           const res = j?.chart?.result?.[0];
@@ -1626,8 +1655,26 @@
     }
 
     async function loadAndRender(){
-      try{ state.rows = await fetchRows(state.ticker, state.range, state.interval); await buildSMAAlignedSeries(); await renderChart(); refreshQuoteOnce(); }
-      catch(e){ console.error('Chart error', e); els.lastLine.innerHTML='Last: — · Change: —'; if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)'; }
+      const reqId = ++state.chartFetchId;
+      state.chartController?.abort();
+      const controller = new AbortController();
+      state.chartController = controller;
+      try{
+        state.rows = await fetchRows(state.ticker, state.range, state.interval, controller.signal);
+        if(reqId !== state.chartFetchId || controller.signal.aborted) return;
+        await buildSMAAlignedSeries();
+        if(reqId !== state.chartFetchId || controller.signal.aborted) return;
+        await renderChart();
+        if(reqId !== state.chartFetchId || controller.signal.aborted) return;
+        refreshQuoteOnce();
+      }
+      catch(e){
+        if(reqId !== state.chartFetchId || controller.signal.aborted) return;
+        console.error('Chart error', e); els.lastLine.innerHTML='Last: — · Change: —'; if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)';
+      }
+      finally{
+        if(state.chartController === controller) state.chartController = null;
+      }
     }
 
     // UI wiring (patched search + AC close)
@@ -1637,10 +1684,14 @@
         const base = t.replace(/-USD$/,'');
         if(!isCryptoBase(base)) t = base;
       }
-      state.ticker=t; localStorage.setItem('lastTicker', t); hideAC(); loadAndRender(); });
+      state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
     els.input?.addEventListener('input', debounce((e)=>{ updateAC(e.target.value); }, 120));
     els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ hideAC(); return;} if(!state.acMatches.length){ if(e.key==='Enter'){ els.searchBtn?.click(); } return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
     els.list?.addEventListener('mousedown', (e)=>{ const it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });
+    els.searchHistory?.addEventListener('click', (e)=>{ const btn=e.target.closest('button[data-history]'); if(!btn) return; const t=btn.dataset.history; if(!t) return; els.input.value=t; state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
+    els.showFavoritesBtn?.addEventListener('click', ()=>{ toggleFavoritesPanel(); });
+    els.favoriteToggleBtn?.addEventListener('click', ()=>{ const current=sanitizeTicker(state.ticker || els.input?.value || ''); if(!current){ els.input?.focus(); return; } const added=toggleFavorite(current); if(added){ setFavoritesPanelVisible(true); showToast(`Added ${current} to favorites`); } else { showToast(`Removed ${current} from favorites`); } renderFavorites(); syncFavoriteButton(); });
+    els.favoritesRow?.addEventListener('click', (e)=>{ const btn=e.target.closest('button[data-history]'); if(!btn) return; const t=btn.dataset.history; if(!t) return; els.input.value=t; state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
     // Range bar handlers (days + frequency)
     els.rangeBar?.addEventListener('click', e=>{
       const rangeBtn = e.target.closest('button[data-range]');
@@ -2059,6 +2110,10 @@
       try{ await loadSymbols(); }catch{}
       applyDeviceClass();
       els.input.value=state.ticker;
+      renderSearchHistory();
+      renderFavorites();
+      setFavoritesPanelVisible(false);
+      syncFavoriteButton();
       renderCustomSMAChips();
       refreshRangeFreqDisabledState();
       await loadAndRender();
