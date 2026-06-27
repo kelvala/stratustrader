@@ -761,7 +761,8 @@
       interval = String(interval||'').toLowerCase();
       const intraday = INTRADAY_INTERVALS.includes(interval);
       if(!intraday) return true; // daily/weekly/monthly allowed for all ranges
-      return SHORT_RANGES.includes(range); // intraday only supported on short ranges
+      if(interval === '1m') return ['1d','2d','5d'].includes(range); // Yahoo 1m only supports up to ~8 days
+      return SHORT_RANGES.includes(range); // 5m/15m/60m only supported on short ranges
     }
     function refreshRangeFreqDisabledState(){
       if(!els.rangeBar) return;
