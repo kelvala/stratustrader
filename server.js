@@ -290,7 +290,57 @@ app.post('/api/capture-vix-open', async (req, res) => {
   }catch(e){ return res.status(500).json({ error: 'exception', detail: String(e) }); }
 });
 
-app.listen(PORT, () => {
+// ---- Favorites sync (local dev: file-based fallback, production: Upstash Redis) ----
+const FAVORITES_FILE = path.join(CACHE_DIR, 'favorites.json');
+async function readFavoritesStore() {
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (redisUrl && redisToken) return null; // use Redis in cloud; not reached locally
+  try { const txt = await fs.readFile(FAVORITES_FILE, 'utf8'); return JSON.parse(txt); } catch { return {}; }
+}
+async function writeFavoritesStore(store) {
+  await ensureCacheDir();
+  await fs.writeFile(FAVORITES_FILE, JSON.stringify(store, null, 2), 'utf8');
+}
+
+app.get('/api/favorites-get', async (req, res) => {
+  const uid = (req.query.uid || '').toUpperCase();
+  if (!uid || !/^[A-Z0-9]{4,16}$/.test(uid)) return res.status(400).json({ error: 'invalid uid' });
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (redisUrl && redisToken) {
+    try {
+      const r = await fetch(`${redisUrl}/get/${encodeURIComponent('fav:' + uid)}`, { headers: { Authorization: `Bearer ${redisToken}` } });
+      const j = await r.json();
+      const favorites = j.result ? JSON.parse(j.result) : [];
+      return res.json({ favorites: Array.isArray(favorites) ? favorites : [] });
+    } catch (e) { return res.status(502).json({ error: 'upstream', favorites: [] }); }
+  }
+  const store = await readFavoritesStore();
+  return res.json({ favorites: store[uid] || [] });
+});
+
+app.post('/api/favorites-set', express.json(), async (req, res) => {
+  const { uid, favorites } = req.body || {};
+  const cleanUid = (uid || '').toUpperCase();
+  if (!cleanUid || !/^[A-Z0-9]{4,16}$/.test(cleanUid)) return res.status(400).json({ error: 'invalid uid' });
+  if (!Array.isArray(favorites)) return res.status(400).json({ error: 'invalid favorites' });
+  const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (redisUrl && redisToken) {
+    try {
+      const val = JSON.stringify(favorites.slice(0, 20));
+      await fetch(`${redisUrl}/set/${encodeURIComponent('fav:' + cleanUid)}/${encodeURIComponent(val)}/ex/7776000`, { headers: { Authorization: `Bearer ${redisToken}` } });
+      return res.json({ ok: true });
+    } catch (e) { return res.status(502).json({ error: 'upstream' }); }
+  }
+  const store = await readFavoritesStore();
+  store[cleanUid] = favorites.slice(0, 20);
+  await writeFavoritesStore(store);
+  return res.json({ ok: true });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://localhost:${PORT}`);
   // Nightly symbols refresh at 2:30 AM America/New_York
   try{

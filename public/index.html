@@ -58,6 +58,17 @@
   .favorites-row.hidden{display:none}
   .fav-chip{border:1px solid color-mix(in srgb, var(--accent), #ffffff 18%);background:color-mix(in srgb, var(--accent), transparent 86%);color:var(--text);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer}
   .fav-chip:hover{background:color-mix(in srgb, var(--accent), transparent 78%);border-color:var(--accent)}
+  .sync-btn{position:relative;padding:7px 10px;font-size:12px;font-weight:700;background:var(--panel);border:1px solid var(--border);border-radius:9px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;transition:border-color .15s,color .15s}
+  .sync-btn:hover{color:var(--text);border-color:var(--accent)}
+  .sync-btn.synced{color:var(--c-up);border-color:var(--c-up)}
+  .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s}
+  .sync-btn.synced .sync-dot{background:var(--c-up)}
+  /* sync modal */
+  #syncModal .sheet-inner{max-width:380px}
+  .sync-token-display{font-family:monospace;font-size:22px;font-weight:900;letter-spacing:4px;color:var(--accent);text-align:center;padding:14px 0;background:color-mix(in srgb,var(--panel),#000 20%);border-radius:10px;border:1px solid var(--border);margin:10px 0}
+  .sync-divider{text-align:center;color:var(--muted);font-size:11px;margin:10px 0;position:relative}
+  .sync-divider::before,.sync-divider::after{content:'';position:absolute;top:50%;width:40%;height:1px;background:var(--border)}
+  .sync-divider::before{left:0}.sync-divider::after{right:0}
   .history-empty{font-size:12px;color:var(--muted);padding:2px 2px 0}
   .favorite-toggle{padding:8px 12px;background:color-mix(in srgb, var(--panel), #ffffff 4%);color:var(--text);border:1px solid var(--border)}
   .favorite-toggle.active{background:color-mix(in srgb, var(--accent), transparent 84%);border-color:var(--accent);color:var(--accent)}
@@ -360,6 +371,7 @@
               <div style="flex:0"><button id="buffettEditBtn" class="tool-btn" title="Edit Buffett value">✎</button></div>
             </div>
           </div>
+          <button id="syncBtn" class="sync-btn" title="Sync favorites across devices" type="button"><span class="sync-dot"></span>Sync</button>
         </div>
       </div>
       
@@ -737,6 +749,57 @@
   // replace whole-card click with explicit Edit button to avoid accidental prompts
   const buffEditBtn = q('#buffettEditBtn'); if(buffEditBtn) buffEditBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openBuffettModal(); });
 
+    // Sync modal
+    function openSyncModal(){
+      let m = document.getElementById('syncModal');
+      if(!m){
+        m = document.createElement('div'); m.id='syncModal'; m.className='sheet'; m.setAttribute('hidden','');
+        document.body.appendChild(m);
+      }
+      const uid = getUserToken();
+      const syncUrl = uid ? `${location.origin}${location.pathname}?sync=${uid}` : '';
+      m.innerHTML = `<div class="sheet-inner" role="dialog" aria-modal="true" aria-label="Sync Favorites">
+        <div class="sheet-head"><div class="sheet-title">☁ Sync Favorites</div><button class="sheet-close" id="syncModalClose">✕</button></div>
+        <div class="sheet-body">
+          <p style="margin:0 0 10px;color:var(--muted);font-size:13px">Keep your favorites in sync across all your devices. Set a token once per device — that's it.</p>
+          ${uid ? `
+            <div class="sync-token-display" id="syncTokenDisplay">${uid}</div>
+            <button class="btn" id="syncCopyBtn" style="width:100%;margin-bottom:6px">Copy sync link</button>
+            <p style="margin:0 0 10px;font-size:11px;color:var(--muted);text-align:center">Bookmark this link on each device: <code style="font-size:10px;word-break:break-all">${syncUrl}</code></p>
+            <div class="sync-divider">or use a different token</div>
+          ` : `<p style="color:var(--c-up);font-size:13px;margin:0 0 10px">No token set yet. Generate one or enter an existing token from another device.</p>`}
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input id="syncTokenInput" type="text" placeholder="Enter existing token" maxlength="16" style="flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text);font-family:monospace;font-size:15px;text-transform:uppercase;letter-spacing:2px"/>
+            <button class="btn" id="syncSetBtn">Set</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button class="tool-btn" id="syncGenBtn" style="flex:1">Generate new token</button>
+            ${uid ? `<button class="tool-btn" id="syncClearBtn">Clear token</button>` : ''}
+          </div>
+          <div id="syncStatus" style="margin-top:10px;font-size:12px;color:var(--muted);text-align:center"></div>
+        </div></div>`;
+      // wire events
+      m.querySelector('#syncModalClose').addEventListener('click', closeSyncModal);
+      m.querySelector('#syncSetBtn').addEventListener('click', ()=>{
+        const v = (m.querySelector('#syncTokenInput').value||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+        if(!v||v.length<4){ m.querySelector('#syncStatus').textContent='Token must be 4–16 characters.'; return; }
+        setUserToken(v); closeSyncModal(); showToast('Token set! Loading your favorites…'); syncFavoritesFromCloud();
+      });
+      m.querySelector('#syncGenBtn').addEventListener('click', ()=>{
+        const t=generateToken(); setUserToken(t); openSyncModal();
+        showToast('New token generated! Save the sync link.');
+        pushFavoritesToCloud(getFavorites());
+      });
+      if(uid){ m.querySelector('#syncCopyBtn')?.addEventListener('click', ()=>{ navigator.clipboard?.writeText(syncUrl).then(()=>showToast('Sync link copied!')).catch(()=>{ m.querySelector('#syncStatus').textContent=syncUrl; }); }); }
+      if(uid){ m.querySelector('#syncClearBtn')?.addEventListener('click', ()=>{ setUserToken(null); setSyncBtnState('off'); closeSyncModal(); showToast('Sync token cleared'); }); }
+      m.hidden=false; document.body.style.overflow='hidden';
+    }
+    function closeSyncModal(){ const m=document.getElementById('syncModal'); if(!m) return; m.hidden=true; if(![...document.querySelectorAll('.sheet')].some(s=>!s.hidden)) document.body.style.overflow=''; }
+
+    q('#syncBtn')?.addEventListener('click', openSyncModal);
+
+    // On load: apply ?sync=TOKEN from URL, then pull from cloud
+    (()=>{ const urlToken = new URLSearchParams(location.search).get('sync'); if(urlToken && /^[A-Z0-9]{4,16}$/i.test(urlToken)){ setUserToken(urlToken); } if(getUserToken()) syncFavoritesFromCloud(); else setSyncBtnState('off'); })();
     // Keyboard shortcut (optional): R=refresh when focused on body & not typing
     document.addEventListener('keydown', e=>{ if(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; if(e.metaKey||e.altKey||e.ctrlKey) return; if(e.key==='r'||e.key==='R'){ manualRefresh(); } });
 
@@ -847,6 +910,17 @@
     const SEARCH_HISTORY_LIMIT = 8;
     const FAVORITES_KEY = 'tickerFavorites_v1';
     const FAVORITES_LIMIT = 12;
+    const SYNC_TOKEN_KEY = 'stratustrader_uid';
+
+    function getUserToken(){ try{ return localStorage.getItem(SYNC_TOKEN_KEY)||null; }catch{ return null; } }
+    function setUserToken(t){ try{ if(t) localStorage.setItem(SYNC_TOKEN_KEY,t.toUpperCase()); else localStorage.removeItem(SYNC_TOKEN_KEY); }catch{} }
+    function generateToken(){ const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let t=''; for(let i=0;i<6;i++) t+=chars[Math.floor(Math.random()*chars.length)]; return t; }
+
+    function setSyncBtnState(state){ const btn=document.getElementById('syncBtn'); if(!btn) return; if(state==='synced') btn.classList.add('synced'); else btn.classList.remove('synced'); }
+
+    async function syncFavoritesFromCloud(){ const uid=getUserToken(); if(!uid) return; try{ const r=await fetch(`/api/favorites-get?uid=${encodeURIComponent(uid)}`); if(!r.ok) return; const j=await r.json(); if(Array.isArray(j.favorites) && j.favorites.length>0){ try{ localStorage.setItem(FAVORITES_KEY, JSON.stringify(j.favorites)); }catch{} renderFavorites(); syncFavoriteButton(); setSyncBtnState('synced'); } else { setSyncBtnState('synced'); } }catch(e){ console.warn('[sync] cloud load failed', e?.message||e); } }
+
+    async function pushFavoritesToCloud(favorites){ const uid=getUserToken(); if(!uid) return; try{ await fetch('/api/favorites-set',{ method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ uid, favorites }) }); setSyncBtnState('synced'); }catch(e){ console.warn('[sync] cloud push failed', e?.message||e); } }
     // Restrict -USD behavior to known crypto bases only
     const CRYPTO_BASE = new Set(['BTC','ETH','SOL','DOGE','XRP','ADA','LTC','BCH','BNB','SHIB']);
     const AUTOCOMPLETE_TIMEOUT_MS = 250; // Yahoo autocomplete request timeout before falling back to local CSV
@@ -858,7 +932,7 @@
     function addToSearchHistory(ticker){ const cleaned=sanitizeTicker(ticker); if(!cleaned) return; const next=[cleaned, ...getSearchHistory().filter(x=>x!==cleaned)].slice(0,SEARCH_HISTORY_LIMIT); saveSearchHistory(next); renderSearchHistory(); }
     function renderSearchHistory(){ if(!els.searchHistory) return; const history=getSearchHistory(); if(!history.length){ els.searchHistory.innerHTML='<div class="history-empty">No recent searches yet</div>'; return; } els.searchHistory.innerHTML = history.map(t=>`<button class="history-chip" type="button" data-history="${t}">${t}</button>`).join(''); }
     function getFavorites(){ try{ const raw=localStorage.getItem(FAVORITES_KEY); if(!raw) return []; const parsed=JSON.parse(raw); return Array.isArray(parsed)? parsed.filter(Boolean).map(x=>sanitizeTicker(x)).filter(Boolean).slice(0,FAVORITES_LIMIT) : []; }catch{return [];} }
-    function saveFavorites(favorites){ try{ localStorage.setItem(FAVORITES_KEY, JSON.stringify((favorites||[]).slice(0,FAVORITES_LIMIT))); }catch{} }
+    function saveFavorites(favorites){ try{ localStorage.setItem(FAVORITES_KEY, JSON.stringify((favorites||[]).slice(0,FAVORITES_LIMIT))); }catch{} pushFavoritesToCloud((favorites||[]).slice(0,FAVORITES_LIMIT)); }
     function toggleFavorite(ticker){ const cleaned=sanitizeTicker(ticker); if(!cleaned) return false; const favorites=getFavorites(); const exists=favorites.includes(cleaned); const next = exists ? favorites.filter(x=>x!==cleaned) : [cleaned, ...favorites].slice(0,FAVORITES_LIMIT); saveFavorites(next); renderFavorites(); syncFavoriteButton(); return !exists; }
     function renderFavorites(){ if(!els.favoritesRow) return; const favorites=getFavorites(); if(!favorites.length){ els.favoritesRow.innerHTML='<div class="history-empty">No favorites yet</div>'; return; } els.favoritesRow.innerHTML = favorites.map(t=>`<button class="fav-chip" type="button" data-history="${t}">${t}</button>`).join(''); }
     function syncFavoriteButton(){ if(!els.favoriteToggleBtn) return; const current=sanitizeTicker(state.ticker || els.input?.value || ''); const isFav=getFavorites().includes(current); els.favoriteToggleBtn.classList.toggle('active', isFav); els.favoriteToggleBtn.textContent = isFav ? '★' : '☆'; els.favoriteToggleBtn.setAttribute('aria-pressed', isFav?'true':'false'); }
