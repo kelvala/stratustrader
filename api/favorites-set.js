@@ -16,8 +16,9 @@ export default async function handler(req, res) {
 
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  console.log('[fav-set] env check:', { hasUrl: !!redisUrl, hasToken: !!redisToken, urlLen: redisUrl?.length, tokenLen: redisToken?.length });
   if (!redisUrl || !redisToken) {
-    return res.status(200).json({ ok: true, note: 'sync not configured' });
+    return res.status(200).json({ ok: true, note: 'sync not configured', debug: { hasUrl: !!redisUrl, hasToken: !!redisToken } });
   }
 
   try {
