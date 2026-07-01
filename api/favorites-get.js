@@ -23,5 +23,3 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: 'upstream', favorites: [] });
   }
 }
-// env vars rebuild
-// env vars rebuild
