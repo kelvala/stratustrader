@@ -142,6 +142,12 @@
   /* Bollinger Bands chip color */
   .chip[data-k="BB"]{ border-color:#7c3aed;color:#7c3aed; }
   .chip.active[data-k="BB"]{ background:rgba(124,58,237,.12); }
+  /* Support & Resistance chip */
+  .chip[data-k="SR"]{ border-color:#f97316;color:#f97316; }
+  .chip.active[data-k="SR"]{ background:rgba(249,115,22,.12); }
+  /* Golden/Death Cross chip */
+  .chip[data-k="GCROSS"]{ border-color:#facc15;color:#facc15; }
+  .chip.active[data-k="GCROSS"]{ background:rgba(250,204,21,.12); }
 
   /* Active backgrounds (kept) */
   .chip.active[data-k="SMA20"]{background:rgba(34,197,94,.12)}
@@ -586,6 +592,8 @@
   <button class="chip" data-k="DIV" type="button" aria-pressed="false" title="Show dividend events">Dividends</button>
         <button class="chip" id="autoFib" data-k="AUTOFIB" type="button" aria-pressed="false">Auto Fib</button>
         <button class="chip" data-k="ICHI" type="button" aria-pressed="false">Ichimoku</button>
+        <button class="chip" data-k="SR" type="button" aria-pressed="false" title="Support &amp; Resistance levels">S&amp;R</button>
+        <button class="chip" data-k="GCROSS" type="button" aria-pressed="false" title="Golden Cross (SMA50 crosses SMA200)">Golden Cross</button>
       </div>
 
       <!-- Custom SMA controls + dynamic chips -->
@@ -1190,6 +1198,131 @@
       const midTrace = { type:'scatter', mode:'lines', x, y:fillForward(fillBackward(ma)), name:`BB ${period}`, line:{ color: '#6d28d9', width:1.4, dash:'dash' }, hoverinfo:'skip', yaxis:'y' };
       return [upTrace, lowTrace, midTrace];
     }
+    // Support & Resistance: find pivot highs/lows and cluster nearby levels
+    function srTraces(rows){
+      if(rows.length < 5) return [];
+      const n = rows.length;
+      // Compute avg bar interval from first few bars to set a time-aware wing
+      const sampleEnd = Math.min(6, n - 1);
+      const barMs = sampleEnd > 0 ? (rows[sampleEnd].t - rows[0].t) / sampleEnd : 86400000;
+      const isIntraday = barMs < 4 * 3600000; // bars shorter than 4 hours
+      // Target: ~2 hours lookaround for intraday, ~10 bars for daily+
+      const targetWingMs = isIntraday ? 2 * 3600000 : 10 * barMs;
+      const wing = Math.max(2, Math.min(30, Math.round(targetWingMs / barMs)));
+      const pivotHighs = [], pivotLows = [];
+      for(let i = wing; i < n - wing; i++){
+        let isH = true, isL = true;
+        for(let j = i - wing; j <= i + wing; j++){
+          if(j === i) continue;
+          if(rows[j].h >= rows[i].h) isH = false;
+          if(rows[j].l <= rows[i].l) isL = false;
+        }
+        if(isH) pivotHighs.push(rows[i].h);
+        if(isL) pivotLows.push(rows[i].l);
+      }
+      // Always include session high and low as guaranteed S/R
+      const sessionHigh = Math.max(...rows.map(r => r.h));
+      const sessionLow  = Math.min(...rows.map(r => r.l));
+      const allLevels = [...pivotHighs, ...pivotLows, sessionHigh, sessionLow];
+      allLevels.sort((a, b) => a - b);
+      // Cluster levels within 0.4% of each other, track touch count per cluster
+      const clusterTouches = [];
+      let group = [allLevels[0]];
+      for(let i = 1; i < allLevels.length; i++){
+        if((allLevels[i] - group[0]) / group[0] < 0.004){
+          group.push(allLevels[i]);
+        } else {
+          clusterTouches.push({ lv: group.reduce((s, v) => s + v, 0) / group.length, touches: group.length });
+          group = [allLevels[i]];
+        }
+      }
+      clusterTouches.push({ lv: group.reduce((s, v) => s + v, 0) / group.length, touches: group.length });
+      // Sort by touch count desc, take top 8 strongest levels
+      clusterTouches.sort((a, b) => b.touches - a.touches);
+      const strong = clusterTouches.slice(0, 8).map(c => c.lv);
+      if(!strong.length) return [];
+      const xStart = new Date(rows[0].t);
+      const xEnd   = new Date(rows[n - 1].t);
+      const lastClose = rows[n - 1].c;
+      const traces = [];
+      for(const lv of strong){
+        const isRes = lv > lastClose;
+        const col = isRes ? 'rgba(239,68,68,0.75)' : 'rgba(34,197,94,0.75)';
+        const textCol = isRes ? '#ef4444' : '#22c55e';
+        const lineWidth = (lv === sessionHigh || lv === sessionLow) ? 1.6 : 1.2;
+        // Line trace
+        traces.push({
+          type: 'scatter', mode: 'lines',
+          x: [xStart, xEnd], y: [lv, lv],
+          name: isRes ? `Res ${lv.toFixed(2)}` : `Sup ${lv.toFixed(2)}`,
+          line: { color: col, width: lineWidth, dash: 'dot' },
+          yaxis: 'y', showlegend: false,
+          hovertemplate: `${isRes ? 'Resistance' : 'Support'}: ${lv.toFixed(2)}<extra></extra>`
+        });
+        // Text label trace (positioned at right edge)
+        traces.push({
+          type: 'scatter', mode: 'text',
+          x: [xEnd], y: [lv],
+          text: [lv.toFixed(2)],
+          textposition: 'middle right',
+          textfont: { color: textCol, size: 11, family: 'monospace' },
+          yaxis: 'y', showlegend: false,
+          hoverinfo: 'skip'
+        });
+      }
+      return traces;
+    }
+    // Golden Cross / Death Cross: arrow markers where SMA50 crosses SMA200
+    function crossTraces(rows, map50, map200){
+      if(rows.length < 2) return [];
+      const vals = rows.map(r => ({
+        t: r.t,
+        s50: map50.get(r.t) ?? null,
+        s200: map200.get(r.t) ?? null
+      }));
+      const xGold = [], yGold = [], xDeath = [], yDeath = [];
+      for(let i = 1; i < vals.length; i++){
+        const prev = vals[i - 1], cur = vals[i];
+        if(!Number.isFinite(prev.s50) || !Number.isFinite(prev.s200) ||
+           !Number.isFinite(cur.s50)  || !Number.isFinite(cur.s200)) continue;
+        const prevDiff = prev.s50 - prev.s200;
+        const curDiff  = cur.s50  - cur.s200;
+        if(prevDiff <= 0 && curDiff > 0){ // golden cross
+          xGold.push(new Date(cur.t));
+          yGold.push(rows[i].l * 0.985); // slightly below candle low
+        } else if(prevDiff >= 0 && curDiff < 0){ // death cross
+          xDeath.push(new Date(cur.t));
+          yDeath.push(rows[i].h * 1.015); // slightly above candle high
+        }
+      }
+      const traces = [];
+      if(xGold.length){
+        traces.push({ type:'scatter', mode:'markers+text',
+          x: xGold, y: yGold,
+          name: 'Golden Cross',
+          text: xGold.map(() => '▲'),
+          textposition: 'bottom center',
+          textfont: { color: '#facc15', size: 14 },
+          marker: { symbol: 'triangle-up', size: 14, color: '#facc15', line: { color: '#92400e', width: 1.5 } },
+          yaxis: 'y', showlegend: true,
+          hovertemplate: 'Golden Cross<br>%{x|%Y-%m-%d}<extra></extra>'
+        });
+      }
+      if(xDeath.length){
+        traces.push({ type:'scatter', mode:'markers+text',
+          x: xDeath, y: yDeath,
+          name: 'Death Cross',
+          text: xDeath.map(() => '▼'),
+          textposition: 'top center',
+          textfont: { color: '#f87171', size: 14 },
+          marker: { symbol: 'triangle-down', size: 14, color: '#f87171', line: { color: '#7f1d1d', width: 1.5 } },
+          yaxis: 'y', showlegend: true,
+          hovertemplate: 'Death Cross<br>%{x|%Y-%m-%d}<extra></extra>'
+        });
+      }
+      return traces;
+    }
+
     function ichiTraces(rows){
       const high=rows.map(r=>r.h), low=rows.map(r=>r.l), close=rows.map(r=>r.c), x=rows.map(r=>new Date(r.t));
       const rollingMid=(h,l,p)=>{ const out=Array(h.length).fill(null); for(let i=0;i<h.length;i++){ const s=Math.max(0,i-p+1); let hi=-Infinity, lo=Infinity; for(let j=s;j<=i;j++){ if(Number.isFinite(h[j])) hi=Math.max(hi,h[j]); if(Number.isFinite(l[j])) lo=Math.min(lo,l[j]); } if(hi>-Infinity&&lo<Infinity) out[i]=(hi+lo)/2; } return out; };
@@ -1355,6 +1488,10 @@
   const bbOn = q('.chip[data-k="BB"]')?.classList.contains('active')||false;
   if(bbOn){ traces.push(...bollingerTraces(rowsDisplay, 20, 2)); }
   const ichiOn= q('.chip[data-k="ICHI"]')?.classList.contains('active')||false; if(ichiOn) traces.push(...ichiTraces(rowsDisplay));
+  const srOn = q('.chip[data-k="SR"]')?.classList.contains('active')||false;
+  if(srOn){ traces.push(...srTraces(rowsDisplay)); }
+  const gcrossOn = q('.chip[data-k="GCROSS"]')?.classList.contains('active')||false;
+  if(gcrossOn){ traces.push(...crossTraces(rowsDisplay, map50, map200)); }
 
       // Dynamic custom SMA traces (from chips)
       const customList = Array.from(document.querySelectorAll('#smaCustomChips .chip[data-period]'));
