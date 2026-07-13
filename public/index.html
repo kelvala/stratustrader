@@ -935,6 +935,45 @@
     function isCryptoBase(sym){ return CRYPTO_BASE.has(sym); }
     function hideAC(){ if(els.list){ els.list.classList.remove('show'); els.list.innerHTML=''; } state.acMatches=[]; state.acIndex=-1; }
     function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const html=items.slice(0,60).map((o,i)=>`<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${o.n||''}</span></div>`).join(''); els.list.innerHTML=html; els.list.classList.add('show'); }
+    const COMPANY_ACRONYM_STOP = new Set(['THE','INC','INCORPORATED','CORP','CORPORATION','CO','COMPANY','LTD','LIMITED','PLC','LP','LLC','NV','SA','AG','SPA','ETF','ETN','TRUST','FUND','HOLDINGS','HOLDING','GROUP','ADR','ADS','CLASS','SERIES','SHARES','COMMON','PREFERRED','STOCK']);
+    function normTickerKey(v){ return String(v||'').toUpperCase().replace(/\./g,'-').replace(/\s+/g,''); }
+    function buildCompanyAcronym(name){
+      const parts = String(name||'').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+      const core = parts.filter(p=>!COMPANY_ACRONYM_STOP.has(p) && !/^\d+$/.test(p));
+      if(!core.length) return '';
+      return core.map(p=>p[0]).join('');
+    }
+    function autocompleteScore(query, candidate){
+      const qRaw = String(query||'').toUpperCase();
+      const q = normTickerKey(qRaw);
+      const t = String(candidate?.t||'').toUpperCase();
+      const tn = normTickerKey(t);
+      const n = String(candidate?.n||'').toUpperCase();
+      const acr = buildCompanyAcronym(n);
+      let score = 0;
+
+      if(t===qRaw || tn===q) score += 320;
+      if(t.startsWith(qRaw) || tn.startsWith(q)) score += 240;
+      if(acr===q) score += 270;
+      else if(acr.startsWith(q)) score += 180;
+      if(acr===q && tn.length<=q.length) score += 180;
+      if((t.startsWith(qRaw) || tn.startsWith(q)) && tn!==q && tn.length<=q.length+1) score -= 120;
+      if(n.startsWith(qRaw)) score += 150;
+      if(n.includes(qRaw)) score += 100;
+      if(t.includes(qRaw) || tn.includes(q)) score += 70;
+      if(/^[A-Z]{1,5}$/.test(t)) score += 45;
+      if(/[-.^]/.test(t)) score -= 20;
+      if(q.length>=3 && /(ETF|ETN|2X|3X|DAILY|BEAR|BULL|TOKENIZED|WARRANT|RIGHTS|UNITS)/.test(n)) score -= 35;
+      score -= Math.min(20, Math.abs(tn.length - q.length) * 2);
+
+      return score;
+    }
+    function rankAutocompleteMatches(query, matches){
+      return (matches||[])
+        .map(m=>({ ...m, _score: autocompleteScore(query, m) }))
+        .sort((a,b)=> (b._score-a._score) || (a.t.length-b.t.length) || a.t.localeCompare(b.t))
+        .map(({_score, ...rest})=>rest);
+    }
     function getSearchHistory(){ try{ const raw=localStorage.getItem(SEARCH_HISTORY_KEY); if(!raw) return []; const parsed=JSON.parse(raw); return Array.isArray(parsed)? parsed.filter(Boolean).map(x=>sanitizeTicker(x)).filter(Boolean).slice(0,SEARCH_HISTORY_LIMIT) : []; }catch{return [];} }
     function saveSearchHistory(history){ try{ localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify((history||[]).slice(0,SEARCH_HISTORY_LIMIT))); }catch{} }
     function addToSearchHistory(ticker){ const cleaned=sanitizeTicker(ticker); if(!cleaned) return; const next=[cleaned, ...getSearchHistory().filter(x=>x!==cleaned)].slice(0,SEARCH_HISTORY_LIMIT); saveSearchHistory(next); renderSearchHistory(); }
@@ -985,9 +1024,29 @@
     }
     async function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ hideAC(); return; } if(!state.symbols.length && state.symbolsTried>0){ loadSymbols(true); }
       const localNameMap = (state.symbols||[]).reduce((acc, item)=>{ if(item.t) acc[item.t] = item.n || acc[item.t] || ''; return acc; }, {});
-      if(s.length >= 2){ const remote = await fetchACFromYahoo(s); if(remote.ok && remote.matches.length){ const matches = remote.matches.map(m=>({ t:m.t, n:m.n || localNameMap[m.t] || '' })); state.acMatches=matches; state.acIndex=0; renderAC(); return; } }
+      if(s.length >= 2){
+        const remote = await fetchACFromYahoo(s);
+        if(remote.ok && remote.matches.length){
+          const merged = new Map();
+          for(const m of remote.matches){
+            const t = sanitizeTicker(m.t);
+            if(!t) continue;
+            merged.set(t, { t, n: (m.n || localNameMap[t] || '').trim() });
+          }
+          for(const m of localACMatches(s).slice(0, 80)){
+            const t = sanitizeTicker(m.t);
+            if(!t || merged.has(t)) continue;
+            merged.set(t, { t, n: (m.n || localNameMap[t] || '').trim() });
+          }
+          const ranked = rankAutocompleteMatches(s, Array.from(merged.values()));
+          state.acMatches=ranked;
+          state.acIndex=0;
+          renderAC();
+          return;
+        }
+      }
       const sym=state.symbols||[]; if(!sym.length){ els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">Loading symbols…</div>'; els.list.classList.add('show'); state.acMatches=[]; state.acIndex=-1; return; }
-      const matches = localACMatches(s);
+      const matches = rankAutocompleteMatches(s, localACMatches(s));
       if(!matches.length){ els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">No matches</div>'; els.list.classList.add('show'); state.acMatches=[]; state.acIndex=-1; return; }
       state.acMatches=matches; state.acIndex=0; renderAC(); }
     function pickAC(i){ if(!state.acMatches?.length) return; const it=state.acMatches[i]; if(!it) return; els.input.value=it.t; hideAC(); }

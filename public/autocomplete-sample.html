@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Autocomplete Ranking Demo</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #0f172a;
+      --muted: #8fa0bf;
+      --text: #e9f0ff;
+      --line: #22314f;
+      --good: #22c55e;
+      --bad: #f43f5e;
+      --accent: #3b82f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: radial-gradient(circle at 10% 10%, #1b2b4a, var(--bg) 60%);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+    }
+    .top {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 20px;
+      letter-spacing: 0.2px;
+    }
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 12px;
+    }
+    .row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    input {
+      width: 300px;
+      max-width: 100%;
+      border: 1px solid var(--line);
+      background: #0a1020;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+    .btn {
+      border: 1px solid var(--line);
+      background: #10203d;
+      color: #cfe0ff;
+      border-radius: 10px;
+      padding: 9px 12px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .panel h2 {
+      margin: 0;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+    }
+    .panel h2.bad { color: var(--bad); }
+    .panel h2.good { color: var(--good); }
+    .list {
+      margin: 0;
+      list-style: none;
+      padding: 0;
+      max-height: 440px;
+      overflow: auto;
+    }
+    .item {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .sym {
+      font-weight: 700;
+      color: #86efac;
+      min-width: 110px;
+    }
+    .name {
+      color: #c8d6f2;
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .score {
+      color: var(--accent);
+      font-size: 12px;
+      min-width: 48px;
+      text-align: right;
+    }
+    @media (max-width: 760px) {
+      .grid { grid-template-columns: 1fr; }
+      .sym { min-width: 94px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <h1>Ticker Autocomplete Sample</h1>
+      <p class="muted">Type TSMC to compare raw provider order vs ranked order using the new scoring rules.</p>
+      <div class="row">
+        <input id="q" value="TSMC" placeholder="Type a ticker, e.g. TSMC" />
+        <button class="btn" id="run">Run</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2 class="bad">Raw Provider Order</h2>
+        <ul class="list" id="raw"></ul>
+      </section>
+      <section class="panel">
+        <h2 class="good">Ranked With Fix</h2>
+        <ul class="list" id="ranked"></ul>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const sample = [
+      { t: "TSMC34.SA", n: "Taiwan Semiconductor Manufacturing Co" },
+      { t: "TSMC.BA", n: "Taiwan Semiconductor Manufacturing Co" },
+      { t: "TSMCF", n: "Tesmec S.p.A." },
+      { t: "453950.KS", n: "Mirae Asset TIGER TSMC Future" },
+      { t: "RTSM-USD", n: "TSMC Tokenized Stock" },
+      { t: "TSM", n: "Taiwan Semiconductor Manufacturing Company Ltd." },
+      { t: "TSMU", n: "GraniteShares 2x Long TSM Daily ETF" },
+      { t: "TSMG", n: "Leverage Shares 2X Long TSM Daily ETF" },
+      { t: "TSMX", n: "Direxion Daily TSM Bull 2X Shares" },
+      { t: "TSME", n: "Thrivent Small-Mid Cap Equity ETF" }
+    ];
+
+    const STOP = new Set([
+      "THE","INC","INCORPORATED","CORP","CORPORATION","CO","COMPANY","LTD","LIMITED",
+      "PLC","LP","LLC","NV","SA","AG","SPA","ETF","ETN","TRUST","FUND","HOLDINGS",
+      "HOLDING","GROUP","ADR","ADS","CLASS","SERIES","SHARES","COMMON","PREFERRED","STOCK"
+    ]);
+
+    function normTickerKey(v) {
+      return String(v || "").toUpperCase().replace(/\./g, "-").replace(/\s+/g, "");
+    }
+
+    function buildCompanyAcronym(name) {
+      const parts = String(name || "").toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+      const core = parts.filter(p => !STOP.has(p) && !/^\d+$/.test(p));
+      if (!core.length) return "";
+      return core.map(p => p[0]).join("");
+    }
+
+    function autocompleteScore(query, candidate) {
+      const qRaw = String(query || "").toUpperCase();
+      const q = normTickerKey(qRaw);
+      const t = String(candidate.t || "").toUpperCase();
+      const tn = normTickerKey(t);
+      const n = String(candidate.n || "").toUpperCase();
+      const acr = buildCompanyAcronym(n);
+
+      let score = 0;
+      if (t === qRaw || tn === q) score += 320;
+      if (t.startsWith(qRaw) || tn.startsWith(q)) score += 240;
+      if (acr === q) score += 270;
+      else if (acr.startsWith(q)) score += 180;
+      if (acr === q && tn.length <= q.length) score += 180;
+      if ((t.startsWith(qRaw) || tn.startsWith(q)) && tn !== q && tn.length <= q.length + 1) score -= 120;
+      if (n.startsWith(qRaw)) score += 150;
+      if (n.includes(qRaw)) score += 100;
+      if (t.includes(qRaw) || tn.includes(q)) score += 70;
+      if (/^[A-Z]{1,5}$/.test(t)) score += 45;
+      if (/[-.^]/.test(t)) score -= 20;
+      if (q.length >= 3 && /(ETF|ETN|2X|3X|DAILY|BEAR|BULL|TOKENIZED|WARRANT|RIGHTS|UNITS)/.test(n)) score -= 35;
+      score -= Math.min(20, Math.abs(tn.length - q.length) * 2);
+      return score;
+    }
+
+    function rankAutocompleteMatches(query, items) {
+      return items
+        .map(m => ({ ...m, _score: autocompleteScore(query, m) }))
+        .sort((a, b) => (b._score - a._score) || (a.t.length - b.t.length) || a.t.localeCompare(b.t));
+    }
+
+    function renderList(id, rows, showScore) {
+      const el = document.getElementById(id);
+      el.innerHTML = rows.map(r => {
+        const score = showScore ? `<span class="score">${r._score}</span>` : "";
+        return `<li class="item"><span class="sym">${r.t}</span><span class="name">${r.n}</span>${score}</li>`;
+      }).join("");
+    }
+
+    function run() {
+      const q = document.getElementById("q").value.trim().toUpperCase();
+      const raw = sample.slice();
+      const ranked = rankAutocompleteMatches(q, sample.slice());
+      renderList("raw", raw, false);
+      renderList("ranked", ranked, true);
+    }
+
+    document.getElementById("run").addEventListener("click", run);
+    document.getElementById("q").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") run();
+    });
+
+    run();
+  </script>
+</body>
+</html>
