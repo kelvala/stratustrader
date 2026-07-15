@@ -2743,7 +2743,7 @@
     // Boot
     (async function boot(){
       try{ await loadSymbols(); }catch{}
-      document.getElementById('appVersion')?.textContent = APP_VERSION;
+      { const v = document.getElementById('appVersion'); if(v) v.textContent = APP_VERSION; }
       applyDeviceClass();
       els.input.value=state.ticker;
       setTabTitle({ ticker: state.ticker });
