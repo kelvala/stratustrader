@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.46</title>
+<title>Stratus Trader</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -74,6 +74,7 @@
   .sync-btn{position:relative;padding:7px 10px;font-size:12px;font-weight:700;background:var(--panel);border:1px solid var(--border);border-radius:9px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;transition:border-color .15s,color .15s}
   .sync-btn:hover{color:var(--text);border-color:var(--accent)}
   .sync-btn.synced{color:var(--c-up);border-color:var(--c-up)}
+  .app-version{font-size:11px;color:var(--muted);padding:4px 8px;border:1px solid var(--border);border-radius:999px;line-height:1;opacity:.9;white-space:nowrap}
   .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex-shrink:0;transition:background .3s}
   .sync-btn.synced .sync-dot{background:var(--c-up)}
   /* sync modal */
@@ -401,6 +402,7 @@
             </div>
           </div>
           <button id="syncBtn" class="sync-btn" title="Sync favorites across devices" type="button"><span class="sync-dot"></span>Sync</button>
+          <span id="appVersion" class="app-version" title="App version">v.47</span>
         </div>
       </div>
       
@@ -942,6 +944,8 @@
     const SEARCH_HISTORY_LIMIT = 8;
     const FAVORITES_KEY = 'tickerFavorites_v1';
     const FAVORITES_LIMIT = 12;
+    const APP_NAME = 'Stratus Trader';
+    const APP_VERSION = 'v.47';
     const ALERTS_KEY = 'tickerAlerts_v1';
     const ALERT_SOUND_KEY = 'tickerAlertsSound_v1';
     const ALERT_SOUND_MODE_KEY = 'tickerAlertsSoundMode_v1';
@@ -957,6 +961,16 @@
     function getUserToken(){ try{ return localStorage.getItem(SYNC_TOKEN_KEY)||null; }catch{ return null; } }
     function setUserToken(t){ try{ if(t) localStorage.setItem(SYNC_TOKEN_KEY,t.toUpperCase()); else localStorage.removeItem(SYNC_TOKEN_KEY); }catch{} }
     function generateToken(){ const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let t=''; for(let i=0;i<6;i++) t+=chars[Math.floor(Math.random()*chars.length)]; return t; }
+    function setTabTitle({ticker,price,pct}={}){
+      const t = sanitizeTicker(ticker || state?.ticker || '');
+      if(Number.isFinite(price) && Number.isFinite(pct) && t){
+        const arrow = pct >= 0 ? '▲' : '▼';
+        const sign = pct >= 0 ? '+' : '-';
+        document.title = `${t} ${price.toFixed(2)} ${arrow} ${sign}${Math.abs(pct).toFixed(2)}% ${APP_NAME}`;
+        return;
+      }
+      document.title = t ? `${t} ${APP_NAME}` : APP_NAME;
+    }
 
     function setSyncBtnState(state){ const btn=document.getElementById('syncBtn'); if(!btn) return; if(state==='synced') btn.classList.add('synced'); else btn.classList.remove('synced'); }
 
@@ -1994,6 +2008,7 @@
         const pct=(Number.isFinite(chg)&&Number.isFinite(prevClose)&&prevClose!==0)? (chg/prevClose*100):NaN;
         const sessLabel = best.s==='PRE'?'Pre‑Market': best.s==='POST'?'After‑Hours':'Regular';
         els.headline.textContent = compName? `${state.ticker} — ${compName}` : state.ticker;
+        setTabTitle({ ticker: state.ticker, price, pct });
         if(els.subInfo) els.subInfo.textContent=[exch,currency,`${state.range} · ${state.interval}`,`Session: ${sessLabel}`].filter(Boolean).join(' • ');
         const col = chg>0? css('--c-up') : chg<0? css('--c-down') : (css('--muted')||'#999');
         const changeHTML = Number.isFinite(chg)? `<span style="font-weight:800;color:${col}">${chg>0?'+':''}$${Math.abs(chg).toFixed(2)} (${chg>0?'+':''}${Math.abs(pct).toFixed(2)}%)</span>`:'—';
@@ -2017,7 +2032,7 @@
         }
         if(els.dayRangeLine){ els.dayRangeLine.textContent = `Day’s Range: ${(Number.isFinite(dLo)&&Number.isFinite(dHi))? '$'+dLo.toFixed(2)+' – $'+dHi.toFixed(2) : '—'}`; }
         computeIntrinsicAndDisplay();
-      }catch(e){ console.error('Quote refresh error', e); els.lastLine.innerHTML='Last: — · Change: —'; }
+      }catch(e){ console.error('Quote refresh error', e); els.lastLine.innerHTML='Last: — · Change: —'; setTabTitle({ ticker: state.ticker }); }
     }
 
     function computeIntrinsicAndDisplay(){
@@ -2053,6 +2068,7 @@
     async function go(ticker, company){
       CURRENT={...CURRENT,ticker,company};
       els.headline.textContent=`${ticker}${company?' — '+company:''}`;
+      setTabTitle({ ticker });
       els.lastLine.textContent='Loading…'; els.prevCloseLine.textContent=''; els.ivLine.textContent=''; if(els.companyLine) els.companyLine.textContent='';
       try{
         if(!FUNDAMENTALS[ticker]){ try{ FUNDAMENTALS[ticker]=await getFundamentals(ticker); }catch{ FUNDAMENTALS[ticker]={}; } }
@@ -2727,8 +2743,10 @@
     // Boot
     (async function boot(){
       try{ await loadSymbols(); }catch{}
+      document.getElementById('appVersion')?.textContent = APP_VERSION;
       applyDeviceClass();
       els.input.value=state.ticker;
+      setTabTitle({ ticker: state.ticker });
       renderSearchHistory();
       renderFavorites();
       setFavoritesPanelVisible(false);
