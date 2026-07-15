@@ -940,7 +940,7 @@
     const hasSeenInitial = (()=>{ try{return localStorage.getItem(FIRST_LOAD_KEY)==='1';}catch{return true;} })();
     const defaultRange = hasSeenInitial ? (document.querySelector('#rangeBar button[data-range].active')?.dataset.range)||'6mo' : '6mo';
     const defaultInterval = hasSeenInitial ? (document.querySelector('#rangeBar button[data-interval].active')?.dataset.interval)||'15m' : '1d';
-    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:defaultRange, interval:defaultInterval, rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0,
+    const state = { ticker: localStorage.getItem('lastTicker')||'AAPL', range:defaultRange, interval:defaultInterval, rows:[], candleTight:+(localStorage.getItem('candleTight')||75), symbols:[], symbolNameMap:{}, acMatches:[], acIndex:-1, quoteTimer:null, symbolsTried:0,
       divs:[], chartFetchId:0, chartController:null,
       customSMAs: (()=>{ try{ const a=JSON.parse(sessionStorage.getItem('customSMAs')||'[]'); return Array.isArray(a)? a.filter(n=>Number.isFinite(+n)).slice(0,12) : []; }catch{return [];} })()
     };
@@ -1005,9 +1005,31 @@
     const AUTOCOMPLETE_TIMEOUT_MS = 250; // Yahoo autocomplete request timeout before falling back to local CSV
     function isCryptoBase(sym){ return CRYPTO_BASE.has(sym); }
     function hideAC(){ if(els.list){ els.list.classList.remove('show'); els.list.innerHTML=''; } state.acMatches=[]; state.acIndex=-1; }
-    function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const html=items.slice(0,60).map((o,i)=>`<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${o.n||''}</span></div>`).join(''); els.list.innerHTML=html; els.list.classList.add('show'); }
+    function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const html=items.slice(0,60).map((o,i)=>{ const n = (o.n || companyNameForTicker(o.t) || '').trim(); return `<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${n}</span></div>`; }).join(''); els.list.innerHTML=html; els.list.classList.add('show'); }
     const COMPANY_ACRONYM_STOP = new Set(['THE','INC','INCORPORATED','CORP','CORPORATION','CO','COMPANY','LTD','LIMITED','PLC','LP','LLC','NV','SA','AG','SPA','ETF','ETN','TRUST','FUND','HOLDINGS','HOLDING','GROUP','ADR','ADS','CLASS','SERIES','SHARES','COMMON','PREFERRED','STOCK']);
     function normTickerKey(v){ return String(v||'').toUpperCase().replace(/\./g,'-').replace(/\s+/g,''); }
+    function buildSymbolNameMap(list){
+      const map = {};
+      for(const item of (list||[])){
+        const t = sanitizeTicker(item?.t || '');
+        const n = String(item?.n || '').trim();
+        if(!t || !n) continue;
+        if(!map[t]) map[t] = n;
+        const dashed = t.replace(/\./g,'-');
+        const dotted = t.replace(/-/g,'.');
+        const norm = normTickerKey(t);
+        if(!map[dashed]) map[dashed] = n;
+        if(!map[dotted]) map[dotted] = n;
+        if(!map[norm]) map[norm] = n;
+      }
+      return map;
+    }
+    function companyNameForTicker(t){
+      const key = sanitizeTicker(t);
+      if(!key) return '';
+      const map = state.symbolNameMap || {};
+      return map[key] || map[normTickerKey(key)] || map[key.replace(/\./g,'-')] || map[key.replace(/-/g,'.')] || '';
+    }
     function buildCompanyAcronym(name){
       const parts = String(name||'').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
       const core = parts.filter(p=>!COMPANY_ACRONYM_STOP.has(p) && !/^\d+$/.test(p));
@@ -1480,7 +1502,7 @@
       return matches;
     }
     async function updateAC(qstr){ const s=sanitizeTicker(qstr); if(!s){ hideAC(); return; } if(!state.symbols.length && state.symbolsTried>0){ loadSymbols(true); }
-      const localNameMap = (state.symbols||[]).reduce((acc, item)=>{ if(item.t) acc[item.t] = item.n || acc[item.t] || ''; return acc; }, {});
+      const localNameMap = state.symbolNameMap || {};
       if(s.length >= 2){
         const remote = await fetchACFromYahoo(s);
         if(remote.ok && remote.matches.length){
@@ -1488,12 +1510,21 @@
           for(const m of remote.matches){
             const t = sanitizeTicker(m.t);
             if(!t) continue;
-            merged.set(t, { t, n: (m.n || localNameMap[t] || '').trim() });
+            merged.set(t, { t, n: (m.n || localNameMap[t] || localNameMap[normTickerKey(t)] || '').trim() });
           }
           for(const m of localACMatches(s).slice(0, 80)){
             const t = sanitizeTicker(m.t);
-            if(!t || merged.has(t)) continue;
-            merged.set(t, { t, n: (m.n || localNameMap[t] || '').trim() });
+            if(!t) continue;
+            const fallbackName = (m.n || localNameMap[t] || localNameMap[normTickerKey(t)] || '').trim();
+            if(merged.has(t)){
+              const cur = merged.get(t);
+              if(cur && !cur.n && fallbackName){
+                cur.n = fallbackName;
+                merged.set(t, cur);
+              }
+              continue;
+            }
+            merged.set(t, { t, n: fallbackName });
           }
           const ranked = rankAutocompleteMatches(s, Array.from(merged.values()));
           state.acMatches=ranked;
@@ -1573,7 +1604,8 @@
         ensure('SHIB-USD','Shiba Inu (USD)');
         ensure('BBBY','Bed Bath & Beyond (delisted)');
         state.symbols = out;
-      }catch{ state.symbols=[]; }
+        state.symbolNameMap = buildSymbolNameMap(out);
+      }catch{ state.symbols=[]; state.symbolNameMap={}; }
       if(els.input && els.input.value) updateAC(els.input.value);
       return state.symbols;
     }

@@ -115,7 +115,7 @@ app.get('/api/autocomplete', async (req, res) => {
       const j = await r.json();
       const quotes = Array.isArray(j?.quotes) ? j.quotes : [];
       const matches = quotes
-        .map(q => ({ t: String(q?.symbol || '').trim().toUpperCase(), n: String(q?.longname || q?.shortname || q?.name || '').trim() }))
+        .map(q => ({ t: String(q?.symbol || '').trim().toUpperCase(), n: String(q?.longname || q?.longName || q?.shortname || q?.shortName || q?.name || '').trim() }))
         .filter(x => x.t)
         .slice(0, 40);
       return res.json(matches);
