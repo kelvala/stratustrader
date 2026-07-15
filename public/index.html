@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Stock Analyzer v.45</title>
+<title>Stock Analyzer v.46</title>
 
 <!-- Favicon -->
 <link rel="icon" type="image/png" href="/assets/stratus-trader-wide.png">
@@ -64,8 +64,11 @@
   .alerts-row.hidden{display:none}
   .fav-chip{border:1px solid color-mix(in srgb, var(--accent), #ffffff 18%);background:color-mix(in srgb, var(--accent), transparent 86%);color:var(--text);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer}
   .fav-chip:hover{background:color-mix(in srgb, var(--accent), transparent 78%);border-color:var(--accent)}
-  .alert-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid color-mix(in srgb, var(--focus), #ffffff 18%);background:color-mix(in srgb, var(--focus), transparent 88%);color:var(--text);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700}
+  .alert-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid color-mix(in srgb, var(--focus), #ffffff 18%);background:color-mix(in srgb, var(--focus), transparent 88%);color:var(--text);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700}
   .alert-chip.off{opacity:.55;filter:saturate(.8)}
+  .alert-chip .alert-body{display:flex;flex-direction:column;line-height:1.15;gap:2px}
+  .alert-chip .alert-top{display:flex;align-items:center;gap:6px}
+  .alert-chip .alert-timer{font-size:11px;color:var(--muted);font-weight:600}
   .alert-chip .alert-remove{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0 0 1px}
   .alert-chip .alert-remove:hover{color:var(--c-down)}
   .sync-btn{position:relative;padding:7px 10px;font-size:12px;font-weight:700;background:var(--panel);border:1px solid var(--border);border-radius:9px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;transition:border-color .15s,color .15s}
@@ -946,6 +949,8 @@
     const ALERT_INTERVAL_MS = 5 * 60 * 1000;
     const SYNC_TOKEN_KEY = 'stratustrader_uid';
     let alertTimer = null;
+    let alertCountdownTimer = null;
+    let nextAlertCheckAt = 0;
     let alertAudioCtx = null;
     let lastAlertsQuickCheckAt = 0;
 
@@ -1066,7 +1071,7 @@
       try{ localStorage.setItem(ALERTS_KEY, JSON.stringify(clean)); }catch{}
       renderAlerts();
     }
-    function setAlertsPanelVisible(visible){ if(!els.alertsRow) return; els.alertsRow.classList.toggle('hidden', !visible); if(els.showAlertsBtn){ els.showAlertsBtn.classList.toggle('active', visible); els.showAlertsBtn.textContent = visible ? 'Hide Alerts' : 'Alerts'; } }
+    function setAlertsPanelVisible(visible){ if(!els.alertsRow) return; els.alertsRow.classList.toggle('hidden', !visible); if(els.showAlertsBtn){ els.showAlertsBtn.classList.toggle('active', visible); els.showAlertsBtn.textContent = visible ? 'Hide Alerts' : 'Alerts'; } if(visible) updateAlertCountdownDisplays(); }
     function toggleAlertsPanel(){ if(!els.alertsRow) return; const currentlyVisible = !els.alertsRow.classList.contains('hidden'); if(!currentlyVisible){ renderAlerts(); } setAlertsPanelVisible(!currentlyVisible); }
     function isAlertSoundEnabled(){ try{ const v = localStorage.getItem(ALERT_SOUND_KEY); return v == null ? true : v === '1'; }catch{ return true; } }
     function setAlertSoundEnabled(on){ try{ localStorage.setItem(ALERT_SOUND_KEY, on ? '1' : '0'); }catch{} syncAlertSoundButton(); }
@@ -1128,11 +1133,44 @@
       return true;
     }
     function primeAlertAudio(){ const ctx = getAlertAudioCtx(); if(ctx && ctx.state === 'suspended'){ ctx.resume().catch(()=>{}); } }
+    function fmtCountdown(ms){
+      const s = Math.max(0, Math.ceil((+ms||0)/1000));
+      const h = Math.floor(s/3600);
+      const m = Math.floor((s%3600)/60);
+      const sec = s%60;
+      if(h>0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+      return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    }
+    function updateAlertCountdownDisplays(){
+      if(!els.alertsRow) return;
+      const now = Date.now();
+      const nextCheckRemain = nextAlertCheckAt>0 ? Math.max(0, nextAlertCheckAt-now) : NaN;
+      const byId = new Map(getAlerts().map(a=>[a.id,a]));
+      els.alertsRow.querySelectorAll('[data-alert-timer]').forEach(node=>{
+        const id = node.getAttribute('data-alert-timer');
+        const a = byId.get(id);
+        if(!a){ node.textContent = '—'; return; }
+        if(!a.enabled){ node.textContent = 'Paused'; return; }
+        const cooldownMs = Math.max(1, +(a.cooldownMin||30)) * 60 * 1000;
+        const cooldownRemain = a.lastTriggeredAt ? Math.max(0, (a.lastTriggeredAt + cooldownMs) - now) : 0;
+        if(Number.isFinite(nextCheckRemain)){
+          if(cooldownRemain > 0){
+            const nextPossible = Math.max(nextCheckRemain, cooldownRemain);
+            node.textContent = `Next trigger window ${fmtCountdown(nextPossible)} (cooldown ${fmtCountdown(cooldownRemain)})`;
+          }else{
+            node.textContent = `Next check ${fmtCountdown(nextCheckRemain)}`;
+          }
+        }else{
+          node.textContent = cooldownRemain>0 ? `Cooldown ${fmtCountdown(cooldownRemain)}` : 'Ready';
+        }
+      });
+    }
     function renderAlerts(){
       if(!els.alertsRow) return;
       const alerts = getAlerts();
       if(!alerts.length){ els.alertsRow.innerHTML='<div class="history-empty">No alerts yet</div>'; return; }
-      els.alertsRow.innerHTML = alerts.map(a=>`<div class="alert-chip ${a.enabled?'':'off'}" data-alert-toggle="${a.id}" title="Toggle enabled"><span>${a.ticker} ${opLabel(a.op)} $${a.target.toFixed(2)}</span>${a.once?'<span style="opacity:.8">(once)</span>':''}<button class="alert-remove" type="button" data-alert-remove="${a.id}" title="Remove alert">×</button></div>`).join('');
+      els.alertsRow.innerHTML = alerts.map(a=>`<div class="alert-chip ${a.enabled?'':'off'}" data-alert-toggle="${a.id}" title="Toggle enabled"><div class="alert-body"><div class="alert-top"><span>${a.ticker} ${opLabel(a.op)} $${a.target.toFixed(2)}</span>${a.once?'<span style="opacity:.8">(once)</span>':''}</div><span class="alert-timer" data-alert-timer="${a.id}">—</span></div><button class="alert-remove" type="button" data-alert-remove="${a.id}" title="Remove alert">×</button></div>`).join('');
+      updateAlertCountdownDisplays();
     }
     function openAddAlertModal(){
       let m = document.getElementById('alertModal');
@@ -1240,7 +1278,18 @@
       if(changed) saveAlerts(next);
       if(opts?.manual && !changed) showToast('Alerts checked: no triggers');
     }
-    function scheduleAlertChecks(){ clearInterval(alertTimer); alertTimer = setInterval(()=>{ checkAlertsOnce(); }, ALERT_INTERVAL_MS); }
+    function scheduleAlertChecks(){
+      clearInterval(alertTimer);
+      clearInterval(alertCountdownTimer);
+      nextAlertCheckAt = Date.now() + ALERT_INTERVAL_MS;
+      alertTimer = setInterval(()=>{
+        checkAlertsOnce();
+        nextAlertCheckAt = Date.now() + ALERT_INTERVAL_MS;
+        updateAlertCountdownDisplays();
+      }, ALERT_INTERVAL_MS);
+      alertCountdownTimer = setInterval(updateAlertCountdownDisplays, 1000);
+      updateAlertCountdownDisplays();
+    }
     async function fetchACFromYahoo(q){ if(!q) return { ok:true, matches:[] }; const controller = new AbortController(); const timeout = setTimeout(()=>controller.abort(), AUTOCOMPLETE_TIMEOUT_MS);
       try{
         const r = await fetch(`/api/autocomplete?query=${encodeURIComponent(q)}`, { cache:'no-store', signal: controller.signal });
