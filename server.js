@@ -127,6 +127,58 @@ app.get('/api/autocomplete', async (req, res) => {
   return res.json([]);
 });
 
+app.get('/api/news', async (req, res) => {
+  const ticker = String(req.query.ticker || '').trim().toUpperCase();
+  if (!ticker) {
+    return res.status(400).json({ error: 'ticker required' });
+  }
+
+  const urls = [
+    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(ticker)}&lang=en-US&region=US&quotesCount=0&newsCount=16`,
+    `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(ticker)}&lang=en-US&region=US&quotesCount=0&newsCount=16`
+  ];
+
+  const parseHeadlines = (payload) => {
+    const news = Array.isArray(payload?.news) ? payload.news : [];
+    const out = [];
+    const seen = new Set();
+    for (const n of news) {
+      const title = String(n?.title || '').trim();
+      let url = String(n?.link || n?.url || '').trim();
+      if (!url && n?.clickThroughUrl?.url) url = String(n.clickThroughUrl.url || '').trim();
+      const source = String(n?.publisher || n?.provider || '').trim() || 'Yahoo Finance';
+      const ts = Number(n?.providerPublishTime);
+      const timeMs = Number.isFinite(ts) ? (ts > 1e12 ? ts : ts * 1000) : null;
+      if (!title || !url) continue;
+      const key = `${url}|${title}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        title,
+        url,
+        source,
+        timeMs,
+        timeISO: Number.isFinite(timeMs) ? new Date(timeMs).toISOString() : null
+      });
+    }
+    return out.slice(0, 12);
+  };
+
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' } });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const headlines = parseHeadlines(j);
+      if (headlines.length) return res.json({ ticker, headlines });
+    } catch (e) {
+      console.warn('[news] fetch failed', e?.message || e);
+    }
+  }
+
+  return res.json({ ticker, headlines: [] });
+});
+
 app.get('/api/quote', async (req, res) => {
   const { ticker } = req.query;
   if (!ticker) {

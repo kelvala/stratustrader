@@ -86,6 +86,11 @@
   .history-empty{font-size:12px;color:var(--muted);padding:2px 2px 0}
   .favorite-toggle{padding:8px 12px;background:color-mix(in srgb, var(--panel), #ffffff 4%);color:var(--text);border:1px solid var(--border)}
   .favorite-toggle.active{background:color-mix(in srgb, var(--accent), transparent 84%);border-color:var(--accent);color:var(--accent)}
+  .scan-badge{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.2px;border:1px solid var(--border);background:color-mix(in srgb, var(--panel), #ffffff 4%);color:var(--muted);white-space:nowrap}
+  .scan-badge.live{border-color:color-mix(in srgb, var(--c-up), #ffffff 10%);background:color-mix(in srgb, var(--c-up), transparent 84%);color:var(--c-up)}
+  .scan-badge.default{border-color:color-mix(in srgb, var(--accent), #ffffff 10%);background:color-mix(in srgb, var(--accent), transparent 86%);color:var(--accent)}
+  .scan-badge.backoff{border-color:color-mix(in srgb, var(--c-div), #ffffff 8%);background:color-mix(in srgb, var(--c-div), transparent 84%);color:var(--c-div)}
+  .scan-badge.idle{opacity:.8}
   @media (max-width:720px){ .search-inline{flex:1 1 100%;min-width:0} .input-wrap{flex:1 1 100%;max-width:100%} }
   .ticker-input{width:100%;min-width:120px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text);text-transform:uppercase;font-size:16px}
   .btn{padding:10px 14px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:800;cursor:pointer}
@@ -375,6 +380,7 @@
           <button id="addAlertBtn" class="btn inline favorite-toggle" type="button" title="Add a price alert">+ Alert</button>
           <button id="alertSoundBtn" class="btn inline favorite-toggle" type="button" title="Toggle alert sound">Sound On</button>
           <button id="alertModeBtn" class="btn inline favorite-toggle" type="button" title="Cycle alert sound mode">Tone: Normal</button>
+          <span id="alertScanBadge" class="scan-badge idle" title="Current alert scan cadence">Scan: idle</span>
         </div>
         <div id="searchHistory" class="history-row" aria-label="Recent tickers"></div>
         <div id="favoritesRow" class="favorites-row hidden" aria-label="Favorite tickers"></div>
@@ -435,34 +441,37 @@
 
     <script>
       (function(){
-        // Mock headline generator that follows the currently selected ticker.
-        // It polls the app state for `state.ticker` (if present) or the input #q and updates headlines.
-        function nowISO(){ return new Date().toLocaleString(); }
-
-        function makeHeadlinesFor(sym){
+        function fmtTime(ms){
+          if(!Number.isFinite(ms)) return new Date().toLocaleString();
+          return new Date(ms).toLocaleString();
+        }
+        function fallbackHeadlines(sym){
           const s = (sym||'TGT').toUpperCase();
-          // If we have a known example article for this symbol, prefer direct links (mock)
-          const examples = {
-            'TGT': [
-              { src: 'Reuters', title: `${s}: Target announces elimination of 1,800 corporate roles in restructuring.`, url: 'https://www.reuters.com/business/retail-consumer/target-announces-layoffs-2025-10-25/' },
-              { src: 'Company PR', title: `${s} outlines cost actions and Q3 results in press release.`, url: 'https://corporate.target.com/news' },
-              { src: 'MarketWatch', title: `Analysts react to ${s} restructuring and update estimates.`, url: 'https://www.marketwatch.com/search?q=Target' }
-            ],
-            'AAPL': [
-              { src: 'Apple Newsroom', title: `${s}: Apple announces product/service update and guidance.`, url: 'https://www.apple.com/newsroom/' },
-              { src: 'Reuters', title: `${s} posts quarterly results; services remain a bright spot.`, url: 'https://www.reuters.com/companies/AAPL.O' },
-              { src: 'Analyst', title: `Analysts discuss ${s} supply chain and outlook.`, url: 'https://www.cnbc.com/search/?query=Apple' }
-            ]
-          };
-
-          if (examples[s]) return examples[s].map(h => ({ time: nowISO(), src: h.src, title: h.title, url: h.url }));
-
-          // Fallback: generate headlines and point to a news search for the symbol
           return [
-            { time: nowISO(), src: 'Reuters', title: `${s}: Company announces restructuring to reduce costs and improve margins.`, url: `https://www.google.com/search?q=${encodeURIComponent(s + ' news')}&tbm=nws` },
-            { time: nowISO(), src: 'Company PR', title: `${s} reports quarterly results; management highlights category strength.`, url: `https://www.google.com/search?q=${encodeURIComponent(s + ' press release')}&tbm=nws` },
-            { time: nowISO(), src: 'Analyst', title: `Analysts update ${s} outlook after strategic changes.`, url: `https://www.google.com/search?q=${encodeURIComponent(s + ' analysts raise price target')}&tbm=nws` }
+            { time: fmtTime(Date.now()), src: 'Yahoo', title: `${s}: Open Yahoo Finance news search`, url: `https://finance.yahoo.com/quote/${encodeURIComponent(s)}/news` },
+            { time: fmtTime(Date.now()), src: 'Google News', title: `${s}: Open Google News results`, url: `https://www.google.com/search?q=${encodeURIComponent(s + ' stock news')}&tbm=nws` }
           ];
+        }
+        async function fetchHeadlines(sym){
+          const s = (sym||'TGT').toUpperCase();
+          try{
+            const r = await fetch(`/api/news?ticker=${encodeURIComponent(s)}`, { cache:'no-store' });
+            if(!r.ok) return fallbackHeadlines(s);
+            const j = await r.json();
+            const arr = Array.isArray(j?.headlines) ? j.headlines : [];
+            const mapped = arr
+              .map(h=>({
+                time: fmtTime(Number(h?.timeMs)),
+                src: String(h?.source||'Yahoo Finance').trim() || 'Yahoo Finance',
+                title: String(h?.title||'').trim(),
+                url: String(h?.url||'').trim()
+              }))
+              .filter(h=>h.title && h.url)
+              .slice(0, 12);
+            return mapped.length ? mapped : fallbackHeadlines(s);
+          }catch{
+            return fallbackHeadlines(s);
+          }
         }
 
         const content = document.getElementById('siteTickerContent');
@@ -470,10 +479,11 @@
         const collapseBtn = document.getElementById('siteCollapse');
         const panelEl = document.getElementById('siteTickerPanel');
 
-        let HEADLINES = makeHeadlinesFor('TGT');
+        let HEADLINES = fallbackHeadlines('TGT');
         let idx = 0, running = true, timer = null;
         const MODE_KEY = 'siteTickerMode_v1'; // 'compact' or 'expanded'
         let currentSym = null;
+        let loadToken = 0;
 
         function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
         function render(i){ const h = HEADLINES[i]||{}; content.innerHTML = `<a class="headline" href="${h.url||'#'}" target="_blank" rel="noopener"><span class="meta">${escapeHtml(h.time||'')}${h.src? ' • '+escapeHtml(h.src):''}</span> ${escapeHtml(h.title||'')}</a>`; }
@@ -485,7 +495,7 @@
           if(mode==='expanded'){
             panelEl.style.display = '';
             const h = HEADLINES[idx]||{};
-            panelEl.innerHTML = `<div style="white-space:pre-wrap">${escapeHtml(h.time||'')}${h.src? ' • '+escapeHtml(h.src):''}\n\n${escapeHtml(h.title||'')}\n\n(Full article would be fetched from the source.)</div><p style="margin-top:8px"><a href="${h.url||'#'}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:800">Read original</a></p>`;
+            panelEl.innerHTML = `<div style="white-space:pre-wrap">${escapeHtml(h.time||'')}${h.src? ' • '+escapeHtml(h.src):''}\n\n${escapeHtml(h.title||'')}</div><p style="margin-top:8px"><a href="${h.url||'#'}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:800">Read original</a></p>`;
             collapseBtn.textContent = 'Compact';
             collapseBtn.setAttribute('aria-expanded','true');
             if(running) stop();
@@ -506,12 +516,18 @@
           return null;
         }
 
-        function pollTicker(){
+        async function pollTicker(){
           const sym = getCurrentTicker() || 'TGT';
           if(sym !== currentSym){
             currentSym = sym;
-            HEADLINES = makeHeadlinesFor(currentSym);
+            const token = ++loadToken;
+            HEADLINES = [{ time: fmtTime(Date.now()), src: 'News', title: `Loading ${currentSym} headlines...`, url: `https://finance.yahoo.com/quote/${encodeURIComponent(currentSym)}/news` }];
             idx = 0; render(idx);
+            const fresh = await fetchHeadlines(currentSym);
+            if(token !== loadToken) return;
+            HEADLINES = fresh;
+            idx = 0;
+            render(idx);
             // if expanded, refresh panel content
             const mode = localStorage.getItem(MODE_KEY) === 'expanded' ? 'expanded' : 'compact';
             applyMode(mode);
@@ -527,9 +543,10 @@
         });
 
         // poll for ticker changes so headlines follow the chart
-        setInterval(pollTicker, 900);
+        setInterval(pollTicker, 1500);
         content.addEventListener('mouseenter', ()=>{ if(running) stop(); });
         content.addEventListener('mouseleave', ()=>{ if(!running) start(); });
+        pollTicker();
         render(0); start();
       })();
     </script>
@@ -723,7 +740,7 @@
 
     /* ---------- Elements ---------- */
     const els = {
-      input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'), searchHistory:q('#searchHistory'), favoritesRow:q('#favoritesRow'), favoriteToggleBtn:q('#favoriteToggleBtn'), showFavoritesBtn:q('#showFavoritesBtn'), alertsRow:q('#alertsRow'), showAlertsBtn:q('#showAlertsBtn'), addAlertBtn:q('#addAlertBtn'), alertSoundBtn:q('#alertSoundBtn'), alertModeBtn:q('#alertModeBtn'),
+      input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'), searchHistory:q('#searchHistory'), favoritesRow:q('#favoritesRow'), favoriteToggleBtn:q('#favoriteToggleBtn'), showFavoritesBtn:q('#showFavoritesBtn'), alertsRow:q('#alertsRow'), showAlertsBtn:q('#showAlertsBtn'), addAlertBtn:q('#addAlertBtn'), alertSoundBtn:q('#alertSoundBtn'), alertModeBtn:q('#alertModeBtn'), alertScanBadge:q('#alertScanBadge'),
       headline:q('#headline'), subInfo:q('#subInfo'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'), companyLine:q('#companyLine'),
       chartCard:q('#chartCard'), chart:q('#chart'),
       rangeBar:q('#rangeBar'), toggles:q('#toggles'),
@@ -950,11 +967,17 @@
     const ALERT_SOUND_KEY = 'tickerAlertsSound_v1';
     const ALERT_SOUND_MODE_KEY = 'tickerAlertsSoundMode_v1';
     const ALERTS_LIMIT = 30;
-    const ALERT_INTERVAL_MS = 5 * 60 * 1000;
+    const ALERT_INTERVAL_DEFAULT_MS = 5 * 60 * 1000;
+    const ALERT_INTERVAL_FAST_MS = 1 * 60 * 1000;
+    const ALERT_FAST_WATCHLIST_MAX = 3;
+    const ALERT_BACKOFF_STEPS_MS = [0, 2 * 60 * 1000, 5 * 60 * 1000, 10 * 60 * 1000];
     const SYNC_TOKEN_KEY = 'stratustrader_uid';
     let alertTimer = null;
     let alertCountdownTimer = null;
     let nextAlertCheckAt = 0;
+    let alertBackoffLevel = 0;
+    let alertBackoffUntil = 0;
+    let alertBackoffNoticeAt = 0;
     let alertAudioCtx = null;
     let lastAlertsQuickCheckAt = 0;
 
@@ -1081,8 +1104,17 @@
       }catch{return [];}
     }
     function saveAlerts(alerts){
-      const clean = (alerts||[]).map(normalizeAlert).filter(Boolean).slice(0, ALERTS_LIMIT);
-      try{ localStorage.setItem(ALERTS_KEY, JSON.stringify(clean)); }catch{}
+      const clean = (alerts||[]).map(normalizeAlert).filter(Boolean);
+      const deduped = [];
+      const seen = new Set();
+      for(const a of clean){
+        const key = `${a.ticker}|${a.op}|${a.target.toFixed(4)}`;
+        if(seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(a);
+      }
+      const capped = deduped.slice(0, ALERTS_LIMIT);
+      try{ localStorage.setItem(ALERTS_KEY, JSON.stringify(capped)); }catch{}
       renderAlerts();
     }
     function setAlertsPanelVisible(visible){ if(!els.alertsRow) return; els.alertsRow.classList.toggle('hidden', !visible); if(els.showAlertsBtn){ els.showAlertsBtn.classList.toggle('active', visible); els.showAlertsBtn.textContent = visible ? 'Hide Alerts' : 'Alerts'; } if(visible) updateAlertCountdownDisplays(); }
@@ -1182,8 +1214,9 @@
     function renderAlerts(){
       if(!els.alertsRow) return;
       const alerts = getAlerts();
-      if(!alerts.length){ els.alertsRow.innerHTML='<div class="history-empty">No alerts yet</div>'; return; }
+      if(!alerts.length){ els.alertsRow.innerHTML='<div class="history-empty">No alerts yet</div>'; renderAlertScanBadge(); return; }
       els.alertsRow.innerHTML = alerts.map(a=>`<div class="alert-chip ${a.enabled?'':'off'}" data-alert-toggle="${a.id}" title="Toggle enabled"><div class="alert-body"><div class="alert-top"><span>${a.ticker} ${opLabel(a.op)} $${a.target.toFixed(2)}</span>${a.once?'<span style="opacity:.8">(once)</span>':''}</div><span class="alert-timer" data-alert-timer="${a.id}">—</span></div><button class="alert-remove" type="button" data-alert-remove="${a.id}" title="Remove alert">×</button></div>`).join('');
+      renderAlertScanBadge();
       updateAlertCountdownDisplays();
     }
     function openAddAlertModal(){
@@ -1204,7 +1237,7 @@
                 <input id="alertCooldown" type="number" step="1" min="1" max="240" value="30" style="width:84px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text)" />
               </label>
             </div>
-            <div style="margin-top:6px;font-size:12px;color:var(--muted)">Checks run about every 5 minutes by default. Increase cooldown minutes here to avoid spammy repeat notifications.</div>
+            <div style="margin-top:6px;font-size:12px;color:var(--muted)">Checks run about every 5 minutes by default, and can auto-speed to 1 minute for a tiny watchlist during market hours. Increase cooldown minutes here to avoid repeat notifications.</div>
             <div style="display:flex;gap:8px;margin-top:12px"><button class="btn" id="alertSaveBtn">Save Alert</button><button class="tool-btn" id="alertCloseBtn">Cancel</button></div>
           </div></div>`;
         document.body.appendChild(m);
@@ -1219,6 +1252,7 @@
           if(!ticker || !Number.isFinite(target)){ showToast('Enter ticker and target price'); return; }
           const next = [{ id:`${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ticker, op, target, enabled:true, once, cooldownMin, lastSeenPrice:null, lastTriggeredAt:0, createdAt:Date.now() }, ...getAlerts()].slice(0, ALERTS_LIMIT);
           saveAlerts(next);
+          scheduleAlertChecks();
           setAlertsPanelVisible(true);
           closeAlertModal();
           showToast(`Alert added: ${ticker} ${opLabel(op)} $${target.toFixed(2)}`);
@@ -1234,8 +1268,9 @@
     function updateAlert(id, patch){
       const next = getAlerts().map(a=> a.id===id ? normalizeAlert({ ...a, ...patch }) : a).filter(Boolean);
       saveAlerts(next);
+      scheduleAlertChecks();
     }
-    function removeAlert(id){ saveAlerts(getAlerts().filter(a=>a.id!==id)); }
+    function removeAlert(id){ saveAlerts(getAlerts().filter(a=>a.id!==id)); scheduleAlertChecks(); }
     function maybeNotify(msg){
       try{
         if(typeof Notification === 'undefined') return;
@@ -1246,10 +1281,12 @@
     async function fetchLatestQuotePrice(ticker){
       try{
         const r = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { cache:'no-store' });
-        if(!r.ok) return NaN;
+        if(!r.ok) return { price:NaN, status:r.status, throttled: r.status===429 || r.status===502 || r.status===503 };
         const j = await r.json();
-        return parseQuoteForPrice(j);
-      }catch{return NaN;}
+        return { price: parseQuoteForPrice(j), status:r.status, throttled:false };
+      }catch{
+        return { price:NaN, status:0, throttled:false };
+      }
     }
     function isAlertCrossed(alert, price){
       const last = Number.isFinite(+alert.lastSeenPrice) ? +alert.lastSeenPrice : null;
@@ -1260,19 +1297,114 @@
       if(!(price <= alert.target)) return false;
       return last == null || last > alert.target;
     }
+    function getEnabledAlerts(){ return getAlerts().filter(a=>a.enabled); }
+    function currentAlertBaseIntervalMs(){
+      const enabled = getEnabledAlerts();
+      if(!enabled.length) return ALERT_INTERVAL_DEFAULT_MS;
+      const uniqueTickers = new Set(enabled.map(a=>a.ticker));
+      const inRegularSession = isRegularSessionET(Date.now());
+      if(inRegularSession && uniqueTickers.size > 0 && uniqueTickers.size <= ALERT_FAST_WATCHLIST_MAX){
+        return ALERT_INTERVAL_FAST_MS;
+      }
+      return ALERT_INTERVAL_DEFAULT_MS;
+    }
+    function currentAlertIntervalMs(){
+      const base = currentAlertBaseIntervalMs();
+      const now = Date.now();
+      if(now < alertBackoffUntil){
+        const step = ALERT_BACKOFF_STEPS_MS[Math.min(alertBackoffLevel, ALERT_BACKOFF_STEPS_MS.length-1)] || 0;
+        return Math.max(base, step);
+      }
+      return base;
+    }
+    function renderAlertScanBadge(){
+      if(!els.alertScanBadge) return;
+      const enabled = getEnabledAlerts();
+      const cls = ['scan-badge'];
+      let label = 'Scan: idle';
+      if(enabled.length){
+        const base = currentAlertBaseIntervalMs();
+        const effective = currentAlertIntervalMs();
+        const backoff = Date.now() < alertBackoffUntil && effective > base;
+        if(backoff){
+          cls.push('backoff');
+          label = `Scan: backoff ${Math.max(1, Math.round(effective/60000))}m`;
+        }else if(base <= ALERT_INTERVAL_FAST_MS){
+          cls.push('live');
+          label = 'Scan: live 1m';
+        }else{
+          cls.push('default');
+          label = 'Scan: default 5m';
+        }
+      }else{
+        cls.push('idle');
+      }
+      els.alertScanBadge.className = cls.join(' ');
+      els.alertScanBadge.textContent = label;
+    }
+    function registerAlertScanOutcome({ successes=0, failures=0, throttled=false }={}){
+      const now = Date.now();
+      if(failures <= 0){
+        if(successes > 0){
+          alertBackoffLevel = 0;
+          alertBackoffUntil = 0;
+          renderAlertScanBadge();
+        }
+        return;
+      }
+      if(throttled || successes===0){
+        const bump = throttled ? 2 : 1;
+        alertBackoffLevel = Math.min(ALERT_BACKOFF_STEPS_MS.length-1, alertBackoffLevel + bump);
+      }else{
+        alertBackoffLevel = Math.min(ALERT_BACKOFF_STEPS_MS.length-1, alertBackoffLevel + 1);
+      }
+      const step = ALERT_BACKOFF_STEPS_MS[alertBackoffLevel] || ALERT_INTERVAL_DEFAULT_MS;
+      alertBackoffUntil = now + step;
+      if(throttled && (now - alertBackoffNoticeAt > 2 * 60 * 1000)){
+        alertBackoffNoticeAt = now;
+        showToast('Alerts: upstream busy, slowing checks briefly');
+      }
+      renderAlertScanBadge();
+    }
     async function checkAlertsOnce(opts={}){
       const alerts = getAlerts();
       if(!alerts.length) return;
       const enabled = alerts.filter(a=>a.enabled);
       if(!enabled.length) return;
-      const uniqueTickers = Array.from(new Set(enabled.map(a=>a.ticker)));
+      const now = Date.now();
+      const alertByTicker = new Map();
+      for(const a of enabled){
+        const arr = alertByTicker.get(a.ticker) || [];
+        arr.push(a);
+        alertByTicker.set(a.ticker, arr);
+      }
+      // Skip quote calls if every alert on a ticker is still cooling down and already has a seen price.
+      const uniqueTickers = Array.from(alertByTicker.entries())
+        .filter(([_, arr])=> arr.some(a=>{
+          const cooldownMs = Math.max(1, +(a.cooldownMin||30)) * 60 * 1000;
+          const cooling = !!a.lastTriggeredAt && ((now - a.lastTriggeredAt) < cooldownMs);
+          return !cooling || !Number.isFinite(+a.lastSeenPrice);
+        }))
+        .map(([ticker])=>ticker);
+      if(!uniqueTickers.length){
+        if(opts?.manual) showToast('Alerts checked: all active alerts are in cooldown');
+        return;
+      }
       const quoteEntries = await Promise.all(uniqueTickers.map(async t=> [t, await fetchLatestQuotePrice(t)]));
       const quotes = new Map(quoteEntries);
       let changed = false;
-      const now = Date.now();
+      let successes = 0;
+      let failures = 0;
+      let throttled = false;
+      for(const [, res] of quoteEntries){
+        if(Number.isFinite(+res?.price)) successes++;
+        else failures++;
+        if(res?.throttled) throttled = true;
+      }
+      registerAlertScanOutcome({ successes, failures, throttled });
       const next = alerts.map(a=>{
         if(!a.enabled) return a;
-        const px = quotes.get(a.ticker);
+        const px = quotes.get(a.ticker)?.price;
         if(!Number.isFinite(px)) return a;
         const crossed = isAlertCrossed(a, px);
         const cooldownMs = Math.max(1, +(a.cooldownMin||30)) * 60 * 1000;
@@ -1293,14 +1425,20 @@
       if(opts?.manual && !changed) showToast('Alerts checked: no triggers');
     }
     function scheduleAlertChecks(){
-      clearInterval(alertTimer);
+      clearTimeout(alertTimer);
       clearInterval(alertCountdownTimer);
-      nextAlertCheckAt = Date.now() + ALERT_INTERVAL_MS;
-      alertTimer = setInterval(()=>{
-        checkAlertsOnce();
-        nextAlertCheckAt = Date.now() + ALERT_INTERVAL_MS;
+      const tick = async ()=>{
+        await checkAlertsOnce();
+        const intervalMs = currentAlertIntervalMs();
+        nextAlertCheckAt = Date.now() + intervalMs;
+        renderAlertScanBadge();
         updateAlertCountdownDisplays();
-      }, ALERT_INTERVAL_MS);
+        alertTimer = setTimeout(tick, intervalMs);
+      };
+      const firstInterval = currentAlertIntervalMs();
+      nextAlertCheckAt = Date.now() + firstInterval;
+      renderAlertScanBadge();
+      alertTimer = setTimeout(tick, firstInterval);
       alertCountdownTimer = setInterval(updateAlertCountdownDisplays, 1000);
       updateAlertCountdownDisplays();
     }
