@@ -50,14 +50,24 @@
     body.chart-max .toolbar{opacity:0;pointer-events:none}
   .ticker-wrap{display:flex;align-items:center;gap:8px;flex:1;min-width:0;flex-wrap:wrap}
   .ticker-wrap label{font-weight:800;opacity:.9}
+  .search-inline{display:flex;align-items:center;gap:8px;flex:0 1 360px;min-width:220px}
   .input-wrap{position:relative;flex:0 1 460px;max-width:460px;width:100%}
+  .search-inline .input-wrap{flex:1 1 auto;max-width:320px}
+  .search-inline .btn.inline{flex:0 0 auto;white-space:nowrap}
+  .action-row{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
   .history-row{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
   .history-chip{border:1px solid var(--border);background:color-mix(in srgb, var(--panel), #ffffff 3%);color:var(--text);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer}
   .history-chip:hover{background:var(--hover);border-color:var(--accent)}
   .favorites-row{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
   .favorites-row.hidden{display:none}
+  .alerts-row{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+  .alerts-row.hidden{display:none}
   .fav-chip{border:1px solid color-mix(in srgb, var(--accent), #ffffff 18%);background:color-mix(in srgb, var(--accent), transparent 86%);color:var(--text);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer}
   .fav-chip:hover{background:color-mix(in srgb, var(--accent), transparent 78%);border-color:var(--accent)}
+  .alert-chip{display:inline-flex;align-items:center;gap:6px;border:1px solid color-mix(in srgb, var(--focus), #ffffff 18%);background:color-mix(in srgb, var(--focus), transparent 88%);color:var(--text);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700}
+  .alert-chip.off{opacity:.55;filter:saturate(.8)}
+  .alert-chip .alert-remove{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0 0 1px}
+  .alert-chip .alert-remove:hover{color:var(--c-down)}
   .sync-btn{position:relative;padding:7px 10px;font-size:12px;font-weight:700;background:var(--panel);border:1px solid var(--border);border-radius:9px;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;transition:border-color .15s,color .15s}
   .sync-btn:hover{color:var(--text);border-color:var(--accent)}
   .sync-btn.synced{color:var(--c-up);border-color:var(--c-up)}
@@ -72,7 +82,7 @@
   .history-empty{font-size:12px;color:var(--muted);padding:2px 2px 0}
   .favorite-toggle{padding:8px 12px;background:color-mix(in srgb, var(--panel), #ffffff 4%);color:var(--text);border:1px solid var(--border)}
   .favorite-toggle.active{background:color-mix(in srgb, var(--accent), transparent 84%);border-color:var(--accent);color:var(--accent)}
-  @media (max-width:720px){ .input-wrap{flex:1 1 100%;max-width:100%} }
+  @media (max-width:720px){ .search-inline{flex:1 1 100%;min-width:0} .input-wrap{flex:1 1 100%;max-width:100%} }
   .ticker-input{width:100%;min-width:120px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text);text-transform:uppercase;font-size:16px}
   .btn{padding:10px 14px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:800;cursor:pointer}
   .btn.inline{padding:8px 12px}
@@ -298,6 +308,7 @@
   /* Toast */
   #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(40px);background:var(--panel);color:var(--text);border:1px solid var(--border);padding:10px 14px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:4000;box-shadow:0 6px 24px -2px rgba(0,0,0,.45)}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.alert{border-color:color-mix(in srgb, var(--accent), #ffffff 30%);background:color-mix(in srgb, var(--panel), var(--accent) 10%);box-shadow:0 8px 26px -2px color-mix(in srgb, var(--accent), transparent 55%)}
 
   /* Market Overview mini-cards */
   .mkt-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0}
@@ -346,15 +357,24 @@
     <div class="toolbar">
       <div class="ticker-wrap">
         <label for="q">Ticker</label>
-        <div class="input-wrap">
-          <input id="q" class="ticker-input" type="text" placeholder="AAPL, MSFT… or BTC" spellcheck="false" autocomplete="off"/>
-          <div id="ac" class="ac" role="listbox" aria-label="Suggestions"></div>
+        <div class="search-inline">
+          <div class="input-wrap">
+            <input id="q" class="ticker-input" type="text" placeholder="AAPL, MSFT… or BTC" spellcheck="false" autocomplete="off"/>
+            <div id="ac" class="ac" role="listbox" aria-label="Suggestions"></div>
+          </div>
+          <button id="searchBtn" class="btn inline" type="button">Search</button>
         </div>
-        <button id="showFavoritesBtn" class="btn inline favorite-toggle" type="button" title="Show saved favorites">Favorites</button>
-        <button id="favoriteToggleBtn" class="btn inline favorite-toggle" type="button" title="Add or remove the current ticker from favorites">☆</button>
-        <button id="searchBtn" class="btn inline" type="button">Search</button>
+        <div class="action-row" aria-label="Ticker actions">
+          <button id="showFavoritesBtn" class="btn inline favorite-toggle" type="button" title="Show saved favorites">Favorites</button>
+          <button id="favoriteToggleBtn" class="btn inline favorite-toggle" type="button" title="Add or remove the current ticker from favorites">☆</button>
+          <button id="showAlertsBtn" class="btn inline favorite-toggle" type="button" title="Show price alerts">Alerts</button>
+          <button id="addAlertBtn" class="btn inline favorite-toggle" type="button" title="Add a price alert">+ Alert</button>
+          <button id="alertSoundBtn" class="btn inline favorite-toggle" type="button" title="Toggle alert sound">Sound On</button>
+          <button id="alertModeBtn" class="btn inline favorite-toggle" type="button" title="Cycle alert sound mode">Tone: Normal</button>
+        </div>
         <div id="searchHistory" class="history-row" aria-label="Recent tickers"></div>
         <div id="favoritesRow" class="favorites-row hidden" aria-label="Favorite tickers"></div>
+        <div id="alertsRow" class="alerts-row hidden" aria-label="Price alerts"></div>
       </div>
       <div class="toolsbar" id="toolsBar">
         <button class="tool-btn" id="toolGPTs" aria-label="Open GPTs">🧠 <span class="tool-txt">GPTs</span></button>
@@ -698,7 +718,7 @@
 
     /* ---------- Elements ---------- */
     const els = {
-      input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'), searchHistory:q('#searchHistory'), favoritesRow:q('#favoritesRow'), favoriteToggleBtn:q('#favoriteToggleBtn'), showFavoritesBtn:q('#showFavoritesBtn'),
+      input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'), searchHistory:q('#searchHistory'), favoritesRow:q('#favoritesRow'), favoriteToggleBtn:q('#favoriteToggleBtn'), showFavoritesBtn:q('#showFavoritesBtn'), alertsRow:q('#alertsRow'), showAlertsBtn:q('#showAlertsBtn'), addAlertBtn:q('#addAlertBtn'), alertSoundBtn:q('#alertSoundBtn'), alertModeBtn:q('#alertModeBtn'),
       headline:q('#headline'), subInfo:q('#subInfo'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'), companyLine:q('#companyLine'),
       chartCard:q('#chartCard'), chart:q('#chart'),
       rangeBar:q('#rangeBar'), toggles:q('#toggles'),
@@ -731,7 +751,8 @@
     /* ---------- Toast ---------- */
     let toast = q('#toast');
     if(!toast){ toast = document.createElement('div'); toast.id='toast'; document.body.appendChild(toast); }
-    function showToast(msg, ms=2600){ toast.textContent=msg; toast.classList.add('show'); clearTimeout(showToast._t); showToast._t=setTimeout(()=>toast.classList.remove('show'), ms); }
+    function showToast(msg, ms=2600){ toast.classList.remove('alert'); toast.textContent=msg; toast.classList.add('show'); clearTimeout(showToast._t); showToast._t=setTimeout(()=>toast.classList.remove('show'), ms); }
+    function showAlertToast(msg, ms=5200){ toast.classList.add('alert'); toast.textContent=`Alert: ${msg}`; toast.classList.add('show'); clearTimeout(showToast._t); showToast._t=setTimeout(()=>{ toast.classList.remove('show'); toast.classList.remove('alert'); }, ms); }
 
     /* ---------- Clean UI preview toggle ---------- */
     try{
@@ -918,7 +939,15 @@
     const SEARCH_HISTORY_LIMIT = 8;
     const FAVORITES_KEY = 'tickerFavorites_v1';
     const FAVORITES_LIMIT = 12;
+    const ALERTS_KEY = 'tickerAlerts_v1';
+    const ALERT_SOUND_KEY = 'tickerAlertsSound_v1';
+    const ALERT_SOUND_MODE_KEY = 'tickerAlertsSoundMode_v1';
+    const ALERTS_LIMIT = 30;
+    const ALERT_INTERVAL_MS = 5 * 60 * 1000;
     const SYNC_TOKEN_KEY = 'stratustrader_uid';
+    let alertTimer = null;
+    let alertAudioCtx = null;
+    let lastAlertsQuickCheckAt = 0;
 
     function getUserToken(){ try{ return localStorage.getItem(SYNC_TOKEN_KEY)||null; }catch{ return null; } }
     function setUserToken(t){ try{ if(t) localStorage.setItem(SYNC_TOKEN_KEY,t.toUpperCase()); else localStorage.removeItem(SYNC_TOKEN_KEY); }catch{} }
@@ -985,6 +1014,232 @@
     function syncFavoriteButton(){ if(!els.favoriteToggleBtn) return; const current=sanitizeTicker(state.ticker || els.input?.value || ''); const isFav=getFavorites().includes(current); els.favoriteToggleBtn.classList.toggle('active', isFav); els.favoriteToggleBtn.textContent = isFav ? '★' : '☆'; els.favoriteToggleBtn.setAttribute('aria-pressed', isFav?'true':'false'); }
     function setFavoritesPanelVisible(visible){ if(!els.favoritesRow) return; els.favoritesRow.classList.toggle('hidden', !visible); if(els.showFavoritesBtn){ els.showFavoritesBtn.classList.toggle('active', visible); els.showFavoritesBtn.textContent = visible ? 'Hide Fav' : 'Favorites'; } }
     function toggleFavoritesPanel(){ if(!els.favoritesRow) return; const currentlyVisible = !els.favoritesRow.classList.contains('hidden'); if(!currentlyVisible){ renderFavorites(); } setFavoritesPanelVisible(!currentlyVisible); }
+    function opLabel(op){ return op === '<=' ? '<=' : '>='; }
+    function parseAlertPrice(v){ const n = +v; return Number.isFinite(n) && n > 0 ? +n.toFixed(4) : NaN; }
+    function parseQuoteForPrice(j){
+      try{
+        if(j?.quoteResponse?.result && j.quoteResponse.result[0]){
+          const r = j.quoteResponse.result[0];
+          const p = +(r.regularMarketPrice?.raw ?? r.regularMarketPrice);
+          return Number.isFinite(p) ? p : NaN;
+        }
+        if(j?.quoteSummary?.result && j.quoteSummary.result[0] && j.quoteSummary.result[0].price){
+          const p = +(j.quoteSummary.result[0].price.regularMarketPrice?.raw ?? j.quoteSummary.result[0].price.regularMarketPrice);
+          return Number.isFinite(p) ? p : NaN;
+        }
+        if(j?.chart?.result && j.chart.result[0] && j.chart.result[0].meta){
+          const p = +(j.chart.result[0].meta.regularMarketPrice ?? j.chart.result[0].meta.regularMarketPriceRaw);
+          return Number.isFinite(p) ? p : NaN;
+        }
+      }catch{}
+      return NaN;
+    }
+    function normalizeAlert(a){
+      const ticker = sanitizeTicker(a?.ticker);
+      const op = a?.op === '<=' ? '<=' : '>=';
+      const target = parseAlertPrice(a?.target);
+      if(!ticker || !Number.isFinite(target)) return null;
+      return {
+        id: String(a?.id || (`${Date.now()}-${Math.random().toString(36).slice(2,8)}`)),
+        ticker,
+        op,
+        target,
+        enabled: a?.enabled !== false,
+        once: !!a?.once,
+        cooldownMin: Number.isFinite(+a?.cooldownMin) ? Math.max(1, Math.min(240, +a.cooldownMin)) : 30,
+        lastSeenPrice: Number.isFinite(+a?.lastSeenPrice) ? +a.lastSeenPrice : null,
+        lastTriggeredAt: Number.isFinite(+a?.lastTriggeredAt) ? +a.lastTriggeredAt : 0,
+        createdAt: Number.isFinite(+a?.createdAt) ? +a.createdAt : Date.now()
+      };
+    }
+    function getAlerts(){
+      try{
+        const raw = localStorage.getItem(ALERTS_KEY);
+        if(!raw) return [];
+        const parsed = JSON.parse(raw);
+        if(!Array.isArray(parsed)) return [];
+        return parsed.map(normalizeAlert).filter(Boolean).slice(0, ALERTS_LIMIT);
+      }catch{return [];}
+    }
+    function saveAlerts(alerts){
+      const clean = (alerts||[]).map(normalizeAlert).filter(Boolean).slice(0, ALERTS_LIMIT);
+      try{ localStorage.setItem(ALERTS_KEY, JSON.stringify(clean)); }catch{}
+      renderAlerts();
+    }
+    function setAlertsPanelVisible(visible){ if(!els.alertsRow) return; els.alertsRow.classList.toggle('hidden', !visible); if(els.showAlertsBtn){ els.showAlertsBtn.classList.toggle('active', visible); els.showAlertsBtn.textContent = visible ? 'Hide Alerts' : 'Alerts'; } }
+    function toggleAlertsPanel(){ if(!els.alertsRow) return; const currentlyVisible = !els.alertsRow.classList.contains('hidden'); if(!currentlyVisible){ renderAlerts(); } setAlertsPanelVisible(!currentlyVisible); }
+    function isAlertSoundEnabled(){ try{ const v = localStorage.getItem(ALERT_SOUND_KEY); return v == null ? true : v === '1'; }catch{ return true; } }
+    function setAlertSoundEnabled(on){ try{ localStorage.setItem(ALERT_SOUND_KEY, on ? '1' : '0'); }catch{} syncAlertSoundButton(); }
+    function syncAlertSoundButton(){ if(!els.alertSoundBtn) return; const on = isAlertSoundEnabled(); els.alertSoundBtn.classList.toggle('active', on); els.alertSoundBtn.textContent = on ? 'Sound On' : 'Sound Off'; els.alertSoundBtn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+    function getAlertSoundMode(){
+      try{
+        const v = localStorage.getItem(ALERT_SOUND_MODE_KEY);
+        if(v === 'soft' || v === 'normal' || v === 'louder') return v;
+      }catch{}
+      return 'normal';
+    }
+    function setAlertSoundMode(mode){
+      const m = (mode === 'soft' || mode === 'normal' || mode === 'louder') ? mode : 'normal';
+      try{ localStorage.setItem(ALERT_SOUND_MODE_KEY, m); }catch{}
+      syncAlertModeButton();
+    }
+    function syncAlertModeButton(){
+      if(!els.alertModeBtn) return;
+      const mode = getAlertSoundMode();
+      const label = mode === 'soft' ? 'Soft' : mode === 'louder' ? 'Louder' : 'Normal';
+      els.alertModeBtn.classList.toggle('active', mode !== 'normal');
+      els.alertModeBtn.textContent = `Tone: ${label}`;
+      els.alertModeBtn.setAttribute('aria-pressed', mode === 'normal' ? 'false' : 'true');
+    }
+    function getAlertAudioCtx(){
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if(!Ctx) return null;
+      if(!alertAudioCtx) alertAudioCtx = new Ctx();
+      return alertAudioCtx;
+    }
+    async function playAlertSound(kind='alert'){
+      if(!isAlertSoundEnabled()) return false;
+      const ctx = getAlertAudioCtx();
+      if(!ctx) return false;
+      if(ctx.state === 'suspended'){
+        try{ await ctx.resume(); }catch{}
+      }
+      if(ctx.state !== 'running') return false;
+      const now = ctx.currentTime;
+      const mode = getAlertSoundMode();
+      const isSoft = mode === 'soft';
+      const isLouder = mode === 'louder';
+      const seq = kind === 'test'
+        ? (isSoft ? [[560,0.07,0.05],[660,0.14,0.05]] : [[620,0.08,0.06],[784,0.16,0.06]])
+        : (isSoft ? [[560,0.07,0.05],[660,0.14,0.05],[740,0.22,0.06]] : [[620,0.08,0.06],[784,0.16,0.06],[988,0.25,0.07]]);
+      const peak = (kind === 'test' ? 0.09 : 0.085) * (isLouder ? 1.65 : 1.0);
+      for(const [freq, start, dur] of seq){
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = isSoft ? 'triangle' : 'sine';
+        osc.frequency.setValueAtTime(freq, now + start);
+        gain.gain.setValueAtTime(0.0001, now + start);
+        gain.gain.exponentialRampToValueAtTime(peak, now + start + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + start);
+        osc.stop(now + start + dur + 0.02);
+      }
+      return true;
+    }
+    function primeAlertAudio(){ const ctx = getAlertAudioCtx(); if(ctx && ctx.state === 'suspended'){ ctx.resume().catch(()=>{}); } }
+    function renderAlerts(){
+      if(!els.alertsRow) return;
+      const alerts = getAlerts();
+      if(!alerts.length){ els.alertsRow.innerHTML='<div class="history-empty">No alerts yet</div>'; return; }
+      els.alertsRow.innerHTML = alerts.map(a=>`<div class="alert-chip ${a.enabled?'':'off'}" data-alert-toggle="${a.id}" title="Toggle enabled"><span>${a.ticker} ${opLabel(a.op)} $${a.target.toFixed(2)}</span>${a.once?'<span style="opacity:.8">(once)</span>':''}<button class="alert-remove" type="button" data-alert-remove="${a.id}" title="Remove alert">×</button></div>`).join('');
+    }
+    function openAddAlertModal(){
+      let m = document.getElementById('alertModal');
+      if(!m){
+        m = document.createElement('div'); m.id='alertModal'; m.className='sheet'; m.setAttribute('hidden','');
+        m.innerHTML = `<div class="sheet-inner" role="dialog" aria-modal="true" aria-label="Add Price Alert">
+          <div class="sheet-head"><div class="sheet-title">Add Price Alert</div><button class="sheet-close" data-close="alertModal">✕</button></div>
+          <div class="sheet-body">
+            <div style="display:grid;grid-template-columns:1fr 96px 1fr;gap:8px;align-items:center">
+              <input id="alertTicker" type="text" placeholder="SPY" maxlength="12" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text);text-transform:uppercase" />
+              <select id="alertOp" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text)"><option value=">=">&gt;=</option><option value="<=">&lt;=</option></select>
+              <input id="alertTarget" type="number" step="0.01" min="0" placeholder="620" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text)" />
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
+              <label style="display:flex;gap:6px;align-items:center;font-size:13px"><input id="alertOnce" type="checkbox" /> Trigger once</label>
+              <label style="display:flex;gap:6px;align-items:center;font-size:13px">Cooldown (min)
+                <input id="alertCooldown" type="number" step="1" min="1" max="240" value="30" style="width:84px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text)" />
+              </label>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px"><button class="btn" id="alertSaveBtn">Save Alert</button><button class="tool-btn" id="alertCloseBtn">Cancel</button></div>
+          </div></div>`;
+        document.body.appendChild(m);
+        m.querySelectorAll('[data-close]').forEach(b=> b.addEventListener('click', ()=> closeAlertModal()));
+        m.querySelector('#alertCloseBtn')?.addEventListener('click', ()=> closeAlertModal());
+        m.querySelector('#alertSaveBtn')?.addEventListener('click', ()=>{
+          const ticker = sanitizeTicker(m.querySelector('#alertTicker')?.value || '');
+          const op = (m.querySelector('#alertOp')?.value === '<=') ? '<=' : '>=';
+          const target = parseAlertPrice(m.querySelector('#alertTarget')?.value);
+          const once = !!m.querySelector('#alertOnce')?.checked;
+          const cooldownMin = Math.max(1, Math.min(240, +(m.querySelector('#alertCooldown')?.value || 30)));
+          if(!ticker || !Number.isFinite(target)){ showToast('Enter ticker and target price'); return; }
+          const next = [{ id:`${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ticker, op, target, enabled:true, once, cooldownMin, lastSeenPrice:null, lastTriggeredAt:0, createdAt:Date.now() }, ...getAlerts()].slice(0, ALERTS_LIMIT);
+          saveAlerts(next);
+          setAlertsPanelVisible(true);
+          closeAlertModal();
+          showToast(`Alert added: ${ticker} ${opLabel(op)} $${target.toFixed(2)}`);
+          checkAlertsOnce({ manual:true });
+        });
+      }
+      m.hidden=false; m.setAttribute('data-open','true'); document.body.style.overflow='hidden';
+      m.querySelector('#alertTicker').value = sanitizeTicker(state.ticker || els.input?.value || '');
+      m.querySelector('#alertTarget').value = Number.isFinite(state.rows?.at(-1)?.c) ? (+state.rows.at(-1).c).toFixed(2) : '';
+      setTimeout(()=> m.querySelector('#alertTicker')?.focus(), 50);
+    }
+    function closeAlertModal(){ const m=document.getElementById('alertModal'); if(!m) return; m.hidden=true; m.removeAttribute('data-open'); if(![...document.querySelectorAll('.sheet')].some(s=>!s.hidden)) document.body.style.overflow=''; }
+    function updateAlert(id, patch){
+      const next = getAlerts().map(a=> a.id===id ? normalizeAlert({ ...a, ...patch }) : a).filter(Boolean);
+      saveAlerts(next);
+    }
+    function removeAlert(id){ saveAlerts(getAlerts().filter(a=>a.id!==id)); }
+    function maybeNotify(msg){
+      try{
+        if(typeof Notification === 'undefined') return;
+        if(Notification.permission === 'granted'){ new Notification(msg); return; }
+        if(Notification.permission !== 'denied'){ Notification.requestPermission().then(p=>{ if(p==='granted') new Notification(msg); }).catch(()=>{}); }
+      }catch{}
+    }
+    async function fetchLatestQuotePrice(ticker){
+      try{
+        const r = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { cache:'no-store' });
+        if(!r.ok) return NaN;
+        const j = await r.json();
+        return parseQuoteForPrice(j);
+      }catch{return NaN;}
+    }
+    function isAlertCrossed(alert, price){
+      const last = Number.isFinite(+alert.lastSeenPrice) ? +alert.lastSeenPrice : null;
+      if(alert.op === '>='){
+        if(!(price >= alert.target)) return false;
+        return last == null || last < alert.target;
+      }
+      if(!(price <= alert.target)) return false;
+      return last == null || last > alert.target;
+    }
+    async function checkAlertsOnce(opts={}){
+      const alerts = getAlerts();
+      if(!alerts.length) return;
+      const enabled = alerts.filter(a=>a.enabled);
+      if(!enabled.length) return;
+      const uniqueTickers = Array.from(new Set(enabled.map(a=>a.ticker)));
+      const quoteEntries = await Promise.all(uniqueTickers.map(async t=> [t, await fetchLatestQuotePrice(t)]));
+      const quotes = new Map(quoteEntries);
+      let changed = false;
+      const now = Date.now();
+      const next = alerts.map(a=>{
+        if(!a.enabled) return a;
+        const px = quotes.get(a.ticker);
+        if(!Number.isFinite(px)) return a;
+        const crossed = isAlertCrossed(a, px);
+        const cooldownMs = Math.max(1, +(a.cooldownMin||30)) * 60 * 1000;
+        const cooled = !a.lastTriggeredAt || (now - a.lastTriggeredAt >= cooldownMs);
+        if(crossed && cooled){
+          const msg = `${a.ticker} hit ${a.op} $${a.target.toFixed(2)} (now $${px.toFixed(2)})`;
+          showAlertToast(msg, 5600);
+          maybeNotify(msg);
+          playAlertSound();
+          try{ if(typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(80); }catch{}
+          changed = true;
+          return normalizeAlert({ ...a, lastSeenPrice: px, lastTriggeredAt: now, enabled: a.once ? false : a.enabled });
+        }
+        if(a.lastSeenPrice !== px){ changed = true; return normalizeAlert({ ...a, lastSeenPrice: px }); }
+        return a;
+      });
+      if(changed) saveAlerts(next);
+      if(opts?.manual && !changed) showToast('Alerts checked: no triggers');
+    }
+    function scheduleAlertChecks(){ clearInterval(alertTimer); alertTimer = setInterval(()=>{ checkAlertsOnce(); }, ALERT_INTERVAL_MS); }
     async function fetchACFromYahoo(q){ if(!q) return { ok:true, matches:[] }; const controller = new AbortController(); const timeout = setTimeout(()=>controller.abort(), AUTOCOMPLETE_TIMEOUT_MS);
       try{
         const r = await fetch(`/api/autocomplete?query=${encodeURIComponent(q)}`, { cache:'no-store', signal: controller.signal });
@@ -1963,6 +2218,50 @@
     els.showFavoritesBtn?.addEventListener('click', ()=>{ toggleFavoritesPanel(); });
     els.favoriteToggleBtn?.addEventListener('click', ()=>{ const current=sanitizeTicker(state.ticker || els.input?.value || ''); if(!current){ els.input?.focus(); return; } const added=toggleFavorite(current); if(added){ setFavoritesPanelVisible(true); showToast(`Added ${current} to favorites`); } else { showToast(`Removed ${current} from favorites`); } renderFavorites(); syncFavoriteButton(); });
     els.favoritesRow?.addEventListener('click', (e)=>{ const btn=e.target.closest('button[data-history]'); if(!btn) return; const t=btn.dataset.history; if(!t) return; els.input.value=t; state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
+    els.showAlertsBtn?.addEventListener('click', ()=>{ toggleAlertsPanel(); });
+    els.addAlertBtn?.addEventListener('click', ()=>{ openAddAlertModal(); });
+    els.alertSoundBtn?.addEventListener('click', async ()=>{
+      const next = !isAlertSoundEnabled();
+      setAlertSoundEnabled(next);
+      if(next){
+        const ok = await playAlertSound('test');
+        showToast(ok ? 'Alert sound enabled' : 'Sound enabled (audio blocked by browser until interaction)');
+      } else {
+        showToast('Alert sound muted');
+      }
+    });
+    els.alertModeBtn?.addEventListener('click', async ()=>{
+      const modes = ['soft','normal','louder'];
+      const cur = getAlertSoundMode();
+      const idx = modes.indexOf(cur);
+      const next = modes[(idx + 1) % modes.length];
+      setAlertSoundMode(next);
+      if(isAlertSoundEnabled()) await playAlertSound('test');
+      showToast(`Alert tone: ${next[0].toUpperCase()+next.slice(1)}`);
+    });
+    els.alertsRow?.addEventListener('click', (e)=>{
+      const removeBtn = e.target.closest('button[data-alert-remove]');
+      if(removeBtn){
+        const id = removeBtn.dataset.alertRemove;
+        if(id){ removeAlert(id); showToast('Alert removed'); }
+        return;
+      }
+      const toggleBtn = e.target.closest('[data-alert-toggle]');
+      if(!toggleBtn) return;
+      const id = toggleBtn.dataset.alertToggle;
+      const cur = getAlerts().find(a=>a.id===id);
+      if(!cur) return;
+      updateAlert(id, { enabled: !cur.enabled });
+      showToast(`${cur.ticker} alert ${cur.enabled ? 'paused' : 'enabled'}`);
+    });
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if(now - lastAlertsQuickCheckAt < 45000) return;
+      lastAlertsQuickCheckAt = now;
+      checkAlertsOnce();
+    });
+    document.addEventListener('pointerdown', primeAlertAudio, { once:true });
     // Range bar handlers (days + frequency)
     els.rangeBar?.addEventListener('click', e=>{
       const rangeBtn = e.target.closest('button[data-range]');
@@ -2265,7 +2564,6 @@
     (async ()=>{ try{ const a = await fetchBuffettAuto(); if(a) renderBuffett(); else renderBuffett(); }catch(e){ renderBuffett(); } })();
 
     // VIX helpers: fetch and display + simple buy/sell remark
-    function parseQuoteForPrice(j){ try{ if(j?.quoteResponse?.result && j.quoteResponse.result[0]){ return j.quoteResponse.result[0].regularMarketPrice || j.quoteResponse.result[0].regularMarketPriceRaw || j.quoteResponse.result[0].regularMarketPrice?.raw || j.quoteResponse.result[0].regularMarketPrice; } if(j?.quoteSummary?.result && j.quoteSummary.result[0] && j.quoteSummary.result[0].price){ return j.quoteSummary.result[0].price.regularMarketPrice?.raw || j.quoteSummary.result[0].price.regularMarketPrice; } if(j?.chart?.result && j.chart.result[0] && j.chart.result[0].meta){ return j.chart.result[0].meta.regularMarketPrice || j.chart.result[0].meta.regularMarketPriceRaw; } return null; }catch(e){ return null; } }
     async function fetchVIX(){
       try{
         const base = (window.location && window.location.origin) ? window.location.origin : '';
@@ -2384,11 +2682,17 @@
       renderSearchHistory();
       renderFavorites();
       setFavoritesPanelVisible(false);
+      renderAlerts();
+      setAlertsPanelVisible(false);
+      syncAlertSoundButton();
+      syncAlertModeButton();
       syncFavoriteButton();
       renderCustomSMAChips();
       refreshRangeFreqDisabledState();
       await loadAndRender();
       scheduleQuoteAutoRefresh();
+      scheduleAlertChecks();
+      await checkAlertsOnce();
       await renderAllMkt();
       scheduleMkt();
     })();
