@@ -321,15 +321,18 @@
   #toast.alert{border-color:color-mix(in srgb, var(--accent), #ffffff 30%);background:color-mix(in srgb, var(--panel), var(--accent) 10%);box-shadow:0 8px 26px -2px color-mix(in srgb, var(--accent), transparent 55%)}
 
   /* Market Overview mini-cards */
-  .mkt-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0}
-  @media (max-width:980px){ .mkt-row{grid-template-columns:1fr;gap:10px} }
-  .mkt-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .mkt-row{display:flex;gap:12px;margin:14px 0;flex-wrap:nowrap}
+  .mkt-card{flex:1;min-width:0;background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px}
+  @media (max-width:680px){ .mkt-card{padding:8px} }
   .mkt-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
   .mkt-left{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
   .mkt-title{font-weight:900;letter-spacing:.4px}
   .mkt-level{font-size:12px;font-weight:700;color:var(--muted)}
   .mkt-chg{font-weight:900}
-  .mkt-chart{height:180px}
+  .mkt-chart{height:200px;width:100%}
+  @media (max-width:1200px){ .mkt-chart{height:160px} }
+  @media (max-width:980px){ .mkt-chart{height:140px} }
+  @media (max-width:720px){ .mkt-chart{height:100px} }
 
   /* Mini gauges row under market overview */
   .mkt-gauges{display:grid;grid-template-columns:repeat(5,minmax(180px,1fr));gap:10px;margin:8px 0 2px}
