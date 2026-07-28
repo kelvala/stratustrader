@@ -1017,6 +1017,39 @@
     function readQuoteCache(){ try{ const all = JSON.parse(localStorage.getItem(QUOTE_CACHE_KEY) || '{}'); return all && typeof all === 'object' ? all : {}; }catch{return {}; } }
     function writeQuoteCache(ticker, payload){ try{ const all = readQuoteCache(); all[sanitizeTicker(ticker)] = payload; localStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify(all)); }catch{} }
     function applyCachedQuote(ticker){ const cached = readQuoteCache()[sanitizeTicker(ticker)]; if(!cached) return false; try{ setSessionMiniFallback(cached); return true; }catch{ return false; } }
+    function deriveQuoteFromRows(rows){
+      if(!Array.isArray(rows) || !rows.length) return null;
+      const sorted = [...rows].filter(r=>r && Number.isFinite(r.t) && Number.isFinite(r.c)).sort((a,b)=>a.t-b.t);
+      if(!sorted.length) return null;
+      const dtfDay = new Intl.DateTimeFormat('en-US',{ timeZone:'America/New_York', hour12:false, hour:'2-digit', minute:'2-digit' });
+      const hm = ms => {
+        const parts = dtfDay.formatToParts(new Date(ms));
+        const get = t => parts.find(p=>p.type===t)?.value;
+        return +(get('hour')||'0') + +(get('minute')||'0') / 60;
+      };
+      let reg = null, pre = null, post = null;
+      for(const row of sorted){
+        const v = hm(row.t);
+        if(v >= 9.5 && v <= 16.0) reg = row;
+        else if(v < 9.5) pre = row;
+        else if(v > 16.0 && v <= 20.0) post = row;
+      }
+      const last = sorted.at(-1);
+      const prevClose = sorted.at(-2)?.c ?? sorted.at(-1)?.c ?? NaN;
+      const bestSession = post ? 'post' : (pre ? 'pre' : 'regular');
+      const bestTime = (post || pre || reg || last)?.t ?? last.t;
+      return {
+        regPrice: reg?.c ?? last.c,
+        prePrice: pre?.c ?? null,
+        postPrice: post?.c ?? null,
+        prevClose,
+        bestSession,
+        bestTime,
+        regTime: reg?.t ?? last.t,
+        preTime: pre?.t ?? null,
+        postTime: post?.t ?? null
+      };
+    }
     const SEARCH_HISTORY_KEY = 'tickerSearchHistory_v1';
     const SEARCH_HISTORY_LIMIT = 8;
     const FAVORITES_KEY = 'tickerFavorites_v1';
@@ -2332,7 +2365,7 @@
         }
         if(els.dayRangeLine){ els.dayRangeLine.textContent = `Day’s Range: ${(Number.isFinite(dLo)&&Number.isFinite(dHi))? '$'+dLo.toFixed(2)+' – $'+dHi.toFixed(2) : '—'}`; }
         try{ computeIntrinsicAndDisplay(); }catch(e){ console.error('Intrinsic display error', e); }
-      }catch(e){ console.error('Quote refresh error', e); const restored = applyCachedQuote(state.ticker); if(!restored){ els.lastLine.innerHTML='Last: — · Change: —'; if(els.sessionMiniStatus) els.sessionMiniStatus.textContent='Quote refresh failed'; if(els.sessionMiniNote) els.sessionMiniNote.textContent='Try again with the main Refresh button.'; } else { if(els.sessionMiniStatus) els.sessionMiniStatus.textContent='Using cached prices'; if(els.sessionMiniNote) els.sessionMiniNote.textContent='Live quote refresh failed, but the last successful prices are still shown.'; } setTabTitle({ ticker: state.ticker }); }
+      }catch(e){ console.error('Quote refresh error', e); const restored = applyCachedQuote(state.ticker) || (()=>{ const derived = deriveQuoteFromRows(state.rows||[]); if(!derived) return false; setSessionMiniFallback(derived); writeQuoteCache(state.ticker, derived); if(els.sessionMiniStatus) els.sessionMiniStatus.textContent='Using chart fallback'; if(els.sessionMiniNote) els.sessionMiniNote.textContent='Live quote refresh failed, so chart prices are shown instead.'; return true; })(); if(!restored){ els.lastLine.innerHTML='Last: — · Change: —'; if(els.sessionMiniStatus) els.sessionMiniStatus.textContent='Quote refresh failed'; if(els.sessionMiniNote) els.sessionMiniNote.textContent='Try again with the main Refresh button.'; } setTabTitle({ ticker: state.ticker }); }
     }
 
     function computeIntrinsicAndDisplay(){
