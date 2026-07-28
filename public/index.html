@@ -961,6 +961,7 @@
     const $all = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
     const sanitizeTicker = s => String(s||'').split('|')[0].trim().toUpperCase();
     const normalizeTickerForFetch = t => sanitizeTicker(t).replace(/\s+/g,'').replace(/\.([A-Z0-9]{1,3})$/,'-$1'); // BRK.B -> BRK-B, etc.
+    const USER_TICKER_ALIASES = Object.freeze({ BTC:'BTC-USD' });
     const SEARCH_HISTORY_KEY = 'tickerSearchHistory_v1';
     const SEARCH_HISTORY_LIMIT = 8;
     const FAVORITES_KEY = 'tickerFavorites_v1';
@@ -1008,6 +1009,18 @@
     const CRYPTO_BASE = new Set(['BTC','ETH','SOL','DOGE','XRP','ADA','LTC','BCH','BNB','SHIB']);
     const AUTOCOMPLETE_TIMEOUT_MS = 250; // Yahoo autocomplete request timeout before falling back to local CSV
     function isCryptoBase(sym){ return CRYPTO_BASE.has(sym); }
+    function canonicalizeUserTicker(input){
+      let t = sanitizeTicker(input);
+      if(!t) return '';
+      // Treat plain BTC as Bitcoin spot by default so it maps to Yahoo's crypto symbol.
+      if(USER_TICKER_ALIASES[t]) t = USER_TICKER_ALIASES[t];
+      // Strip -USD when it's not a known crypto base (e.g., ANET-USD -> ANET).
+      if(/-USD$/.test(t)){
+        const base = t.replace(/-USD$/,'');
+        if(!isCryptoBase(base)) t = base;
+      }
+      return t;
+    }
     function hideAC(){ if(els.list){ els.list.classList.remove('show'); els.list.innerHTML=''; } state.acMatches=[]; state.acIndex=-1; }
     function renderAC(){ if(!els.list) return; const items=state.acMatches||[]; if(!items.length){ els.list.innerHTML=''; els.list.classList.remove('show'); return; } const html=items.slice(0,60).map((o,i)=>{ const n = (o.n || companyNameForTicker(o.t) || '').trim(); return `<div class="ac-item${i===state.acIndex?' active':''}" role="option" data-t="${o.t}"><span class="ticker">${o.t}</span><span class="company">${n}</span></div>`; }).join(''); els.list.innerHTML=html; els.list.classList.add('show'); }
     const COMPANY_ACRONYM_STOP = new Set(['THE','INC','INCORPORATED','CORP','CORPORATION','CO','COMPANY','LTD','LIMITED','PLC','LP','LLC','NV','SA','AG','SPA','ETF','ETN','TRUST','FUND','HOLDINGS','HOLDING','GROUP','ADR','ADS','CLASS','SERIES','SHARES','COMMON','PREFERRED','STOCK']);
@@ -1047,10 +1060,14 @@
       const tn = normTickerKey(t);
       const n = String(candidate?.n||'').toUpperCase();
       const acr = buildCompanyAcronym(n);
+      const qIsCryptoBase = isCryptoBase(q);
+      const spotTicker = `${q}-USD`;
       let score = 0;
 
       if(t===qRaw || tn===q) score += 320;
       if(t.startsWith(qRaw) || tn.startsWith(q)) score += 240;
+      if(qIsCryptoBase && t===spotTicker) score += 380;
+      if(qIsCryptoBase && tn===q) score -= 420;
       if(acr===q) score += 270;
       else if(acr.startsWith(q)) score += 180;
       if(acr===q && tn.length<=q.length) score += 180;
@@ -1071,13 +1088,30 @@
         .sort((a,b)=> (b._score-a._score) || (a.t.length-b.t.length) || a.t.localeCompare(b.t))
         .map(({_score, ...rest})=>rest);
     }
-    function getSearchHistory(){ try{ const raw=localStorage.getItem(SEARCH_HISTORY_KEY); if(!raw) return []; const parsed=JSON.parse(raw); return Array.isArray(parsed)? parsed.filter(Boolean).map(x=>sanitizeTicker(x)).filter(Boolean).slice(0,SEARCH_HISTORY_LIMIT) : []; }catch{return [];} }
+    function enforceCryptoSpotPriority(query, matches){
+      const q = sanitizeTicker(query);
+      if(!isCryptoBase(q)) return matches || [];
+      const spot = `${q}-USD`;
+      const list = Array.isArray(matches) ? matches.slice() : [];
+      const spotItem = list.find(m=>sanitizeTicker(m?.t)===spot);
+      const filtered = list.filter(m=>{
+        const t = sanitizeTicker(m?.t);
+        // For crypto base searches, prefer spot and avoid ambiguous plain-base symbols.
+        if(t===q) return false;
+        return true;
+      });
+      if(spotItem){
+        return [spotItem, ...filtered.filter(m=>sanitizeTicker(m?.t)!==spot)];
+      }
+      return [{ t: spot, n: 'Crypto vs USD' }, ...filtered];
+    }
+    function getSearchHistory(){ try{ const raw=localStorage.getItem(SEARCH_HISTORY_KEY); if(!raw) return []; const parsed=JSON.parse(raw); return Array.isArray(parsed)? parsed.filter(Boolean).map(x=>canonicalizeUserTicker(x)).filter(Boolean).slice(0,SEARCH_HISTORY_LIMIT) : []; }catch{return [];} }
     function saveSearchHistory(history){ try{ localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify((history||[]).slice(0,SEARCH_HISTORY_LIMIT))); }catch{} }
-    function addToSearchHistory(ticker){ const cleaned=sanitizeTicker(ticker); if(!cleaned) return; const next=[cleaned, ...getSearchHistory().filter(x=>x!==cleaned)].slice(0,SEARCH_HISTORY_LIMIT); saveSearchHistory(next); renderSearchHistory(); }
+    function addToSearchHistory(ticker){ const cleaned=canonicalizeUserTicker(ticker); if(!cleaned) return; const next=[cleaned, ...getSearchHistory().filter(x=>x!==cleaned)].slice(0,SEARCH_HISTORY_LIMIT); saveSearchHistory(next); renderSearchHistory(); }
     function renderSearchHistory(){ if(!els.searchHistory) return; const history=getSearchHistory(); if(!history.length){ els.searchHistory.innerHTML='<div class="history-empty">No recent searches yet</div>'; return; } els.searchHistory.innerHTML = history.map(t=>`<button class="history-chip" type="button" data-history="${t}">${t}</button>`).join(''); }
-    function getFavorites(){ try{ const raw=localStorage.getItem(FAVORITES_KEY); if(!raw) return []; const parsed=JSON.parse(raw); return Array.isArray(parsed)? parsed.filter(Boolean).map(x=>sanitizeTicker(x)).filter(Boolean).slice(0,FAVORITES_LIMIT) : []; }catch{return [];} }
+    function getFavorites(){ try{ const raw=localStorage.getItem(FAVORITES_KEY); if(!raw) return []; const parsed=JSON.parse(raw); return Array.isArray(parsed)? parsed.filter(Boolean).map(x=>canonicalizeUserTicker(x)).filter(Boolean).slice(0,FAVORITES_LIMIT) : []; }catch{return [];} }
     function saveFavorites(favorites){ try{ localStorage.setItem(FAVORITES_KEY, JSON.stringify((favorites||[]).slice(0,FAVORITES_LIMIT))); }catch{} pushFavoritesToCloud((favorites||[]).slice(0,FAVORITES_LIMIT)); }
-    function toggleFavorite(ticker){ const cleaned=sanitizeTicker(ticker); if(!cleaned) return false; const favorites=getFavorites(); const exists=favorites.includes(cleaned); const next = exists ? favorites.filter(x=>x!==cleaned) : [cleaned, ...favorites].slice(0,FAVORITES_LIMIT); saveFavorites(next); renderFavorites(); syncFavoriteButton(); return !exists; }
+    function toggleFavorite(ticker){ const cleaned=canonicalizeUserTicker(ticker); if(!cleaned) return false; const favorites=getFavorites(); const exists=favorites.includes(cleaned); const next = exists ? favorites.filter(x=>x!==cleaned) : [cleaned, ...favorites].slice(0,FAVORITES_LIMIT); saveFavorites(next); renderFavorites(); syncFavoriteButton(); return !exists; }
     function renderFavorites(){ if(!els.favoritesRow) return; const favorites=getFavorites(); if(!favorites.length){ els.favoritesRow.innerHTML='<div class="history-empty">No favorites yet</div>'; return; } els.favoritesRow.innerHTML = favorites.map(t=>`<button class="fav-chip" type="button" data-history="${t}">${t}</button>`).join(''); }
     function syncFavoriteButton(){ if(!els.favoriteToggleBtn) return; const current=sanitizeTicker(state.ticker || els.input?.value || ''); const isFav=getFavorites().includes(current); els.favoriteToggleBtn.classList.toggle('active', isFav); els.favoriteToggleBtn.textContent = isFav ? '★' : '☆'; els.favoriteToggleBtn.setAttribute('aria-pressed', isFav?'true':'false'); }
     function setFavoritesPanelVisible(visible){ if(!els.favoritesRow) return; els.favoritesRow.classList.toggle('hidden', !visible); if(els.showFavoritesBtn){ els.showFavoritesBtn.classList.toggle('active', visible); els.showFavoritesBtn.textContent = visible ? 'Hide Fav' : 'Favorites'; } }
@@ -1531,14 +1565,14 @@
             merged.set(t, { t, n: fallbackName });
           }
           const ranked = rankAutocompleteMatches(s, Array.from(merged.values()));
-          state.acMatches=ranked;
+          state.acMatches=enforceCryptoSpotPriority(s, ranked);
           state.acIndex=0;
           renderAC();
           return;
         }
       }
       const sym=state.symbols||[]; if(!sym.length){ els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">Loading symbols…</div>'; els.list.classList.add('show'); state.acMatches=[]; state.acIndex=-1; return; }
-      const matches = rankAutocompleteMatches(s, localACMatches(s));
+      const matches = enforceCryptoSpotPriority(s, rankAutocompleteMatches(s, localACMatches(s)));
       if(!matches.length){ els.list.innerHTML='<div style="padding:10px;font-size:12px;opacity:.65">No matches</div>'; els.list.classList.add('show'); state.acMatches=[]; state.acIndex=-1; return; }
       state.acMatches=matches; state.acIndex=0; renderAC(); }
     function pickAC(i){ if(!state.acMatches?.length) return; const it=state.acMatches[i]; if(!it) return; els.input.value=it.t; hideAC(); }
@@ -2444,20 +2478,15 @@
     }
 
     // UI wiring (patched search + AC close)
-    els.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; let t=sanitizeTicker(raw); if(!t){ els.input.focus(); return; }
-      // Strip -USD if user typed it for a non-crypto base (e.g., ANET-USD -> ANET)
-      if(/-USD$/.test(t)){
-        const base = t.replace(/-USD$/,'');
-        if(!isCryptoBase(base)) t = base;
-      }
+    els.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; const t=canonicalizeUserTicker(raw); if(!t){ els.input.focus(); return; }
       state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
     els.input?.addEventListener('input', debounce((e)=>{ updateAC(e.target.value); }, 120));
     els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ hideAC(); return;} if(!state.acMatches.length){ if(e.key==='Enter'){ els.searchBtn?.click(); } return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
     els.list?.addEventListener('mousedown', (e)=>{ const it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });
-    els.searchHistory?.addEventListener('click', (e)=>{ const btn=e.target.closest('button[data-history]'); if(!btn) return; const t=btn.dataset.history; if(!t) return; els.input.value=t; state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
+    els.searchHistory?.addEventListener('click', (e)=>{ const btn=e.target.closest('button[data-history]'); if(!btn) return; const t=canonicalizeUserTicker(btn.dataset.history); if(!t) return; els.input.value=t; state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
     els.showFavoritesBtn?.addEventListener('click', ()=>{ toggleFavoritesPanel(); });
     els.favoriteToggleBtn?.addEventListener('click', ()=>{ const current=sanitizeTicker(state.ticker || els.input?.value || ''); if(!current){ els.input?.focus(); return; } const added=toggleFavorite(current); if(added){ setFavoritesPanelVisible(true); showToast(`Added ${current} to favorites`); } else { showToast(`Removed ${current} from favorites`); } renderFavorites(); syncFavoriteButton(); });
-    els.favoritesRow?.addEventListener('click', (e)=>{ const btn=e.target.closest('button[data-history]'); if(!btn) return; const t=btn.dataset.history; if(!t) return; els.input.value=t; state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
+    els.favoritesRow?.addEventListener('click', (e)=>{ const btn=e.target.closest('button[data-history]'); if(!btn) return; const t=canonicalizeUserTicker(btn.dataset.history); if(!t) return; els.input.value=t; state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
     els.showAlertsBtn?.addEventListener('click', ()=>{ toggleAlertsPanel(); });
     els.addAlertBtn?.addEventListener('click', ()=>{ openAddAlertModal(); });
     els.alertSoundBtn?.addEventListener('click', async ()=>{
@@ -2919,6 +2948,8 @@
       try{ await loadSymbols(); }catch{}
       { const v = document.getElementById('appVersion'); if(v) v.textContent = APP_VERSION; }
       applyDeviceClass();
+      state.ticker = canonicalizeUserTicker(state.ticker) || 'AAPL';
+      try{ localStorage.setItem('lastTicker', state.ticker); }catch{}
       els.input.value=state.ticker;
       setTabTitle({ ticker: state.ticker });
       renderSearchHistory();
