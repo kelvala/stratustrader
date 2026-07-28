@@ -428,7 +428,7 @@
             </div>
           </div>
           <button id="syncBtn" class="sync-btn" title="Sync favorites across devices" type="button"><span class="sync-dot"></span>Sync</button>
-          <span id="appVersion" class="app-version" title="App version">v.48</span>
+          <span id="appVersion" class="app-version" title="App version">v.49</span>
         </div>
       </div>
       
@@ -1022,7 +1022,7 @@
     const FAVORITES_KEY = 'tickerFavorites_v1';
     const FAVORITES_LIMIT = 12;
     const APP_NAME = 'Stratus Trader';
-    const APP_VERSION = 'v.48';
+    const APP_VERSION = 'v.49';
     const QUOTE_CACHE_KEY = 'tickerQuoteCache_v1';
     const ALERTS_KEY = 'tickerAlerts_v1';
     const ALERT_SOUND_KEY = 'tickerAlertsSound_v1';
@@ -2557,14 +2557,15 @@
         await buildSMAAlignedSeries();
         if(reqId !== state.chartFetchId || controller.signal.aborted) return;
         await renderChart();
-        if(reqId !== state.chartFetchId || controller.signal.aborted) return;
-        await refreshQuoteOnce();
       }
       catch(e){
         if(reqId !== state.chartFetchId || controller.signal.aborted) return;
-        console.error('Chart error', e); els.lastLine.innerHTML='Last: — · Change: —'; if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)';
+        console.error('Chart error', e); if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)';
       }
       finally{
+        if(reqId === state.chartFetchId && !controller.signal.aborted){
+          try{ await refreshQuoteOnce(); }catch{}
+        }
         if(state.chartController === controller) state.chartController = null;
       }
     }
