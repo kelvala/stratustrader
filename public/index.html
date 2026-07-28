@@ -115,26 +115,10 @@
   .ticker{font-weight:800}
   .company{color:var(--muted);font-size:13px;line-height:1.28;white-space:normal;overflow:hidden;text-overflow:ellipsis;min-width:0;display:-webkit-box;line-clamp:2;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
   @media (max-width:760px){ .ac{min-width:100%;max-width:100%;max-height:280px} .ac-item{grid-template-columns:minmax(84px, 136px) minmax(0, 1fr);gap:10px} }
-  .info{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,280px);gap:14px;align-items:start;position:relative}
-  .info-main{min-width:0}
-  .info-side{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:flex-end;gap:10px;width:100%}
-  .info-logo{width:min(140px,100%);height:auto;align-self:start;justify-self:end;pointer-events:none;filter:drop-shadow(0 2px 8px rgba(0,0,0,.35));opacity:.92}
+  .info{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px;position:relative}
+  .info-logo{position:absolute;top:10px;right:12px;height:54px;opacity:.92;pointer-events:none;filter:drop-shadow(0 2px 8px rgba(0,0,0,.35))}
   .light .info-logo{mix-blend-mode:multiply;filter:drop-shadow(0 2px 6px rgba(0,0,0,.12));opacity:.95}
-  .session-mini{padding:10px 12px;border-radius:12px;border:1px solid color-mix(in srgb, var(--border), #ffffff 10%);background:linear-gradient(180deg, color-mix(in srgb, var(--panel), #ffffff 3%), color-mix(in srgb, var(--panel), #000 4%));box-shadow:0 8px 22px rgba(0,0,0,.12);align-self:center;flex:0 1 280px;min-width:230px}
-  .session-mini-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px}
-  .session-mini-title{font-size:12px;font-weight:900;letter-spacing:.3px;text-transform:uppercase;color:var(--muted)}
-  .session-mini-status{font-size:13px;font-weight:800;margin-top:2px}
-  .session-mini-refresh{padding:6px 10px;border-radius:999px;border:1px solid var(--border);background:var(--panel);color:var(--text);font-weight:800;cursor:pointer;white-space:nowrap}
-  .session-mini-refresh:hover{background:var(--hover);border-color:var(--accent)}
-  .session-mini-grid{display:grid;gap:6px}
-  .session-mini-row{display:grid;grid-template-columns:70px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 8px;border-radius:9px;background:color-mix(in srgb, var(--panel), #ffffff 3%);border:1px solid transparent}
-  .session-mini-row.active{border-color:color-mix(in srgb, var(--accent), #ffffff 12%);background:color-mix(in srgb, var(--accent), transparent 88%)}
-  .session-mini-label{font-size:12px;font-weight:800;color:var(--muted)}
-  .session-mini-price{font-size:14px;font-weight:900;justify-self:end}
-  .session-mini-delta{font-size:12px;font-weight:800;justify-self:end;opacity:.95}
-  .session-mini-note{flex-basis:100%;margin-top:2px;font-size:11px;color:var(--muted);line-height:1.35}
-  @media (max-width:820px){ .info{grid-template-columns:1fr} .info-side{justify-self:stretch;justify-content:flex-start} .info-logo{width:140px;justify-self:start} .session-mini-note{flex-basis:100%} }
-  @media (max-width:640px){ .session-mini-row{grid-template-columns:64px minmax(0,1fr) auto} }
+  @media (max-width:640px){ .info-logo{height:42px;right:10px} }
   #chartCard{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;position:relative}
   #chart{height:68vh;min-height:520px}
   /* When maximized, we fix the chart card and let JS
@@ -428,7 +412,7 @@
             </div>
           </div>
           <button id="syncBtn" class="sync-btn" title="Sync favorites across devices" type="button"><span class="sync-dot"></span>Sync</button>
-          <span id="appVersion" class="app-version" title="App version">v.49</span>
+          <span id="appVersion" class="app-version" title="App version">v.47</span>
         </div>
       </div>
       
@@ -447,47 +431,16 @@
 
     <!-- Info bar -->
     <div id="info" class="info">
-      <div class="info-main">
-        <h3 id="headline" style="margin:0 0 4px 0"></h3>
-        <div id="subInfo" style="font-size:12px;opacity:.7;margin:0 0 6px"></div>
-        <div style="opacity:.9;font-size:14px;line-height:1.6">
-          <div id="companyLine" style="margin:0 0 4px 0;opacity:.95"></div>
-          <div id="lastLine">Last: — · Change: —</div>
-          <div id="prevCloseLine">Yesterday’s Close: —</div>
-          <div id="dayRangeLine">Day’s Range: —</div>
-          <div id="ivLine">Intrinsic Value: —</div>
-        </div>
+      <h3 id="headline" style="margin:0 0 4px 0"></h3>
+      <div id="subInfo" style="font-size:12px;opacity:.7;margin:0 0 6px"></div>
+      <div style="opacity:.9;font-size:14px;line-height:1.6">
+        <div id="companyLine" style="margin:0 0 4px 0;opacity:.95"></div>
+        <div id="lastLine">Last: — · Change: —</div>
+        <div id="prevCloseLine">Yesterday’s Close: —</div>
+        <div id="dayRangeLine">Day’s Range: —</div>
+        <div id="ivLine">Intrinsic Value: —</div>
       </div>
-      <div class="info-side">
-        <div class="session-mini" id="sessionMini" aria-label="Pre and post market prices">
-          <div class="session-mini-head">
-            <div>
-              <div class="session-mini-title">Session Prices</div>
-              <div id="sessionMiniStatus" class="session-mini-status">Loading quotes…</div>
-            </div>
-            <button id="sessionRefreshBtn" class="session-mini-refresh" type="button">Refresh quotes</button>
-          </div>
-          <div class="session-mini-grid">
-            <div class="session-mini-row" id="sessionRowRegular">
-              <div class="session-mini-label">Regular</div>
-              <div class="session-mini-price" id="sessionRegularPrice">—</div>
-              <div class="session-mini-delta" id="sessionRegularDelta">—</div>
-            </div>
-            <div class="session-mini-row" id="sessionRowPre">
-              <div class="session-mini-label">Pre</div>
-              <div class="session-mini-price" id="sessionPrePrice">—</div>
-              <div class="session-mini-delta" id="sessionPreDelta">—</div>
-            </div>
-            <div class="session-mini-row" id="sessionRowPost">
-              <div class="session-mini-label">Post</div>
-              <div class="session-mini-price" id="sessionPostPrice">—</div>
-              <div class="session-mini-delta" id="sessionPostDelta">—</div>
-            </div>
-          </div>
-        </div>
-        <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
-        <div id="sessionMiniNote" class="session-mini-note">Refreshes quote data only. The main Refresh button still reloads the chart.</div>
-      </div>
+      <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
     </div>
 
     <script>
@@ -761,7 +714,6 @@
             <div style="font-size:12px;color:var(--muted)">Uses the visible chart context when possible.</div>
           </div>
         </div>
-        <img id="infoLogo" class="info-logo" src="/assets/stratus-trader-wide.png" alt="Stratus Trader" />
       </div>
     </div>
   </div>
@@ -798,10 +750,6 @@
       rangeBar:q('#rangeBar'), toggles:q('#toggles'),
       themeToggle:q('#themeToggle'), autoFib:q('#autoFib'),
       refreshBtn:q('#refreshBtn'),
-      sessionRefreshBtn:q('#sessionRefreshBtn'), sessionMiniStatus:q('#sessionMiniStatus'), sessionMiniNote:q('#sessionMiniNote'),
-      sessionRegularPrice:q('#sessionRegularPrice'), sessionRegularDelta:q('#sessionRegularDelta'), sessionRowRegular:q('#sessionRowRegular'),
-      sessionPrePrice:q('#sessionPrePrice'), sessionPreDelta:q('#sessionPreDelta'), sessionRowPre:q('#sessionRowPre'),
-      sessionPostPrice:q('#sessionPostPrice'), sessionPostDelta:q('#sessionPostDelta'), sessionRowPost:q('#sessionRowPost'),
       tfCard:q('#tfCard'), tfHead:q('#tfHead'),
       btmNav:q('#btmNav'), scrList:q('#scrList'),
       // Added: tool buttons & sheet / input refs for GPTs & Screeners
@@ -855,7 +803,6 @@
   const vixMiniEl = q('#vixMini'); if(vixMiniEl) vixMiniEl.addEventListener('click', ()=>{ renderVix(); showToast('VIX refreshed'); });
   // replace whole-card click with explicit Edit button to avoid accidental prompts
   const buffEditBtn = q('#buffettEditBtn'); if(buffEditBtn) buffEditBtn.addEventListener('click', (e)=>{ e.stopPropagation(); openBuffettModal(); });
-  const sessionRefreshBtn = q('#sessionRefreshBtn'); if(sessionRefreshBtn) sessionRefreshBtn.addEventListener('click', async (e)=>{ e.preventDefault(); sessionRefreshBtn.setAttribute('data-busy','1'); try{ await refreshQuoteOnce(); showToast('Quotes refreshed'); } finally { sessionRefreshBtn.removeAttribute('data-busy'); } });
 
     // Sync modal
     function openSyncModal(){
@@ -1014,49 +961,12 @@
     const $all = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
     const sanitizeTicker = s => String(s||'').split('|')[0].trim().toUpperCase();
     const normalizeTickerForFetch = t => sanitizeTicker(t).replace(/\s+/g,'').replace(/\.([A-Z0-9]{1,3})$/,'-$1'); // BRK.B -> BRK-B, etc.
-    function readQuoteCache(){ try{ const all = JSON.parse(localStorage.getItem(QUOTE_CACHE_KEY) || '{}'); return all && typeof all === 'object' ? all : {}; }catch{return {}; } }
-    function writeQuoteCache(ticker, payload){ try{ const all = readQuoteCache(); all[sanitizeTicker(ticker)] = payload; localStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify(all)); }catch{} }
-    function applyCachedQuote(ticker){ const cached = readQuoteCache()[sanitizeTicker(ticker)]; if(!cached) return false; try{ setSessionMiniFallback(cached); return true; }catch{ return false; } }
-    function deriveQuoteFromRows(rows){
-      if(!Array.isArray(rows) || !rows.length) return null;
-      const sorted = [...rows].filter(r=>r && Number.isFinite(r.t) && Number.isFinite(r.c)).sort((a,b)=>a.t-b.t);
-      if(!sorted.length) return null;
-      const dtfDay = new Intl.DateTimeFormat('en-US',{ timeZone:'America/New_York', hour12:false, hour:'2-digit', minute:'2-digit' });
-      const hm = ms => {
-        const parts = dtfDay.formatToParts(new Date(ms));
-        const get = t => parts.find(p=>p.type===t)?.value;
-        return +(get('hour')||'0') + +(get('minute')||'0') / 60;
-      };
-      let reg = null, pre = null, post = null;
-      for(const row of sorted){
-        const v = hm(row.t);
-        if(v >= 9.5 && v <= 16.0) reg = row;
-        else if(v < 9.5) pre = row;
-        else if(v > 16.0 && v <= 20.0) post = row;
-      }
-      const last = sorted.at(-1);
-      const prevClose = sorted.at(-2)?.c ?? sorted.at(-1)?.c ?? NaN;
-      const bestSession = post ? 'post' : (pre ? 'pre' : 'regular');
-      const bestTime = (post || pre || reg || last)?.t ?? last.t;
-      return {
-        regPrice: reg?.c ?? last.c,
-        prePrice: pre?.c ?? null,
-        postPrice: post?.c ?? null,
-        prevClose,
-        bestSession,
-        bestTime,
-        regTime: reg?.t ?? last.t,
-        preTime: pre?.t ?? null,
-        postTime: post?.t ?? null
-      };
-    }
     const SEARCH_HISTORY_KEY = 'tickerSearchHistory_v1';
     const SEARCH_HISTORY_LIMIT = 8;
     const FAVORITES_KEY = 'tickerFavorites_v1';
     const FAVORITES_LIMIT = 12;
     const APP_NAME = 'Stratus Trader';
-    const APP_VERSION = 'v.49';
-    const QUOTE_CACHE_KEY = 'tickerQuoteCache_v1';
+    const APP_VERSION = 'v.47';
     const ALERTS_KEY = 'tickerAlerts_v1';
     const ALERT_SOUND_KEY = 'tickerAlertsSound_v1';
     const ALERT_SOUND_MODE_KEY = 'tickerAlertsSoundMode_v1';
@@ -2009,62 +1919,6 @@
         },
         uirevision:`${state.ticker}|${state.range}|${state.interval}`
       });
-
-    function fmtMoney(v){ return Number.isFinite(v) ? `$${v.toFixed(2)}` : '—'; }
-    function fmtDelta(v){ if(!Number.isFinite(v) || v === 0) return '—'; return `${v > 0 ? '+' : ''}$${Math.abs(v).toFixed(2)}`; }
-    function fmtSessionTime(ms){ return Number.isFinite(ms) ? new Date(ms).toLocaleString([], { timeZone:'America/New_York', hour12:true, hour:'numeric', minute:'2-digit' }) + ' ET' : '—'; }
-    function setSessionMini({ regPrice, prePrice, postPrice, prevClose, bestSession, bestTime, regTime, preTime, postTime }){
-      const rows = [
-        { key:'regular', elRow: els.sessionRowRegular, elPrice: els.sessionRegularPrice, elDelta: els.sessionRegularDelta, label:'Regular', price: regPrice, time: regTime },
-        { key:'pre', elRow: els.sessionRowPre, elPrice: els.sessionPrePrice, elDelta: els.sessionPreDelta, label:'Pre', price: prePrice, time: preTime },
-        { key:'post', elRow: els.sessionRowPost, elPrice: els.sessionPostPrice, elDelta: els.sessionPostDelta, label:'Post', price: postPrice, time: postTime }
-      ];
-      for(const row of rows){
-        if(row.elPrice) row.elPrice.textContent = fmtMoney(row.price);
-        const delta = Number.isFinite(prevClose) && Number.isFinite(row.price) ? row.price - prevClose : NaN;
-        if(row.elDelta){
-          row.elDelta.textContent = fmtDelta(delta);
-          row.elDelta.style.color = delta > 0 ? css('--c-up') : delta < 0 ? css('--c-down') : 'var(--muted)';
-        }
-        if(row.elRow){
-          const active = bestSession === row.key;
-          row.elRow.classList.toggle('active', active);
-          row.elRow.title = [row.label, fmtMoney(row.price), fmtSessionTime(row.time)].filter(Boolean).join(' • ');
-        }
-      }
-      if(els.sessionMiniStatus){
-        const status = bestSession === 'pre' ? 'Pre-market' : bestSession === 'post' ? 'After-hours' : 'Regular session';
-        els.sessionMiniStatus.textContent = `${status} · ${fmtSessionTime(bestTime)}`;
-      }
-      if(els.sessionMiniNote){
-        const missing = [!Number.isFinite(prePrice) ? 'pre-market' : null, !Number.isFinite(postPrice) ? 'after-hours' : null].filter(Boolean);
-        els.sessionMiniNote.textContent = missing.length ? `No ${missing.join(' or ')} quote yet. Refresh after the session opens.` : 'Refreshes quote data only. The main Refresh button still reloads the chart.';
-      }
-    }
-
-    function setSessionMiniFallback({ regPrice, prePrice, postPrice, prevClose, bestSession, bestTime }){
-      const rows = [
-        { elRow: els.sessionRowRegular, elPrice: els.sessionRegularPrice, elDelta: els.sessionRegularDelta, label:'Regular', price: regPrice },
-        { elRow: els.sessionRowPre, elPrice: els.sessionPrePrice, elDelta: els.sessionPreDelta, label:'Pre', price: prePrice },
-        { elRow: els.sessionRowPost, elPrice: els.sessionPostPrice, elDelta: els.sessionPostDelta, label:'Post', price: postPrice }
-      ];
-      for(const row of rows){
-        if(row.elPrice) row.elPrice.textContent = fmtMoney(row.price);
-        const delta = Number.isFinite(prevClose) && Number.isFinite(row.price) ? row.price - prevClose : NaN;
-        if(row.elDelta){
-          row.elDelta.textContent = fmtDelta(delta);
-          row.elDelta.style.color = delta > 0 ? css('--c-up') : delta < 0 ? css('--c-down') : 'var(--muted)';
-        }
-        if(row.elRow) row.elRow.classList.toggle('active', bestSession === (row.label === 'Regular' ? 'regular' : row.label.toLowerCase()));
-      }
-      if(els.sessionMiniStatus){
-        const status = bestSession === 'pre' ? 'Pre-market' : bestSession === 'post' ? 'After-hours' : 'Regular session';
-        els.sessionMiniStatus.textContent = `${status} · ${fmtSessionTime(bestTime)}`;
-      }
-      if(els.sessionMiniNote){
-        els.sessionMiniNote.textContent = 'Refreshes quote data only. The main Refresh button still reloads the chart.';
-      }
-    }
     }
 
     // --- Auto Fib helpers ---
@@ -2327,19 +2181,6 @@
         const chg=(Number.isFinite(price)&&Number.isFinite(prevClose))? price-prevClose:NaN;
         const pct=(Number.isFinite(chg)&&Number.isFinite(prevClose)&&prevClose!==0)? (chg/prevClose*100):NaN;
         const sessLabel = best.s==='PRE'?'Pre‑Market': best.s==='POST'?'After‑Hours':'Regular';
-        const miniArgs = {
-          regPrice,
-          prePrice,
-          postPrice,
-          prevClose,
-          bestSession: best.s === 'PRE' ? 'pre' : best.s === 'POST' ? 'post' : 'regular',
-          bestTime: best.t,
-          regTime,
-          preTime,
-          postTime
-        };
-        try{ setSessionMini(miniArgs); }catch(e){ console.error('Session mini render error', e); setSessionMiniFallback(miniArgs); }
-        writeQuoteCache(state.ticker, miniArgs);
         els.headline.textContent = compName? `${state.ticker} — ${compName}` : state.ticker;
         setTabTitle({ ticker: state.ticker, price, pct });
         if(els.subInfo) els.subInfo.textContent=[exch,currency,`${state.range} · ${state.interval}`,`Session: ${sessLabel}`].filter(Boolean).join(' • ');
@@ -2364,8 +2205,8 @@
           }catch{}
         }
         if(els.dayRangeLine){ els.dayRangeLine.textContent = `Day’s Range: ${(Number.isFinite(dLo)&&Number.isFinite(dHi))? '$'+dLo.toFixed(2)+' – $'+dHi.toFixed(2) : '—'}`; }
-        try{ computeIntrinsicAndDisplay(); }catch(e){ console.error('Intrinsic display error', e); }
-      }catch(e){ console.error('Quote refresh error', e); const restored = applyCachedQuote(state.ticker) || (()=>{ const derived = deriveQuoteFromRows(state.rows||[]); if(!derived) return false; setSessionMiniFallback(derived); writeQuoteCache(state.ticker, derived); if(els.sessionMiniStatus) els.sessionMiniStatus.textContent='Using chart fallback'; if(els.sessionMiniNote) els.sessionMiniNote.textContent='Live quote refresh failed, so chart prices are shown instead.'; return true; })(); if(!restored){ els.lastLine.innerHTML='Last: — · Change: —'; if(els.sessionMiniStatus) els.sessionMiniStatus.textContent='Quote refresh failed'; if(els.sessionMiniNote) els.sessionMiniNote.textContent='Try again with the main Refresh button.'; } setTabTitle({ ticker: state.ticker }); }
+        computeIntrinsicAndDisplay();
+      }catch(e){ console.error('Quote refresh error', e); els.lastLine.innerHTML='Last: — · Change: —'; setTabTitle({ ticker: state.ticker }); }
     }
 
     function computeIntrinsicAndDisplay(){
@@ -2374,8 +2215,8 @@
         const gPct = f.growth>3? f.growth : f.growth*100; // treat <3 as fraction
         graham = f.eps * (8.5 + 2 * gPct);
       }
-      const s50 = (state.smaSeries?.[50] || []).filter(Number.isFinite).at(-1);
-      const s200= (state.smaSeries?.[200] || []).filter(Number.isFinite).at(-1);
+      const s50 = state.smaSeries?.[50]?.filter(Number.isFinite).at(-1);
+      const s200= state.smaSeries?.[200]?.filter(Number.isFinite).at(-1);
       let anchor = (Number.isFinite(s50) && Number.isFinite(s200)) ? (s50+s200)/2 : (Number.isFinite(s50)? s50 : (Number.isFinite(s200)? s200 : null));
       let iv=null; if(Number.isFinite(graham) && Number.isFinite(anchor)) iv = graham*0.6 + anchor*0.4; else if(Number.isFinite(graham)) iv=graham; else if(Number.isFinite(anchor)) iv=anchor;
 
@@ -2590,15 +2431,14 @@
         await buildSMAAlignedSeries();
         if(reqId !== state.chartFetchId || controller.signal.aborted) return;
         await renderChart();
+        if(reqId !== state.chartFetchId || controller.signal.aborted) return;
+        refreshQuoteOnce();
       }
       catch(e){
         if(reqId !== state.chartFetchId || controller.signal.aborted) return;
-        console.error('Chart error', e); if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)';
+        console.error('Chart error', e); els.lastLine.innerHTML='Last: — · Change: —'; if(els.rangeLine) els.rangeLine.textContent='Range: — (no data)';
       }
       finally{
-        if(reqId === state.chartFetchId && !controller.signal.aborted){
-          try{ await refreshQuoteOnce(); }catch{}
-        }
         if(state.chartController === controller) state.chartController = null;
       }
     }
@@ -3091,7 +2931,6 @@
       syncFavoriteButton();
       renderCustomSMAChips();
       refreshRangeFreqDisabledState();
-      applyCachedQuote(state.ticker);
       await loadAndRender();
       scheduleQuoteAutoRefresh();
       scheduleAlertChecks();

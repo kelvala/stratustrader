@@ -24,72 +24,6 @@ async function loadPersistedCaches(){
 async function saveBuffettToDisk(cache){ try{ await ensureCacheDir(); const p = path.join(CACHE_DIR,'buffett.json'); await fs.writeFile(p, JSON.stringify({ t: cache.t, data: cache.data }, null, 2), 'utf8'); }catch(e){ console.warn('[cache] saveBuffettToDisk failed', e); } }
 async function saveVixOpenToDisk(obj){ try{ await ensureCacheDir(); const p = path.join(CACHE_DIR,'vix_open.json'); await fs.writeFile(p, JSON.stringify(obj, null, 2), 'utf8'); }catch(e){ console.warn('[cache] saveVixOpenToDisk failed', e); } }
 
-function toMs(v){ const n = Number(v); return Number.isFinite(n) ? n * 1000 : null; }
-function lastPriceInWindow(ts, closes, window){
-  if(!window || !Array.isArray(ts) || !Array.isArray(closes)) return null;
-  const start = toMs(window.start);
-  const end = toMs(window.end);
-  if(!Number.isFinite(start) || !Number.isFinite(end)) return null;
-  let last = null;
-  for(let i=0; i<ts.length && i<closes.length; i++){
-    const t = toMs(ts[i]);
-    const price = Number(closes[i]);
-    if(Number.isFinite(t) && t >= start && t < end && Number.isFinite(price)) last = { price, time: t };
-  }
-  return last;
-}
-async function deriveQuoteFromChart(sym){
-  const urls = [
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1d&interval=1m&includePrePost=true&events=div,splits`,
-    `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=1d&interval=1m&includePrePost=true&events=div,splits`
-  ];
-  for(const url of urls){
-    try{
-      const r = await fetch(url, { headers: { 'user-agent': 'Mozilla/5.0' } });
-      if(!r.ok) continue;
-      const j = await r.json();
-      const res0 = j?.chart?.result?.[0];
-      if(!res0) continue;
-      const meta = res0.meta || {};
-      const q = res0?.indicators?.quote?.[0] || {};
-      const adj = res0?.indicators?.adjclose?.[0]?.adjclose;
-      const closes = Array.isArray(adj) && adj.length ? adj : q.close;
-      const ts = Array.isArray(res0.timestamp) ? res0.timestamp : [];
-      const periods = meta.currentTradingPeriod || {};
-      const pre = lastPriceInWindow(ts, closes, periods.pre);
-      const regular = lastPriceInWindow(ts, closes, periods.regular);
-      const post = lastPriceInWindow(ts, closes, periods.post);
-      const fallbackLastIdx = ts.length ? ts.length - 1 : -1;
-      const fallbackLast = fallbackLastIdx >= 0 ? Number(closes?.[fallbackLastIdx]) : null;
-      const regularPrice = regular?.price ?? Number(meta.regularMarketPrice ?? fallbackLast);
-      const regularTime = regular?.time ?? toMs(meta.regularMarketTime) ?? (fallbackLastIdx >= 0 ? toMs(ts[fallbackLastIdx]) : null);
-      return {
-        quoteResponse: {
-          result: [{
-            symbol: sym,
-            regularMarketPrice: Number.isFinite(regularPrice) ? regularPrice : null,
-            regularMarketTime: regularTime ? Math.round(regularTime / 1000) : null,
-            regularMarketPreviousClose: meta.chartPreviousClose ?? meta.previousClose ?? null,
-            regularMarketDayHigh: meta.regularMarketDayHigh ?? null,
-            regularMarketDayLow: meta.regularMarketDayLow ?? null,
-            preMarketPrice: pre?.price ?? null,
-            preMarketTime: pre?.time ? Math.round(pre.time / 1000) : null,
-            postMarketPrice: post?.price ?? null,
-            postMarketTime: post?.time ? Math.round(post.time / 1000) : null,
-            currency: meta.currency || 'USD',
-            exchangeName: meta.exchangeName || meta.exchange || '',
-            fullExchangeName: meta.fullExchangeName || meta.exchangeName || meta.exchange || '',
-            hasPrePostMarketData: meta.hasPrePostMarketData ?? null,
-            longName: meta.longName || meta.shortName || sym,
-            shortName: meta.shortName || meta.longName || sym
-          }]
-        }
-      };
-    }catch(e){ console.warn('[quote] chart-derive failed', e?.message || e); }
-  }
-  return null;
-}
-
 // --- helper: fetch Buffett ratio from public sources (reusable) ---
 async function fetchBuffettFromSources(){
   const sources = [
@@ -249,11 +183,6 @@ app.get('/api/quote', async (req, res) => {
   const { ticker } = req.query;
   if (!ticker) {
     return res.status(400).json({ error: 'ticker required' });
-  }
-
-  const chartDerived = await deriveQuoteFromChart(ticker);
-  if (chartDerived) {
-    return res.json(chartDerived);
   }
 
   // Try v10 quoteSummary first (preferred: contains rich "price" module),
