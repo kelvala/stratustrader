@@ -1014,12 +1014,16 @@
     const $all = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
     const sanitizeTicker = s => String(s||'').split('|')[0].trim().toUpperCase();
     const normalizeTickerForFetch = t => sanitizeTicker(t).replace(/\s+/g,'').replace(/\.([A-Z0-9]{1,3})$/,'-$1'); // BRK.B -> BRK-B, etc.
+    function readQuoteCache(){ try{ const all = JSON.parse(localStorage.getItem(QUOTE_CACHE_KEY) || '{}'); return all && typeof all === 'object' ? all : {}; }catch{return {}; } }
+    function writeQuoteCache(ticker, payload){ try{ const all = readQuoteCache(); all[sanitizeTicker(ticker)] = payload; localStorage.setItem(QUOTE_CACHE_KEY, JSON.stringify(all)); }catch{} }
+    function applyCachedQuote(ticker){ const cached = readQuoteCache()[sanitizeTicker(ticker)]; if(!cached) return false; try{ setSessionMiniFallback(cached); return true; }catch{ return false; } }
     const SEARCH_HISTORY_KEY = 'tickerSearchHistory_v1';
     const SEARCH_HISTORY_LIMIT = 8;
     const FAVORITES_KEY = 'tickerFavorites_v1';
     const FAVORITES_LIMIT = 12;
     const APP_NAME = 'Stratus Trader';
     const APP_VERSION = 'v.48';
+    const QUOTE_CACHE_KEY = 'tickerQuoteCache_v1';
     const ALERTS_KEY = 'tickerAlerts_v1';
     const ALERT_SOUND_KEY = 'tickerAlertsSound_v1';
     const ALERT_SOUND_MODE_KEY = 'tickerAlertsSoundMode_v1';
@@ -2302,6 +2306,7 @@
           postTime
         };
         try{ setSessionMini(miniArgs); }catch(e){ console.error('Session mini render error', e); setSessionMiniFallback(miniArgs); }
+        writeQuoteCache(state.ticker, miniArgs);
         els.headline.textContent = compName? `${state.ticker} — ${compName}` : state.ticker;
         setTabTitle({ ticker: state.ticker, price, pct });
         if(els.subInfo) els.subInfo.textContent=[exch,currency,`${state.range} · ${state.interval}`,`Session: ${sessLabel}`].filter(Boolean).join(' • ');
@@ -2327,7 +2332,7 @@
         }
         if(els.dayRangeLine){ els.dayRangeLine.textContent = `Day’s Range: ${(Number.isFinite(dLo)&&Number.isFinite(dHi))? '$'+dLo.toFixed(2)+' – $'+dHi.toFixed(2) : '—'}`; }
         try{ computeIntrinsicAndDisplay(); }catch(e){ console.error('Intrinsic display error', e); }
-      }catch(e){ console.error('Quote refresh error', e); els.lastLine.innerHTML='Last: — · Change: —'; if(els.sessionMiniStatus) els.sessionMiniStatus.textContent='Quote refresh failed'; if(els.sessionMiniNote) els.sessionMiniNote.textContent='Try again with the main Refresh button.'; setTabTitle({ ticker: state.ticker }); }
+      }catch(e){ console.error('Quote refresh error', e); const restored = applyCachedQuote(state.ticker); if(!restored){ els.lastLine.innerHTML='Last: — · Change: —'; if(els.sessionMiniStatus) els.sessionMiniStatus.textContent='Quote refresh failed'; if(els.sessionMiniNote) els.sessionMiniNote.textContent='Try again with the main Refresh button.'; } else { if(els.sessionMiniStatus) els.sessionMiniStatus.textContent='Using cached prices'; if(els.sessionMiniNote) els.sessionMiniNote.textContent='Live quote refresh failed, but the last successful prices are still shown.'; } setTabTitle({ ticker: state.ticker }); }
     }
 
     function computeIntrinsicAndDisplay(){
@@ -3052,6 +3057,7 @@
       syncFavoriteButton();
       renderCustomSMAChips();
       refreshRangeFreqDisabledState();
+      applyCachedQuote(state.ticker);
       await loadAndRender();
       scheduleQuoteAutoRefresh();
       scheduleAlertChecks();
