@@ -1062,6 +1062,8 @@
       const acr = buildCompanyAcronym(n);
       const qIsCryptoBase = isCryptoBase(q);
       const spotTicker = `${q}-USD`;
+      const cleanTicker = /^[A-Z]{1,5}$/.test(t);
+      const namePrefix = n.startsWith(qRaw);
       let score = 0;
 
       if(t===qRaw || tn===q) score += 320;
@@ -1072,21 +1074,82 @@
       else if(acr.startsWith(q)) score += 180;
       if(acr===q && tn.length<=q.length) score += 180;
       if((t.startsWith(qRaw) || tn.startsWith(q)) && tn!==q && tn.length<=q.length+1) score -= 120;
-      if(n.startsWith(qRaw)) score += 150;
+      if(namePrefix) score += 150;
+      // Prefer primary symbols for company-name searches (e.g., FORD -> F, AT&T -> T).
+      if(q.length >= 2 && namePrefix && cleanTicker) score += 180;
+      if(q.length >= 2 && namePrefix && t.length <= 2) score += 240;
       if(n.includes(qRaw)) score += 100;
       if(t.includes(qRaw) || tn.includes(q)) score += 70;
-      if(/^[A-Z]{1,5}$/.test(t)) score += 45;
+      if(cleanTicker) score += 45;
       if(/[-.^]/.test(t)) score -= 20;
       if(q.length>=3 && /(ETF|ETN|2X|3X|DAILY|BEAR|BULL|TOKENIZED|WARRANT|RIGHTS|UNITS)/.test(n)) score -= 35;
       score -= Math.min(20, Math.abs(tn.length - q.length) * 2);
 
       return score;
     }
+    function normalizeCompanyName(name){
+      return String(name||'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
+    }
+    function isPrimaryTickerSymbol(ticker){
+      return /^[A-Z]{1,5}$/.test(String(ticker||'').toUpperCase());
+    }
+    function hasRegionalSuffix(ticker){
+      return /(?:\.|-)[A-Z]{1,4}$/.test(String(ticker||'').toUpperCase());
+    }
     function rankAutocompleteMatches(query, matches){
-      return (matches||[])
+      const qRaw = String(query||'').toUpperCase();
+      const q = normTickerKey(qRaw);
+      const ranked = (matches||[])
         .map(m=>({ ...m, _score: autocompleteScore(query, m) }))
-        .sort((a,b)=> (b._score-a._score) || (a.t.length-b.t.length) || a.t.localeCompare(b.t))
+        .sort((a,b)=>{
+          const aName = normalizeCompanyName(a.n);
+          const bName = normalizeCompanyName(b.n);
+          if(aName && bName && aName === bName){
+            const aExact = String(a?.t||'').toUpperCase() === qRaw || normTickerKey(a?.t||'') === q;
+            const bExact = String(b?.t||'').toUpperCase() === qRaw || normTickerKey(b?.t||'') === q;
+            if(!aExact && !bExact){
+              const aPrimary = isPrimaryTickerSymbol(a.t);
+              const bPrimary = isPrimaryTickerSymbol(b.t);
+              const aRegional = hasRegionalSuffix(a.t);
+              const bRegional = hasRegionalSuffix(b.t);
+              if(aPrimary && bRegional) return -1;
+              if(bPrimary && aRegional) return 1;
+              // When both are primary listings for the same company name, prefer the shorter symbol.
+              if(aPrimary && bPrimary && a.t.length !== b.t.length) return a.t.length - b.t.length;
+            }
+          }
+          return (b._score-a._score) || (a.t.length-b.t.length) || a.t.localeCompare(b.t);
+        })
         .map(({_score, ...rest})=>rest);
+      const exactIdx = ranked.findIndex(m=>{
+        const t = String(m?.t||'').toUpperCase();
+        return t === qRaw || normTickerKey(t) === q;
+      });
+      if(exactIdx > 0){
+        const [exact] = ranked.splice(exactIdx, 1);
+        ranked.unshift(exact);
+      }
+      return ranked;
+    }
+    function resolveTickerInput(rawValue){
+      const typed = sanitizeTicker(rawValue);
+      if(!typed) return '';
+      const exact = (state.symbols||[]).some(s=> sanitizeTicker(s?.t) === typed);
+      if(exact) return typed;
+      // Prefer currently shown online suggestions; fall back to local CSV-derived matches.
+      const pool = (state.acMatches && state.acMatches.length)
+        ? state.acMatches
+        : rankAutocompleteMatches(typed, localACMatches(typed));
+      const ranked = Array.isArray(pool) ? pool : [];
+      const top = ranked[0];
+      if(top?.t){
+        const typedUpper = typed.toUpperCase();
+        const topName = String(top.n||'').toUpperCase();
+        if(topName.startsWith(typedUpper) || topName.includes(typedUpper)){
+          return sanitizeTicker(top.t);
+        }
+      }
+      return typed;
     }
     function enforceCryptoSpotPriority(query, matches){
       const q = sanitizeTicker(query);
@@ -1544,27 +1607,13 @@
       if(s.length >= 2){
         const remote = await fetchACFromYahoo(s);
         if(remote.ok && remote.matches.length){
-          const merged = new Map();
+          const remoteOnly = new Map();
           for(const m of remote.matches){
             const t = sanitizeTicker(m.t);
             if(!t) continue;
-            merged.set(t, { t, n: (m.n || localNameMap[t] || localNameMap[normTickerKey(t)] || '').trim() });
+            remoteOnly.set(t, { t, n: (m.n || localNameMap[t] || localNameMap[normTickerKey(t)] || '').trim() });
           }
-          for(const m of localACMatches(s).slice(0, 80)){
-            const t = sanitizeTicker(m.t);
-            if(!t) continue;
-            const fallbackName = (m.n || localNameMap[t] || localNameMap[normTickerKey(t)] || '').trim();
-            if(merged.has(t)){
-              const cur = merged.get(t);
-              if(cur && !cur.n && fallbackName){
-                cur.n = fallbackName;
-                merged.set(t, cur);
-              }
-              continue;
-            }
-            merged.set(t, { t, n: fallbackName });
-          }
-          const ranked = rankAutocompleteMatches(s, Array.from(merged.values()));
+          const ranked = rankAutocompleteMatches(s, Array.from(remoteOnly.values()));
           state.acMatches=enforceCryptoSpotPriority(s, ranked);
           state.acIndex=0;
           renderAC();
@@ -2478,7 +2527,9 @@
     }
 
     // UI wiring (patched search + AC close)
-    els.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; const t=canonicalizeUserTicker(raw); if(!t){ els.input.focus(); return; }
+    els.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; let t=resolveTickerInput(raw); if(!t){ els.input.focus(); return; }
+  t = canonicalizeUserTicker(t);
+  if(!t){ els.input.focus(); return; }
       state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
     els.input?.addEventListener('input', debounce((e)=>{ updateAC(e.target.value); }, 120));
     els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ hideAC(); return;} if(!state.acMatches.length){ if(e.key==='Enter'){ els.searchBtn?.click(); } return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
