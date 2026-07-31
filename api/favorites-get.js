@@ -7,19 +7,31 @@ export default async function handler(req, res) {
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!redisUrl || !redisToken) {
-    return res.status(200).json({ favorites: [], note: 'sync not configured' });
+    return res.status(200).json({ favorites: [], alerts: [], note: 'sync not configured' });
   }
 
   try {
-    const key = `fav:${uid}`;
-    const r = await fetch(`${redisUrl}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${redisToken}` }
+    const favKey = `fav:${uid}`;
+    const alertsKey = `alerts:${uid}`;
+    const [favResp, alertsResp] = await Promise.all([
+      fetch(`${redisUrl}/get/${encodeURIComponent(favKey)}`, {
+        headers: { Authorization: `Bearer ${redisToken}` }
+      }),
+      fetch(`${redisUrl}/get/${encodeURIComponent(alertsKey)}`, {
+        headers: { Authorization: `Bearer ${redisToken}` }
+      })
+    ]);
+    if (!favResp.ok) throw new Error(`redis favorites ${favResp.status}`);
+    if (!alertsResp.ok) throw new Error(`redis alerts ${alertsResp.status}`);
+    const favJson = await favResp.json();
+    const alertsJson = await alertsResp.json();
+    const favorites = favJson.result ? JSON.parse(favJson.result) : [];
+    const alerts = alertsJson.result ? JSON.parse(alertsJson.result) : [];
+    return res.status(200).json({
+      favorites: Array.isArray(favorites) ? favorites : [],
+      alerts: Array.isArray(alerts) ? alerts : []
     });
-    if (!r.ok) throw new Error(`redis ${r.status}`);
-    const j = await r.json();
-    const favorites = j.result ? JSON.parse(j.result) : [];
-    return res.status(200).json({ favorites: Array.isArray(favorites) ? favorites : [] });
   } catch (e) {
-    return res.status(502).json({ error: 'upstream', favorites: [] });
+    return res.status(502).json({ error: 'upstream', favorites: [], alerts: [] });
   }
 }

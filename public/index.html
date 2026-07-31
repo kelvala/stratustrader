@@ -411,7 +411,7 @@
               <div style="flex:0"><button id="buffettEditBtn" class="tool-btn" title="Edit Buffett value">✎</button></div>
             </div>
           </div>
-          <button id="syncBtn" class="sync-btn" title="Sync favorites across devices" type="button"><span class="sync-dot"></span>Sync</button>
+          <button id="syncBtn" class="sync-btn" title="Sync favorites and alerts across devices" type="button"><span class="sync-dot"></span>Sync</button>
           <span id="appVersion" class="app-version" title="App version">v.47</span>
         </div>
       </div>
@@ -813,10 +813,10 @@
       }
       const uid = getUserToken();
       const syncUrl = uid ? `${location.origin}${location.pathname}?sync=${uid}` : '';
-      m.innerHTML = `<div class="sheet-inner" role="dialog" aria-modal="true" aria-label="Sync Favorites">
-        <div class="sheet-head"><div class="sheet-title">☁ Sync Favorites</div><button class="sheet-close" id="syncModalClose">✕</button></div>
+      m.innerHTML = `<div class="sheet-inner" role="dialog" aria-modal="true" aria-label="Sync Data">
+        <div class="sheet-head"><div class="sheet-title">☁ Sync Data</div><button class="sheet-close" id="syncModalClose">✕</button></div>
         <div class="sheet-body">
-          <p style="margin:0 0 10px;color:var(--muted);font-size:13px">Keep your favorites in sync across all your devices. Set a token once per device — that's it.</p>
+          <p style="margin:0 0 10px;color:var(--muted);font-size:13px">Keep your favorites and alerts in sync across all your devices. Set a token once per device — that's it.</p>
           ${uid ? `
             <div class="sync-token-display" id="syncTokenDisplay">${uid}</div>
             <button class="btn" id="syncCopyBtn" style="width:100%;margin-bottom:6px">Copy sync link</button>
@@ -838,12 +838,12 @@
       m.querySelector('#syncSetBtn').addEventListener('click', ()=>{
         const v = (m.querySelector('#syncTokenInput').value||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
         if(!v||v.length<4){ m.querySelector('#syncStatus').textContent='Token must be 4–16 characters.'; return; }
-        setUserToken(v); closeSyncModal(); showToast('Token set! Loading your favorites…'); syncFavoritesFromCloud();
+        setUserToken(v); closeSyncModal(); showToast('Token set! Loading your cloud data…'); syncCloudStateFromCloud();
       });
       m.querySelector('#syncGenBtn').addEventListener('click', ()=>{
         const t=generateToken(); setUserToken(t); openSyncModal();
         showToast('New token generated! Save the sync link.');
-        pushFavoritesToCloud(getFavorites());
+        pushCloudState({ favorites:getFavorites(), alerts:getAlerts() });
       });
       if(uid){ m.querySelector('#syncCopyBtn')?.addEventListener('click', ()=>{ navigator.clipboard?.writeText(syncUrl).then(()=>showToast('Sync link copied!')).catch(()=>{ m.querySelector('#syncStatus').textContent=syncUrl; }); }); }
       if(uid){ m.querySelector('#syncClearBtn')?.addEventListener('click', ()=>{ setUserToken(null); setSyncBtnState('off'); closeSyncModal(); showToast('Sync token cleared'); }); }
@@ -854,7 +854,7 @@
     q('#syncBtn')?.addEventListener('click', openSyncModal);
 
     // On load: apply ?sync=TOKEN from URL, then pull from cloud
-    (()=>{ const urlToken = new URLSearchParams(location.search).get('sync'); if(urlToken && /^[A-Z0-9]{4,16}$/i.test(urlToken)){ setUserToken(urlToken); } if(getUserToken()) syncFavoritesFromCloud(); else setSyncBtnState('off'); })();
+    (()=>{ const urlToken = new URLSearchParams(location.search).get('sync'); if(urlToken && /^[A-Z0-9]{4,16}$/i.test(urlToken)){ setUserToken(urlToken); } if(getUserToken()) syncCloudStateFromCloud(); else setSyncBtnState('off'); })();
     // Keyboard shortcut (optional): R=refresh when focused on body & not typing
     document.addEventListener('keydown', e=>{ if(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return; if(e.metaKey||e.altKey||e.ctrlKey) return; if(e.key==='r'||e.key==='R'){ manualRefresh(); } });
 
@@ -1002,9 +1002,11 @@
 
     function setSyncBtnState(state){ const btn=document.getElementById('syncBtn'); if(!btn) return; if(state==='synced') btn.classList.add('synced'); else btn.classList.remove('synced'); }
 
-    async function syncFavoritesFromCloud(){ const uid=getUserToken(); if(!uid) return; try{ const r=await fetch(`/api/favorites-get?uid=${encodeURIComponent(uid)}`); if(!r.ok) return; const j=await r.json(); if(Array.isArray(j.favorites) && j.favorites.length>0){ try{ localStorage.setItem(FAVORITES_KEY, JSON.stringify(j.favorites)); }catch{} renderFavorites(); syncFavoriteButton(); setSyncBtnState('synced'); } else { setSyncBtnState('synced'); } }catch(e){ console.warn('[sync] cloud load failed', e?.message||e); } }
+    async function syncCloudStateFromCloud(){ const uid=getUserToken(); if(!uid) return; try{ const r=await fetch(`/api/favorites-get?uid=${encodeURIComponent(uid)}`); if(!r.ok) return; const j=await r.json(); if(Array.isArray(j.favorites)){ try{ localStorage.setItem(FAVORITES_KEY, JSON.stringify(j.favorites)); }catch{} renderFavorites(); syncFavoriteButton(); } if(Array.isArray(j.alerts)){ try{ localStorage.setItem(ALERTS_KEY, JSON.stringify(j.alerts)); }catch{} renderAlerts(); scheduleAlertChecks(); } setSyncBtnState('synced'); }catch(e){ console.warn('[sync] cloud load failed', e?.message||e); } }
 
-    async function pushFavoritesToCloud(favorites){ const uid=getUserToken(); if(!uid) return; try{ await fetch('/api/favorites-set',{ method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ uid, favorites }) }); setSyncBtnState('synced'); }catch(e){ console.warn('[sync] cloud push failed', e?.message||e); } }
+    async function pushCloudState({ favorites, alerts }){ const uid=getUserToken(); if(!uid) return; try{ await fetch('/api/favorites-set',{ method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ uid, favorites: Array.isArray(favorites)?favorites:[], alerts: Array.isArray(alerts)?alerts:[] }) }); setSyncBtnState('synced'); }catch(e){ console.warn('[sync] cloud push failed', e?.message||e); } }
+    async function pushFavoritesToCloud(favorites){ await pushCloudState({ favorites, alerts:getAlerts() }); }
+    async function pushAlertsToCloud(alerts){ await pushCloudState({ favorites:getFavorites(), alerts }); }
     // Restrict -USD behavior to known crypto bases only
     const CRYPTO_BASE = new Set(['BTC','ETH','SOL','DOGE','XRP','ADA','LTC','BCH','BNB','SHIB']);
     const AUTOCOMPLETE_TIMEOUT_MS = 250; // Yahoo autocomplete request timeout before falling back to local CSV
@@ -1238,6 +1240,7 @@
       }
       const capped = deduped.slice(0, ALERTS_LIMIT);
       try{ localStorage.setItem(ALERTS_KEY, JSON.stringify(capped)); }catch{}
+      pushAlertsToCloud(capped);
       renderAlerts();
     }
     function setAlertsPanelVisible(visible){ if(!els.alertsRow) return; els.alertsRow.classList.toggle('hidden', !visible); if(els.showAlertsBtn){ els.showAlertsBtn.classList.toggle('active', visible); els.showAlertsBtn.textContent = visible ? 'Hide Alerts' : 'Alerts'; } if(visible) updateAlertCountdownDisplays(); }

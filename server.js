@@ -362,32 +362,57 @@ app.get('/api/favorites-get', async (req, res) => {
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (redisUrl && redisToken) {
     try {
-      const r = await fetch(`${redisUrl}/get/${encodeURIComponent('fav:' + uid)}`, { headers: { Authorization: `Bearer ${redisToken}` } });
-      const j = await r.json();
-      const favorites = j.result ? JSON.parse(j.result) : [];
-      return res.json({ favorites: Array.isArray(favorites) ? favorites : [] });
-    } catch (e) { return res.status(502).json({ error: 'upstream', favorites: [] }); }
+      const [favResp, alertsResp] = await Promise.all([
+        fetch(`${redisUrl}/get/${encodeURIComponent('fav:' + uid)}`, { headers: { Authorization: `Bearer ${redisToken}` } }),
+        fetch(`${redisUrl}/get/${encodeURIComponent('alerts:' + uid)}`, { headers: { Authorization: `Bearer ${redisToken}` } })
+      ]);
+      if (!favResp.ok) throw new Error(`redis favorites ${favResp.status}`);
+      if (!alertsResp.ok) throw new Error(`redis alerts ${alertsResp.status}`);
+      const favJson = await favResp.json();
+      const alertsJson = await alertsResp.json();
+      const favorites = favJson.result ? JSON.parse(favJson.result) : [];
+      const alerts = alertsJson.result ? JSON.parse(alertsJson.result) : [];
+      return res.json({
+        favorites: Array.isArray(favorites) ? favorites : [],
+        alerts: Array.isArray(alerts) ? alerts : []
+      });
+    } catch (e) { return res.status(502).json({ error: 'upstream', favorites: [], alerts: [] }); }
   }
   const store = await readFavoritesStore();
-  return res.json({ favorites: store[uid] || [] });
+  const record = store[uid];
+  if (Array.isArray(record)) {
+    return res.json({ favorites: record, alerts: [] });
+  }
+  return res.json({ favorites: record?.favorites || [], alerts: record?.alerts || [] });
 });
 
 app.post('/api/favorites-set', express.json(), async (req, res) => {
-  const { uid, favorites } = req.body || {};
+  const { uid, favorites, alerts } = req.body || {};
   const cleanUid = (uid || '').toUpperCase();
   if (!cleanUid || !/^[A-Z0-9]{4,16}$/.test(cleanUid)) return res.status(400).json({ error: 'invalid uid' });
   if (!Array.isArray(favorites)) return res.status(400).json({ error: 'invalid favorites' });
+  if (alerts != null && !Array.isArray(alerts)) return res.status(400).json({ error: 'invalid alerts' });
   const redisUrl = process.env.UPSTASH_REDIS_REST_URL;
   const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (redisUrl && redisToken) {
     try {
-      const val = JSON.stringify(favorites.slice(0, 20));
-      await fetch(`${redisUrl}/set/${encodeURIComponent('fav:' + cleanUid)}/${encodeURIComponent(val)}/ex/7776000`, { headers: { Authorization: `Bearer ${redisToken}` } });
+      const writes = [];
+      const favVal = JSON.stringify(favorites.slice(0, 20));
+      writes.push(fetch(`${redisUrl}/set/${encodeURIComponent('fav:' + cleanUid)}/${encodeURIComponent(favVal)}/ex/7776000`, { headers: { Authorization: `Bearer ${redisToken}` } }));
+      if (Array.isArray(alerts)) {
+        const alertsVal = JSON.stringify(alerts.slice(0, 40));
+        writes.push(fetch(`${redisUrl}/set/${encodeURIComponent('alerts:' + cleanUid)}/${encodeURIComponent(alertsVal)}/ex/7776000`, { headers: { Authorization: `Bearer ${redisToken}` } }));
+      }
+      const results = await Promise.all(writes);
+      if (results.some(r => !r.ok)) throw new Error('redis write failed');
       return res.json({ ok: true });
     } catch (e) { return res.status(502).json({ error: 'upstream' }); }
   }
   const store = await readFavoritesStore();
-  store[cleanUid] = favorites.slice(0, 20);
+  store[cleanUid] = {
+    favorites: favorites.slice(0, 20),
+    alerts: Array.isArray(alerts) ? alerts.slice(0, 40) : (store[cleanUid]?.alerts || [])
+  };
   await writeFavoritesStore(store);
   return res.json({ ok: true });
 });
