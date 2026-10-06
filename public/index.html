@@ -1138,14 +1138,21 @@
       if(!typed) return '';
       const exact = (state.symbols||[]).some(s=> sanitizeTicker(s?.t) === typed);
       if(exact) return typed;
-      // Prefer currently shown online suggestions; fall back to local CSV-derived matches.
-      const pool = (state.acMatches && state.acMatches.length)
-        ? state.acMatches
-        : rankAutocompleteMatches(typed, localACMatches(typed));
-      const ranked = Array.isArray(pool) ? pool : [];
-      const top = ranked[0];
+      const typedUpper = typed.toUpperCase();
+      const localMatches = rankAutocompleteMatches(typed, localACMatches(typed));
+      const localNameMatch = localMatches.find(m=>
+        String(m.n||'').toUpperCase().includes(typedUpper)
+      );
+      if(localNameMatch?.t) return sanitizeTicker(localNameMatch.t);
+
+      // Ignore stale suggestions that do not match the current input.
+      const currentMatches = (state.acMatches||[]).filter(m=>{
+        const ticker = sanitizeTicker(m?.t);
+        const name = String(m?.n||'').toUpperCase();
+        return ticker.includes(typedUpper) || name.includes(typedUpper);
+      });
+      const top = rankAutocompleteMatches(typed, currentMatches)[0];
       if(top?.t){
-        const typedUpper = typed.toUpperCase();
         const topName = String(top.n||'').toUpperCase();
         if(topName.startsWith(typedUpper) || topName.includes(typedUpper)){
           return sanitizeTicker(top.t);
@@ -1615,6 +1622,11 @@
             const t = sanitizeTicker(m.t);
             if(!t) continue;
             remoteOnly.set(t, { t, n: (m.n || localNameMap[t] || localNameMap[normTickerKey(t)] || '').trim() });
+          }
+          for(const m of localACMatches(s)){
+            const existing = remoteOnly.get(m.t);
+            if(!existing) remoteOnly.set(m.t, m);
+            else if(!existing.n && m.n) existing.n = m.n;
           }
           const ranked = rankAutocompleteMatches(s, Array.from(remoteOnly.values()));
           state.acMatches=enforceCryptoSpotPriority(s, ranked);
@@ -2533,7 +2545,7 @@
     els.searchBtn?.addEventListener('click', ()=>{ const raw=els.input.value; let t=resolveTickerInput(raw); if(!t){ els.input.focus(); return; }
   t = canonicalizeUserTicker(t);
   if(!t){ els.input.focus(); return; }
-      state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
+      els.input.value=t; state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
     els.input?.addEventListener('input', debounce((e)=>{ updateAC(e.target.value); }, 120));
     els.input?.addEventListener('keydown', (e)=>{ if(!['ArrowDown','ArrowUp','Enter','Escape','Tab'].includes(e.key)) return; if(e.key==='Escape'){ hideAC(); return;} if(!state.acMatches.length){ if(e.key==='Enter'){ els.searchBtn?.click(); } return; } if(e.key==='ArrowDown'){ e.preventDefault(); state.acIndex = (state.acIndex+1)%state.acMatches.length; renderAC(); } else if(e.key==='ArrowUp'){ e.preventDefault(); state.acIndex = (state.acIndex-1+state.acMatches.length)%state.acMatches.length; renderAC(); } else if(e.key==='Enter' || e.key==='Tab'){ const idx= state.acIndex<0?0:state.acIndex; pickAC(idx); if(e.key==='Enter'){ e.preventDefault(); els.searchBtn?.click(); } } });
     els.list?.addEventListener('mousedown', (e)=>{ const it=e.target.closest('.ac-item'); if(!it) return; pickAC(state.acMatches.findIndex(x=>x.t===it.dataset.t)); els.searchBtn?.click(); });
