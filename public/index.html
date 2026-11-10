@@ -60,8 +60,6 @@
   .history-chip:hover{background:var(--hover);border-color:var(--accent)}
   .favorites-row{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
   .favorites-row.hidden{display:none}
-  .alerts-row{flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
-  .alerts-row.hidden{display:none}
   .fav-chip{border:1px solid color-mix(in srgb, var(--accent), #ffffff 18%);background:color-mix(in srgb, var(--accent), transparent 86%);color:var(--text);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer}
   .fav-chip:hover{background:color-mix(in srgb, var(--accent), transparent 78%);border-color:var(--accent)}
   .alert-chip{display:inline-flex;align-items:center;gap:8px;border:1px solid color-mix(in srgb, var(--focus), #ffffff 18%);background:color-mix(in srgb, var(--focus), transparent 88%);color:var(--text);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700}
@@ -86,11 +84,6 @@
   .history-empty{font-size:12px;color:var(--muted);padding:2px 2px 0}
   .favorite-toggle{padding:8px 12px;background:color-mix(in srgb, var(--panel), #ffffff 4%);color:var(--text);border:1px solid var(--border)}
   .favorite-toggle.active{background:color-mix(in srgb, var(--accent), transparent 84%);border-color:var(--accent);color:var(--accent)}
-  .scan-badge{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;letter-spacing:.2px;border:1px solid var(--border);background:color-mix(in srgb, var(--panel), #ffffff 4%);color:var(--muted);white-space:nowrap}
-  .scan-badge.live{border-color:color-mix(in srgb, var(--c-up), #ffffff 10%);background:color-mix(in srgb, var(--c-up), transparent 84%);color:var(--c-up)}
-  .scan-badge.default{border-color:color-mix(in srgb, var(--accent), #ffffff 10%);background:color-mix(in srgb, var(--accent), transparent 86%);color:var(--accent)}
-  .scan-badge.backoff{border-color:color-mix(in srgb, var(--c-div), #ffffff 8%);background:color-mix(in srgb, var(--c-div), transparent 84%);color:var(--c-div)}
-  .scan-badge.idle{opacity:.8}
   @media (max-width:720px){ .search-inline{flex:1 1 100%;min-width:0} .input-wrap{flex:1 1 100%;max-width:100%} }
   .ticker-input{width:100%;min-width:120px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text);text-transform:uppercase;font-size:16px}
   .btn{padding:10px 14px;border:0;border-radius:10px;background:var(--accent);color:#fff;font-weight:800;cursor:pointer}
@@ -380,15 +373,9 @@
         <div class="action-row" aria-label="Ticker actions">
           <button id="showFavoritesBtn" class="btn inline favorite-toggle" type="button" title="Show saved favorites">Favorites</button>
           <button id="favoriteToggleBtn" class="btn inline favorite-toggle" type="button" title="Add or remove the current ticker from favorites">☆</button>
-          <button id="showAlertsBtn" class="btn inline favorite-toggle" type="button" title="Show price alerts">Alerts</button>
-          <button id="addAlertBtn" class="btn inline favorite-toggle" type="button" title="Add a price alert">+ Alert</button>
-          <button id="alertSoundBtn" class="btn inline favorite-toggle" type="button" title="Toggle alert sound">Sound On</button>
-          <button id="alertModeBtn" class="btn inline favorite-toggle" type="button" title="Cycle alert sound mode">Tone: Normal</button>
-          <span id="alertScanBadge" class="scan-badge idle" title="Current alert scan cadence">Scan: idle</span>
         </div>
         <div id="searchHistory" class="history-row" aria-label="Recent tickers"></div>
         <div id="favoritesRow" class="favorites-row hidden" aria-label="Favorite tickers"></div>
-        <div id="alertsRow" class="alerts-row hidden" aria-label="Price alerts"></div>
       </div>
       <div class="toolsbar" id="toolsBar">
         <button class="tool-btn" id="toolGPTs" aria-label="Open GPTs">🧠 <span class="tool-txt">GPTs</span></button>
@@ -411,7 +398,7 @@
               <div style="flex:0"><button id="buffettEditBtn" class="tool-btn" title="Edit Buffett value">✎</button></div>
             </div>
           </div>
-          <button id="syncBtn" class="sync-btn" title="Sync favorites and alerts across devices" type="button"><span class="sync-dot"></span>Sync</button>
+          <button id="syncBtn" class="sync-btn" title="Sync favorites across devices" type="button"><span class="sync-dot"></span>Sync</button>
           <span id="appVersion" class="app-version" title="App version">v.47</span>
         </div>
       </div>
@@ -744,7 +731,7 @@
 
     /* ---------- Elements ---------- */
     const els = {
-      input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'), searchHistory:q('#searchHistory'), favoritesRow:q('#favoritesRow'), favoriteToggleBtn:q('#favoriteToggleBtn'), showFavoritesBtn:q('#showFavoritesBtn'), alertsRow:q('#alertsRow'), showAlertsBtn:q('#showAlertsBtn'), addAlertBtn:q('#addAlertBtn'), alertSoundBtn:q('#alertSoundBtn'), alertModeBtn:q('#alertModeBtn'), alertScanBadge:q('#alertScanBadge'),
+      input:q('#q'), list:q('#ac'), searchBtn:q('#searchBtn'), searchHistory:q('#searchHistory'), favoritesRow:q('#favoritesRow'), favoriteToggleBtn:q('#favoriteToggleBtn'), showFavoritesBtn:q('#showFavoritesBtn'),
       headline:q('#headline'), subInfo:q('#subInfo'), lastLine:q('#lastLine'), prevCloseLine:q('#prevCloseLine'), ivLine:q('#ivLine'), companyLine:q('#companyLine'),
       chartCard:q('#chartCard'), chart:q('#chart'),
       rangeBar:q('#rangeBar'), toggles:q('#toggles'),
@@ -816,7 +803,7 @@
       m.innerHTML = `<div class="sheet-inner" role="dialog" aria-modal="true" aria-label="Sync Data">
         <div class="sheet-head"><div class="sheet-title">☁ Sync Data</div><button class="sheet-close" id="syncModalClose">✕</button></div>
         <div class="sheet-body">
-          <p style="margin:0 0 10px;color:var(--muted);font-size:13px">Keep your favorites and alerts in sync across all your devices. Set a token once per device — that's it.</p>
+          <p style="margin:0 0 10px;color:var(--muted);font-size:13px">Keep your favorites in sync across all your devices. Set a token once per device — that's it.</p>
           ${uid ? `
             <div class="sync-token-display" id="syncTokenDisplay">${uid}</div>
             <button class="btn" id="syncCopyBtn" style="width:100%;margin-bottom:6px">Copy sync link</button>
@@ -843,7 +830,7 @@
       m.querySelector('#syncGenBtn').addEventListener('click', ()=>{
         const t=generateToken(); setUserToken(t); openSyncModal();
         showToast('New token generated! Save the sync link.');
-        pushCloudState({ favorites:getFavorites(), alerts:getAlerts() });
+        pushCloudState({ favorites:getFavorites() });
       });
       if(uid){ m.querySelector('#syncCopyBtn')?.addEventListener('click', ()=>{ navigator.clipboard?.writeText(syncUrl).then(()=>showToast('Sync link copied!')).catch(()=>{ m.querySelector('#syncStatus').textContent=syncUrl; }); }); }
       if(uid){ m.querySelector('#syncClearBtn')?.addEventListener('click', ()=>{ setUserToken(null); setSyncBtnState('off'); closeSyncModal(); showToast('Sync token cleared'); }); }
@@ -968,23 +955,7 @@
     const FAVORITES_LIMIT = 12;
     const APP_NAME = 'Stratus Trader';
     const APP_VERSION = 'v.47';
-    const ALERTS_KEY = 'tickerAlerts_v1';
-    const ALERT_SOUND_KEY = 'tickerAlertsSound_v1';
-    const ALERT_SOUND_MODE_KEY = 'tickerAlertsSoundMode_v1';
-    const ALERTS_LIMIT = 30;
-    const ALERT_INTERVAL_DEFAULT_MS = 5 * 60 * 1000;
-    const ALERT_INTERVAL_FAST_MS = 1 * 60 * 1000;
-    const ALERT_FAST_WATCHLIST_MAX = 3;
-    const ALERT_BACKOFF_STEPS_MS = [0, 2 * 60 * 1000, 5 * 60 * 1000, 10 * 60 * 1000];
     const SYNC_TOKEN_KEY = 'stratustrader_uid';
-    let alertTimer = null;
-    let alertCountdownTimer = null;
-    let nextAlertCheckAt = 0;
-    let alertBackoffLevel = 0;
-    let alertBackoffUntil = 0;
-    let alertBackoffNoticeAt = 0;
-    let alertAudioCtx = null;
-    let lastAlertsQuickCheckAt = 0;
 
     function getUserToken(){ try{ return localStorage.getItem(SYNC_TOKEN_KEY)||null; }catch{ return null; } }
     function setUserToken(t){ try{ if(t) localStorage.setItem(SYNC_TOKEN_KEY,t.toUpperCase()); else localStorage.removeItem(SYNC_TOKEN_KEY); }catch{} }
@@ -1002,11 +973,10 @@
 
     function setSyncBtnState(state){ const btn=document.getElementById('syncBtn'); if(!btn) return; if(state==='synced') btn.classList.add('synced'); else btn.classList.remove('synced'); }
 
-    async function syncCloudStateFromCloud(){ const uid=getUserToken(); if(!uid) return; try{ const r=await fetch(`/api/favorites-get?uid=${encodeURIComponent(uid)}`); if(!r.ok) return; const j=await r.json(); if(Array.isArray(j.favorites)){ try{ localStorage.setItem(FAVORITES_KEY, JSON.stringify(j.favorites)); }catch{} renderFavorites(); syncFavoriteButton(); } if(Array.isArray(j.alerts)){ try{ localStorage.setItem(ALERTS_KEY, JSON.stringify(j.alerts)); }catch{} renderAlerts(); scheduleAlertChecks(); } setSyncBtnState('synced'); }catch(e){ console.warn('[sync] cloud load failed', e?.message||e); } }
+    async function syncCloudStateFromCloud(){ const uid=getUserToken(); if(!uid) return; try{ const r=await fetch(`/api/favorites-get?uid=${encodeURIComponent(uid)}`); if(!r.ok) return; const j=await r.json(); if(Array.isArray(j.favorites)){ try{ localStorage.setItem(FAVORITES_KEY, JSON.stringify(j.favorites)); }catch{} renderFavorites(); syncFavoriteButton(); } setSyncBtnState('synced'); }catch(e){ console.warn('[sync] cloud load failed', e?.message||e); } }
 
-    async function pushCloudState({ favorites, alerts }){ const uid=getUserToken(); if(!uid) return; try{ await fetch('/api/favorites-set',{ method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ uid, favorites: Array.isArray(favorites)?favorites:[], alerts: Array.isArray(alerts)?alerts:[] }) }); setSyncBtnState('synced'); }catch(e){ console.warn('[sync] cloud push failed', e?.message||e); } }
-    async function pushFavoritesToCloud(favorites){ await pushCloudState({ favorites, alerts:getAlerts() }); }
-    async function pushAlertsToCloud(alerts){ await pushCloudState({ favorites:getFavorites(), alerts }); }
+    async function pushCloudState({ favorites }){ const uid=getUserToken(); if(!uid) return; try{ await fetch('/api/favorites-set',{ method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ uid, favorites: Array.isArray(favorites)?favorites:[] }) }); setSyncBtnState('synced'); }catch(e){ console.warn('[sync] cloud push failed', e?.message||e); } }
+    async function pushFavoritesToCloud(favorites){ await pushCloudState({ favorites }); }
     // Restrict -USD behavior to known crypto bases only
     const CRYPTO_BASE = new Set(['BTC','ETH','SOL','DOGE','XRP','ADA','LTC','BCH','BNB','SHIB']);
     const AUTOCOMPLETE_TIMEOUT_MS = 250; // Yahoo autocomplete request timeout before falling back to local CSV
@@ -1188,393 +1158,6 @@
     function syncFavoriteButton(){ if(!els.favoriteToggleBtn) return; const current=sanitizeTicker(state.ticker || els.input?.value || ''); const isFav=getFavorites().includes(current); els.favoriteToggleBtn.classList.toggle('active', isFav); els.favoriteToggleBtn.textContent = isFav ? '★' : '☆'; els.favoriteToggleBtn.setAttribute('aria-pressed', isFav?'true':'false'); }
     function setFavoritesPanelVisible(visible){ if(!els.favoritesRow) return; els.favoritesRow.classList.toggle('hidden', !visible); if(els.showFavoritesBtn){ els.showFavoritesBtn.classList.toggle('active', visible); els.showFavoritesBtn.textContent = visible ? 'Hide Fav' : 'Favorites'; } }
     function toggleFavoritesPanel(){ if(!els.favoritesRow) return; const currentlyVisible = !els.favoritesRow.classList.contains('hidden'); if(!currentlyVisible){ renderFavorites(); } setFavoritesPanelVisible(!currentlyVisible); }
-    function opLabel(op){ return op === '<=' ? '<=' : '>='; }
-    function parseAlertPrice(v){ const n = +v; return Number.isFinite(n) && n > 0 ? +n.toFixed(4) : NaN; }
-    function parseQuoteForPrice(j){
-      try{
-        if(j?.quoteResponse?.result && j.quoteResponse.result[0]){
-          const r = j.quoteResponse.result[0];
-          const p = +(r.regularMarketPrice?.raw ?? r.regularMarketPrice);
-          return Number.isFinite(p) ? p : NaN;
-        }
-        if(j?.quoteSummary?.result && j.quoteSummary.result[0] && j.quoteSummary.result[0].price){
-          const p = +(j.quoteSummary.result[0].price.regularMarketPrice?.raw ?? j.quoteSummary.result[0].price.regularMarketPrice);
-          return Number.isFinite(p) ? p : NaN;
-        }
-        if(j?.chart?.result && j.chart.result[0] && j.chart.result[0].meta){
-          const p = +(j.chart.result[0].meta.regularMarketPrice ?? j.chart.result[0].meta.regularMarketPriceRaw);
-          return Number.isFinite(p) ? p : NaN;
-        }
-      }catch{}
-      return NaN;
-    }
-    function normalizeAlert(a){
-      const ticker = sanitizeTicker(a?.ticker);
-      const op = a?.op === '<=' ? '<=' : '>=';
-      const target = parseAlertPrice(a?.target);
-      if(!ticker || !Number.isFinite(target)) return null;
-      return {
-        id: String(a?.id || (`${Date.now()}-${Math.random().toString(36).slice(2,8)}`)),
-        ticker,
-        op,
-        target,
-        enabled: a?.enabled !== false,
-        once: !!a?.once,
-        cooldownMin: Number.isFinite(+a?.cooldownMin) ? Math.max(1, Math.min(240, +a.cooldownMin)) : 30,
-        lastSeenPrice: Number.isFinite(+a?.lastSeenPrice) ? +a.lastSeenPrice : null,
-        lastTriggeredAt: Number.isFinite(+a?.lastTriggeredAt) ? +a.lastTriggeredAt : 0,
-        createdAt: Number.isFinite(+a?.createdAt) ? +a.createdAt : Date.now()
-      };
-    }
-    function getAlerts(){
-      try{
-        const raw = localStorage.getItem(ALERTS_KEY);
-        if(!raw) return [];
-        const parsed = JSON.parse(raw);
-        if(!Array.isArray(parsed)) return [];
-        return parsed.map(normalizeAlert).filter(Boolean).slice(0, ALERTS_LIMIT);
-      }catch{return [];}
-    }
-    function saveAlerts(alerts){
-      const clean = (alerts||[]).map(normalizeAlert).filter(Boolean);
-      const deduped = [];
-      const seen = new Set();
-      for(const a of clean){
-        const key = `${a.ticker}|${a.op}|${a.target.toFixed(4)}`;
-        if(seen.has(key)) continue;
-        seen.add(key);
-        deduped.push(a);
-      }
-      const capped = deduped.slice(0, ALERTS_LIMIT);
-      try{ localStorage.setItem(ALERTS_KEY, JSON.stringify(capped)); }catch{}
-      pushAlertsToCloud(capped);
-      renderAlerts();
-    }
-    function setAlertsPanelVisible(visible){ if(!els.alertsRow) return; els.alertsRow.classList.toggle('hidden', !visible); if(els.showAlertsBtn){ els.showAlertsBtn.classList.toggle('active', visible); els.showAlertsBtn.textContent = visible ? 'Hide Alerts' : 'Alerts'; } if(visible) updateAlertCountdownDisplays(); }
-    function toggleAlertsPanel(){ if(!els.alertsRow) return; const currentlyVisible = !els.alertsRow.classList.contains('hidden'); if(!currentlyVisible){ renderAlerts(); } setAlertsPanelVisible(!currentlyVisible); }
-    function isAlertSoundEnabled(){ try{ const v = localStorage.getItem(ALERT_SOUND_KEY); return v == null ? true : v === '1'; }catch{ return true; } }
-    function setAlertSoundEnabled(on){ try{ localStorage.setItem(ALERT_SOUND_KEY, on ? '1' : '0'); }catch{} syncAlertSoundButton(); }
-    function syncAlertSoundButton(){ if(!els.alertSoundBtn) return; const on = isAlertSoundEnabled(); els.alertSoundBtn.classList.toggle('active', on); els.alertSoundBtn.textContent = on ? 'Sound On' : 'Sound Off'; els.alertSoundBtn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
-    function getAlertSoundMode(){
-      try{
-        const v = localStorage.getItem(ALERT_SOUND_MODE_KEY);
-        if(v === 'soft' || v === 'normal' || v === 'louder') return v;
-      }catch{}
-      return 'normal';
-    }
-    function setAlertSoundMode(mode){
-      const m = (mode === 'soft' || mode === 'normal' || mode === 'louder') ? mode : 'normal';
-      try{ localStorage.setItem(ALERT_SOUND_MODE_KEY, m); }catch{}
-      syncAlertModeButton();
-    }
-    function syncAlertModeButton(){
-      if(!els.alertModeBtn) return;
-      const mode = getAlertSoundMode();
-      const label = mode === 'soft' ? 'Soft' : mode === 'louder' ? 'Louder' : 'Normal';
-      els.alertModeBtn.classList.toggle('active', mode !== 'normal');
-      els.alertModeBtn.textContent = `Tone: ${label}`;
-      els.alertModeBtn.setAttribute('aria-pressed', mode === 'normal' ? 'false' : 'true');
-    }
-    function getAlertAudioCtx(){
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if(!Ctx) return null;
-      if(!alertAudioCtx) alertAudioCtx = new Ctx();
-      return alertAudioCtx;
-    }
-    async function playAlertSound(kind='alert'){
-      if(!isAlertSoundEnabled()) return false;
-      const ctx = getAlertAudioCtx();
-      if(!ctx) return false;
-      if(ctx.state === 'suspended'){
-        try{ await ctx.resume(); }catch{}
-      }
-      if(ctx.state !== 'running') return false;
-      const now = ctx.currentTime;
-      const mode = getAlertSoundMode();
-      const isSoft = mode === 'soft';
-      const isLouder = mode === 'louder';
-      const seq = kind === 'test'
-        ? (isSoft ? [[560,0.07,0.05],[660,0.14,0.05]] : [[620,0.08,0.06],[784,0.16,0.06]])
-        : (isSoft ? [[560,0.07,0.05],[660,0.14,0.05],[740,0.22,0.06]] : [[620,0.08,0.06],[784,0.16,0.06],[988,0.25,0.07]]);
-      const peak = (kind === 'test' ? 0.09 : 0.085) * (isLouder ? 1.65 : 1.0);
-      for(const [freq, start, dur] of seq){
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = isSoft ? 'triangle' : 'sine';
-        osc.frequency.setValueAtTime(freq, now + start);
-        gain.gain.setValueAtTime(0.0001, now + start);
-        gain.gain.exponentialRampToValueAtTime(peak, now + start + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + start + dur);
-        osc.connect(gain).connect(ctx.destination);
-        osc.start(now + start);
-        osc.stop(now + start + dur + 0.02);
-      }
-      return true;
-    }
-    function primeAlertAudio(){ const ctx = getAlertAudioCtx(); if(ctx && ctx.state === 'suspended'){ ctx.resume().catch(()=>{}); } }
-    function fmtCountdown(ms){
-      const s = Math.max(0, Math.ceil((+ms||0)/1000));
-      const h = Math.floor(s/3600);
-      const m = Math.floor((s%3600)/60);
-      const sec = s%60;
-      if(h>0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-      return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-    }
-    function updateAlertCountdownDisplays(){
-      if(!els.alertsRow) return;
-      const now = Date.now();
-      const nextCheckRemain = nextAlertCheckAt>0 ? Math.max(0, nextAlertCheckAt-now) : NaN;
-      const byId = new Map(getAlerts().map(a=>[a.id,a]));
-      els.alertsRow.querySelectorAll('[data-alert-timer]').forEach(node=>{
-        const id = node.getAttribute('data-alert-timer');
-        const a = byId.get(id);
-        if(!a){ node.textContent = '—'; return; }
-        if(!a.enabled){ node.textContent = 'Paused'; return; }
-        const cooldownMs = Math.max(1, +(a.cooldownMin||30)) * 60 * 1000;
-        const cooldownRemain = a.lastTriggeredAt ? Math.max(0, (a.lastTriggeredAt + cooldownMs) - now) : 0;
-        if(Number.isFinite(nextCheckRemain)){
-          if(cooldownRemain > 0){
-            const nextPossible = Math.max(nextCheckRemain, cooldownRemain);
-            node.textContent = `Next trigger window ${fmtCountdown(nextPossible)} (cooldown ${fmtCountdown(cooldownRemain)})`;
-          }else{
-            node.textContent = `Next check ${fmtCountdown(nextCheckRemain)}`;
-          }
-        }else{
-          node.textContent = cooldownRemain>0 ? `Cooldown ${fmtCountdown(cooldownRemain)}` : 'Ready';
-        }
-      });
-    }
-    function renderAlerts(){
-      if(!els.alertsRow) return;
-      const alerts = getAlerts();
-      if(!alerts.length){ els.alertsRow.innerHTML='<div class="history-empty">No alerts yet</div>'; renderAlertScanBadge(); return; }
-      els.alertsRow.innerHTML = alerts.map(a=>`<div class="alert-chip ${a.enabled?'':'off'}" data-alert-toggle="${a.id}" title="Toggle enabled"><div class="alert-body"><div class="alert-top"><span>${a.ticker} ${opLabel(a.op)} $${a.target.toFixed(2)}</span>${a.once?'<span style="opacity:.8">(once)</span>':''}</div><span class="alert-timer" data-alert-timer="${a.id}">—</span></div><button class="alert-remove" type="button" data-alert-remove="${a.id}" title="Remove alert">×</button></div>`).join('');
-      renderAlertScanBadge();
-      updateAlertCountdownDisplays();
-    }
-    function openAddAlertModal(){
-      let m = document.getElementById('alertModal');
-      if(!m){
-        m = document.createElement('div'); m.id='alertModal'; m.className='sheet'; m.setAttribute('hidden','');
-        m.innerHTML = `<div class="sheet-inner" role="dialog" aria-modal="true" aria-label="Add Price Alert">
-          <div class="sheet-head"><div class="sheet-title">Add Price Alert</div><button class="sheet-close" data-close="alertModal">✕</button></div>
-          <div class="sheet-body">
-            <div style="display:grid;grid-template-columns:1fr 96px 1fr;gap:8px;align-items:center">
-              <input id="alertTicker" type="text" placeholder="SPY" maxlength="12" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text);text-transform:uppercase" />
-              <select id="alertOp" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text)"><option value=">=">&gt;=</option><option value="<=">&lt;=</option></select>
-              <input id="alertTarget" type="number" step="0.01" min="0" placeholder="620" style="padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text)" />
-            </div>
-            <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
-              <label style="display:flex;gap:6px;align-items:center;font-size:13px"><input id="alertOnce" type="checkbox" /> Trigger once</label>
-              <label style="display:flex;gap:6px;align-items:center;font-size:13px">Cooldown after trigger (min)
-                <input id="alertCooldown" type="number" step="1" min="1" max="240" value="30" style="width:84px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--field-bg);color:var(--field-text)" />
-              </label>
-            </div>
-            <div style="margin-top:6px;font-size:12px;color:var(--muted)">Checks run about every 5 minutes by default, and can auto-speed to 1 minute for a tiny watchlist during market hours. Increase cooldown minutes here to avoid repeat notifications.</div>
-            <div style="display:flex;gap:8px;margin-top:12px"><button class="btn" id="alertSaveBtn">Save Alert</button><button class="tool-btn" id="alertCloseBtn">Cancel</button></div>
-          </div></div>`;
-        document.body.appendChild(m);
-        m.querySelectorAll('[data-close]').forEach(b=> b.addEventListener('click', ()=> closeAlertModal()));
-        m.querySelector('#alertCloseBtn')?.addEventListener('click', ()=> closeAlertModal());
-        m.querySelector('#alertSaveBtn')?.addEventListener('click', ()=>{
-          const ticker = sanitizeTicker(m.querySelector('#alertTicker')?.value || '');
-          const op = (m.querySelector('#alertOp')?.value === '<=') ? '<=' : '>=';
-          const target = parseAlertPrice(m.querySelector('#alertTarget')?.value);
-          const once = !!m.querySelector('#alertOnce')?.checked;
-          const cooldownMin = Math.max(1, Math.min(240, +(m.querySelector('#alertCooldown')?.value || 30)));
-          if(!ticker || !Number.isFinite(target)){ showToast('Enter ticker and target price'); return; }
-          const next = [{ id:`${Date.now()}-${Math.random().toString(36).slice(2,8)}`, ticker, op, target, enabled:true, once, cooldownMin, lastSeenPrice:null, lastTriggeredAt:0, createdAt:Date.now() }, ...getAlerts()].slice(0, ALERTS_LIMIT);
-          saveAlerts(next);
-          scheduleAlertChecks();
-          setAlertsPanelVisible(true);
-          closeAlertModal();
-          showToast(`Alert added: ${ticker} ${opLabel(op)} $${target.toFixed(2)}`);
-          checkAlertsOnce({ manual:true });
-        });
-      }
-      m.hidden=false; m.setAttribute('data-open','true'); document.body.style.overflow='hidden';
-      m.querySelector('#alertTicker').value = sanitizeTicker(state.ticker || els.input?.value || '');
-      m.querySelector('#alertTarget').value = Number.isFinite(state.rows?.at(-1)?.c) ? (+state.rows.at(-1).c).toFixed(2) : '';
-      setTimeout(()=> m.querySelector('#alertTicker')?.focus(), 50);
-    }
-    function closeAlertModal(){ const m=document.getElementById('alertModal'); if(!m) return; m.hidden=true; m.removeAttribute('data-open'); if(![...document.querySelectorAll('.sheet')].some(s=>!s.hidden)) document.body.style.overflow=''; }
-    function updateAlert(id, patch){
-      const next = getAlerts().map(a=> a.id===id ? normalizeAlert({ ...a, ...patch }) : a).filter(Boolean);
-      saveAlerts(next);
-      scheduleAlertChecks();
-    }
-    function removeAlert(id){ saveAlerts(getAlerts().filter(a=>a.id!==id)); scheduleAlertChecks(); }
-    function maybeNotify(msg){
-      try{
-        if(typeof Notification === 'undefined') return;
-        if(Notification.permission === 'granted'){ new Notification(msg); return; }
-        if(Notification.permission !== 'denied'){ Notification.requestPermission().then(p=>{ if(p==='granted') new Notification(msg); }).catch(()=>{}); }
-      }catch{}
-    }
-    async function fetchLatestQuotePrice(ticker){
-      try{
-        const r = await fetch(`/api/quote?ticker=${encodeURIComponent(ticker)}`, { cache:'no-store' });
-        if(!r.ok) return { price:NaN, status:r.status, throttled: r.status===429 || r.status===502 || r.status===503 };
-        const j = await r.json();
-        return { price: parseQuoteForPrice(j), status:r.status, throttled:false };
-      }catch{
-        return { price:NaN, status:0, throttled:false };
-      }
-    }
-    function isAlertCrossed(alert, price){
-      const last = Number.isFinite(+alert.lastSeenPrice) ? +alert.lastSeenPrice : null;
-      if(alert.op === '>='){
-        if(!(price >= alert.target)) return false;
-        return last == null || last < alert.target;
-      }
-      if(!(price <= alert.target)) return false;
-      return last == null || last > alert.target;
-    }
-    function getEnabledAlerts(){ return getAlerts().filter(a=>a.enabled); }
-    function currentAlertBaseIntervalMs(){
-      const enabled = getEnabledAlerts();
-      if(!enabled.length) return ALERT_INTERVAL_DEFAULT_MS;
-      const uniqueTickers = new Set(enabled.map(a=>a.ticker));
-      const inRegularSession = isRegularSessionET(Date.now());
-      if(inRegularSession && uniqueTickers.size > 0 && uniqueTickers.size <= ALERT_FAST_WATCHLIST_MAX){
-        return ALERT_INTERVAL_FAST_MS;
-      }
-      return ALERT_INTERVAL_DEFAULT_MS;
-    }
-    function currentAlertIntervalMs(){
-      const base = currentAlertBaseIntervalMs();
-      const now = Date.now();
-      if(now < alertBackoffUntil){
-        const step = ALERT_BACKOFF_STEPS_MS[Math.min(alertBackoffLevel, ALERT_BACKOFF_STEPS_MS.length-1)] || 0;
-        return Math.max(base, step);
-      }
-      return base;
-    }
-    function renderAlertScanBadge(){
-      if(!els.alertScanBadge) return;
-      const enabled = getEnabledAlerts();
-      const cls = ['scan-badge'];
-      let label = 'Scan: idle';
-      if(enabled.length){
-        const base = currentAlertBaseIntervalMs();
-        const effective = currentAlertIntervalMs();
-        const backoff = Date.now() < alertBackoffUntil && effective > base;
-        if(backoff){
-          cls.push('backoff');
-          label = `Scan: backoff ${Math.max(1, Math.round(effective/60000))}m`;
-        }else if(base <= ALERT_INTERVAL_FAST_MS){
-          cls.push('live');
-          label = 'Scan: live 1m';
-        }else{
-          cls.push('default');
-          label = 'Scan: default 5m';
-        }
-      }else{
-        cls.push('idle');
-      }
-      els.alertScanBadge.className = cls.join(' ');
-      els.alertScanBadge.textContent = label;
-    }
-    function registerAlertScanOutcome({ successes=0, failures=0, throttled=false }={}){
-      const now = Date.now();
-      if(failures <= 0){
-        if(successes > 0){
-          alertBackoffLevel = 0;
-          alertBackoffUntil = 0;
-          renderAlertScanBadge();
-        }
-        return;
-      }
-      if(throttled || successes===0){
-        const bump = throttled ? 2 : 1;
-        alertBackoffLevel = Math.min(ALERT_BACKOFF_STEPS_MS.length-1, alertBackoffLevel + bump);
-      }else{
-        alertBackoffLevel = Math.min(ALERT_BACKOFF_STEPS_MS.length-1, alertBackoffLevel + 1);
-      }
-      const step = ALERT_BACKOFF_STEPS_MS[alertBackoffLevel] || ALERT_INTERVAL_DEFAULT_MS;
-      alertBackoffUntil = now + step;
-      if(throttled && (now - alertBackoffNoticeAt > 2 * 60 * 1000)){
-        alertBackoffNoticeAt = now;
-        showToast('Alerts: upstream busy, slowing checks briefly');
-      }
-      renderAlertScanBadge();
-    }
-    async function checkAlertsOnce(opts={}){
-      const alerts = getAlerts();
-      if(!alerts.length) return;
-      const enabled = alerts.filter(a=>a.enabled);
-      if(!enabled.length) return;
-      const now = Date.now();
-      const alertByTicker = new Map();
-      for(const a of enabled){
-        const arr = alertByTicker.get(a.ticker) || [];
-        arr.push(a);
-        alertByTicker.set(a.ticker, arr);
-      }
-      // Skip quote calls if every alert on a ticker is still cooling down and already has a seen price.
-      const uniqueTickers = Array.from(alertByTicker.entries())
-        .filter(([_, arr])=> arr.some(a=>{
-          const cooldownMs = Math.max(1, +(a.cooldownMin||30)) * 60 * 1000;
-          const cooling = !!a.lastTriggeredAt && ((now - a.lastTriggeredAt) < cooldownMs);
-          return !cooling || !Number.isFinite(+a.lastSeenPrice);
-        }))
-        .map(([ticker])=>ticker);
-      if(!uniqueTickers.length){
-        if(opts?.manual) showToast('Alerts checked: all active alerts are in cooldown');
-        return;
-      }
-      const quoteEntries = await Promise.all(uniqueTickers.map(async t=> [t, await fetchLatestQuotePrice(t)]));
-      const quotes = new Map(quoteEntries);
-      let changed = false;
-      let successes = 0;
-      let failures = 0;
-      let throttled = false;
-      for(const [, res] of quoteEntries){
-        if(Number.isFinite(+res?.price)) successes++;
-        else failures++;
-        if(res?.throttled) throttled = true;
-      }
-      registerAlertScanOutcome({ successes, failures, throttled });
-      const next = alerts.map(a=>{
-        if(!a.enabled) return a;
-        const px = quotes.get(a.ticker)?.price;
-        if(!Number.isFinite(px)) return a;
-        const crossed = isAlertCrossed(a, px);
-        const cooldownMs = Math.max(1, +(a.cooldownMin||30)) * 60 * 1000;
-        const cooled = !a.lastTriggeredAt || (now - a.lastTriggeredAt >= cooldownMs);
-        if(crossed && cooled){
-          const msg = `${a.ticker} hit ${a.op} $${a.target.toFixed(2)} (now $${px.toFixed(2)})`;
-          showAlertToast(msg, 5600);
-          maybeNotify(msg);
-          playAlertSound();
-          try{ if(typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(80); }catch{}
-          changed = true;
-          return normalizeAlert({ ...a, lastSeenPrice: px, lastTriggeredAt: now, enabled: a.once ? false : a.enabled });
-        }
-        if(a.lastSeenPrice !== px){ changed = true; return normalizeAlert({ ...a, lastSeenPrice: px }); }
-        return a;
-      });
-      if(changed) saveAlerts(next);
-      if(opts?.manual && !changed) showToast('Alerts checked: no triggers');
-    }
-    function scheduleAlertChecks(){
-      clearTimeout(alertTimer);
-      clearInterval(alertCountdownTimer);
-      const tick = async ()=>{
-        await checkAlertsOnce();
-        const intervalMs = currentAlertIntervalMs();
-        nextAlertCheckAt = Date.now() + intervalMs;
-        renderAlertScanBadge();
-        updateAlertCountdownDisplays();
-        alertTimer = setTimeout(tick, intervalMs);
-      };
-      const firstInterval = currentAlertIntervalMs();
-      nextAlertCheckAt = Date.now() + firstInterval;
-      renderAlertScanBadge();
-      alertTimer = setTimeout(tick, firstInterval);
-      alertCountdownTimer = setInterval(updateAlertCountdownDisplays, 1000);
-      updateAlertCountdownDisplays();
-    }
     async function fetchACFromYahoo(q){ if(!q) return { ok:true, matches:[] }; const controller = new AbortController(); const timeout = setTimeout(()=>controller.abort(), AUTOCOMPLETE_TIMEOUT_MS);
       try{
         const r = await fetch(`/api/autocomplete?query=${encodeURIComponent(q)}`, { cache:'no-store', signal: controller.signal });
@@ -2553,50 +2136,6 @@
     els.showFavoritesBtn?.addEventListener('click', ()=>{ toggleFavoritesPanel(); });
     els.favoriteToggleBtn?.addEventListener('click', ()=>{ const current=sanitizeTicker(state.ticker || els.input?.value || ''); if(!current){ els.input?.focus(); return; } const added=toggleFavorite(current); if(added){ setFavoritesPanelVisible(true); showToast(`Added ${current} to favorites`); } else { showToast(`Removed ${current} from favorites`); } renderFavorites(); syncFavoriteButton(); });
     els.favoritesRow?.addEventListener('click', (e)=>{ const btn=e.target.closest('button[data-history]'); if(!btn) return; const t=canonicalizeUserTicker(btn.dataset.history); if(!t) return; els.input.value=t; state.ticker=t; localStorage.setItem('lastTicker', t); addToSearchHistory(t); syncFavoriteButton(); hideAC(); loadAndRender(); });
-    els.showAlertsBtn?.addEventListener('click', ()=>{ toggleAlertsPanel(); });
-    els.addAlertBtn?.addEventListener('click', ()=>{ openAddAlertModal(); });
-    els.alertSoundBtn?.addEventListener('click', async ()=>{
-      const next = !isAlertSoundEnabled();
-      setAlertSoundEnabled(next);
-      if(next){
-        const ok = await playAlertSound('test');
-        showToast(ok ? 'Alert sound enabled' : 'Sound enabled (audio blocked by browser until interaction)');
-      } else {
-        showToast('Alert sound muted');
-      }
-    });
-    els.alertModeBtn?.addEventListener('click', async ()=>{
-      const modes = ['soft','normal','louder'];
-      const cur = getAlertSoundMode();
-      const idx = modes.indexOf(cur);
-      const next = modes[(idx + 1) % modes.length];
-      setAlertSoundMode(next);
-      if(isAlertSoundEnabled()) await playAlertSound('test');
-      showToast(`Alert tone: ${next[0].toUpperCase()+next.slice(1)}`);
-    });
-    els.alertsRow?.addEventListener('click', (e)=>{
-      const removeBtn = e.target.closest('button[data-alert-remove]');
-      if(removeBtn){
-        const id = removeBtn.dataset.alertRemove;
-        if(id){ removeAlert(id); showToast('Alert removed'); }
-        return;
-      }
-      const toggleBtn = e.target.closest('[data-alert-toggle]');
-      if(!toggleBtn) return;
-      const id = toggleBtn.dataset.alertToggle;
-      const cur = getAlerts().find(a=>a.id===id);
-      if(!cur) return;
-      updateAlert(id, { enabled: !cur.enabled });
-      showToast(`${cur.ticker} alert ${cur.enabled ? 'paused' : 'enabled'}`);
-    });
-    document.addEventListener('visibilitychange', ()=>{
-      if(document.visibilityState !== 'visible') return;
-      const now = Date.now();
-      if(now - lastAlertsQuickCheckAt < 45000) return;
-      lastAlertsQuickCheckAt = now;
-      checkAlertsOnce();
-    });
-    document.addEventListener('pointerdown', primeAlertAudio, { once:true });
     // Range bar handlers (days + frequency)
     els.rangeBar?.addEventListener('click', e=>{
       const rangeBtn = e.target.closest('button[data-range]');
@@ -2838,8 +2377,15 @@
           throw new Error('bad');
         }
         const j = await r.json();
-        if(j && (j.ratio || j.percent)){
-          const obj = { marketCap: j.marketCap||null, gdp: j.gdp||null, ratio: Number(j.ratio|| (j.percent? j.percent/100 : NaN)), t: Date.now(), source: j.source||url };
+        const ratioVal = Number(j && (j.ratio != null ? j.ratio : (Number.isFinite(Number(j.percent)) ? Number(j.percent)/100 : NaN)));
+        const percentVal = Number(j && (j.percent != null ? j.percent : (Number.isFinite(ratioVal) ? ratioVal * 100 : NaN)));
+        if(j && Number.isFinite(ratioVal) && ratioVal > 0){
+          const obj = { marketCap: Number(j.marketCap) || null, gdp: Number(j.gdp) || null, ratio: ratioVal, t: Date.now(), source: j.source||url };
+          saveBuffett(obj);
+          return obj;
+        }
+        if(j && Number.isFinite(percentVal) && percentVal > 0){
+          const obj = { marketCap: Number(j.marketCap) || null, gdp: Number(j.gdp) || null, ratio: percentVal / 100, t: Date.now(), source: j.source||url };
           saveBuffett(obj);
           return obj;
         }
@@ -2909,7 +2455,7 @@
     }
     function vixRemark(val){ if(!Number.isFinite(val)) return {text:'—', level:'unknown'}; if(val>=30) return {text:'Dangerously High — Extreme fear', level:'danger'}; if(val>=22) return {text:'Elevated — Caution', level:'warn'}; if(val>=14) return {text:'Normal', level:'ok'}; return {text:'Low — Complacency', level:'low'}; }
 
-    // VIX state for intraday delta, baseline, and alerts
+    // VIX state for intraday delta and baseline
     const __vixState = { baseline: null, last: null, lastLevel: null };
 
     function decideVixAction(v, pctChange){
@@ -3021,17 +2567,11 @@
       renderSearchHistory();
       renderFavorites();
       setFavoritesPanelVisible(false);
-      renderAlerts();
-      setAlertsPanelVisible(false);
-      syncAlertSoundButton();
-      syncAlertModeButton();
       syncFavoriteButton();
       renderCustomSMAChips();
       refreshRangeFreqDisabledState();
       await loadAndRender();
       scheduleQuoteAutoRefresh();
-      scheduleAlertChecks();
-      await checkAlertsOnce();
       await renderAllMkt();
       scheduleMkt();
     })();
