@@ -1019,6 +1019,11 @@
       const map = state.symbolNameMap || {};
       return map[key] || map[normTickerKey(key)] || map[key.replace(/\./g,'-')] || map[key.replace(/-/g,'.')] || '';
     }
+    function tickerMatchesQuery(query, candidate){
+      const q = normTickerKey(query);
+      const t = normTickerKey(candidate?.t||'');
+      return Boolean(q && t.startsWith(q));
+    }
     function buildCompanyAcronym(name){
       const parts = String(name||'').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
       const core = parts.filter(p=>!COMPANY_ACRONYM_STOP.has(p) && !/^\d+$/.test(p));
@@ -1074,6 +1079,9 @@
       const ranked = (matches||[])
         .map(m=>({ ...m, _score: autocompleteScore(query, m) }))
         .sort((a,b)=>{
+          const aTickerMatch = tickerMatchesQuery(query, a);
+          const bTickerMatch = tickerMatchesQuery(query, b);
+          if(aTickerMatch !== bTickerMatch) return aTickerMatch ? -1 : 1;
           const aName = normalizeCompanyName(a.n);
           const bName = normalizeCompanyName(b.n);
           if(aName && bName && aName === bName){
@@ -1110,6 +1118,7 @@
       if(exact) return typed;
       const typedUpper = typed.toUpperCase();
       const localMatches = rankAutocompleteMatches(typed, localACMatches(typed));
+      if(localMatches.some(m=>tickerMatchesQuery(typed, m))) return typed;
       const localNameMatch = localMatches.find(m=>
         String(m.n||'').toUpperCase().includes(typedUpper)
       );
